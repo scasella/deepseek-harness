@@ -21,6 +21,7 @@
     "src/model-selection-projection.ts",
     "src/fork-cut.ts",
     "src/fork-lineage-projection.ts",
+    "src/request-route.ts",
     "src/archived-session-gate.ts",
     "src/skill-catalog.ts"
   ],

@@ -1,0 +1,32 @@
+- region "在第 2 轮之后分支":
+  - text: 在第 2 轮之后分支 6 个分支
+  - list:
+    - listitem:
+      - textbox "第 1 条引导语":
+        - /placeholder: 这个分支要做什么？
+        - text: LOOM_GUARDS Answer in one word.
+      - button "移除第 1 条"
+    - listitem:
+      - textbox "第 2 条引导语":
+        - /placeholder: 这个分支要做什么？
+        - text: LOOM_GUARDS Answer in one word.
+      - button "移除第 2 条"
+  - button "添加分支"
+  - text: 第 1、2 行内容相同：同一提示词的多次采样
+  - term: 每行采样数
+  - definition:
+    - radiogroup "每行采样数":
+      - radio "×1"
+      - radio "×2"
+      - radio "×3" [checked]
+      - radio "×4"
+  - term: 模型
+  - definition:
+    - text: DeepSeek-V4-Flash
+    - button "更换"
+    - text: 与父会话相同
+  - term: 工作区
+  - definition: 子分支共用此文件夹，包括先前分支所做的改动
+  - text: 开始之前不会运行任何内容
+  - button "取消"
+  - button "开始 6 个分支"

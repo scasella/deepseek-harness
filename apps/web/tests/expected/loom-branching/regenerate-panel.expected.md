@@ -1,0 +1,20 @@
+- dialog "Regenerate turn 2":
+  - paragraph: Regenerate turn 2
+  - term: Variants
+  - definition:
+    - radiogroup "Number of variants":
+      - radio "×1" [checked]
+      - radio "×2"
+      - radio "×4"
+  - term: Prompt
+  - definition: LOOM_BRANCHING Take the other approach from here.
+  - term: Model
+  - definition:
+    - text: DeepSeek-V4-Flash
+    - button "Change"
+    - text: Same as this branch
+  - term: Workspace
+  - definition: Children share this folder, including edits earlier branches make
+  - term: Usage
+  - definition: 7.2K tok · 85% cache hit This turn's own usage
+  - button "Regenerate ×1"

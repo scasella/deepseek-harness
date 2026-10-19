@@ -1,0 +1,56 @@
+## Chat
+
+- button "继承自父会话 · 第 1 轮 · 1 步"
+- group "分支自 Loom branching，第 1 轮之后":
+  - text: 分支自 Loom branching 第 1 轮之后
+  - button "打开父会话：Loom branching": 打开父会话
+- group "第 1 轮之后的变体":
+  - button "变体 1/5：Branch A": 1 Branch A
+  - button "变体 2/5：Loom branching": 2 Loom branching
+  - button "变体 3/5：Loom branching": 3 Loom branching
+  - button "变体 4/5：Loom branching": 4 Loom branching
+  - button "变体 5/5：Loom branching": 5 Loom branching
+- text: LOOM_BRANCHING Take the other approach from here. {{clock}}
+- button "复制"
+- button "编辑并分支"
+- status: 已完成
+- button "已完成，用时 {{duration}}" [disabled]
+- paragraph: LOOM_BRANCHING Branch A answers turn 2.
+- button "复制"
+- button "好的回答"
+- button "有问题的回答"
+- button "在新对话中分支"
+- button "多路分支"
+- group "变体 1/5":
+  - button "上一个变体" [disabled]
+  - button "下一个变体"
+- button "重新生成一次": 重新生成
+- button "重新生成多个"
+- group "私人标记":
+  - button "保留" [pressed]
+  - button "搁置"
+- button "用量 7.2K tok"
+- text: {{clock}}
+
+## Regenerate
+
+- dialog "重新生成第 2 轮":
+  - paragraph: 重新生成第 2 轮
+  - term: 变体数
+  - definition:
+    - radiogroup "变体数量":
+      - radio "×1" [checked]
+      - radio "×2"
+      - radio "×4"
+  - term: 提示词
+  - definition: LOOM_BRANCHING Take the other approach from here.
+  - term: 模型
+  - definition:
+    - text: DeepSeek-V4-Flash
+    - button "更换"
+    - text: 与此分支相同
+  - term: 工作区
+  - definition: 子分支共用此文件夹，包括先前分支所做的改动
+  - term: 用量
+  - definition: 7.2K tok · 缓存命中 85% 本轮自身用量
+  - button "重新生成 ×1"

@@ -60,7 +60,9 @@ Session 对象还承载本地提交回显：`session.beginSubmission` 在调用�
 
 面向用户调用的 `skills/list` 元数据包含胜出提供方可选的指令文件 `path`。输入框可据此预览文件，无需加载每个 skill 的正文或激活冷态 Agent。
 
-Fork 复制 `atSeq` 所选的精确事件前缀，包含切点事件，允许在开放轮次内截取。子会话在合成的 fork 结果和结束事件之前记录继承标记。省略 `atSeq` 时选择最近已结束轮次及其独立尾部，在下一轮次或排队输入之前停止；不存在的事件会被拒绝。聊天操作选择已结束轮次。
+Fork 复制 `atSeq` 所选的精确事件前缀，包含切点事件，允许在开放轮次内截取。子会话在合成的 fork 结果和结束事件之前记录继承标记。省略 `atSeq` 时选择最近已结束轮次及其独立尾部，在下一轮次或排队输入之前停止；不存在的事件会被拒绝。Host 入口以 `latestCompletedPrefixBoundary(events)` 导出这条规则，稍后才 fork 的调用方可把已算出的切点作为 `atSeq` 传入。聊天操作选择已结束轮次。
+
+Fork 的 `selection` 决定子会话下一次请求的路由：它按 `selectModel` 的规则校验，不可用的路由在任何子会话存在之前以 `session/model-unavailable` 失败，子会话在发布前将其记录为 `model/selection`。源会话不会被写入，部署默认值也从不保存。未提供 `selection` 时，子会话沿用其前缀携带的路由：最后继承的 `request/header`，或尚未被任何 header 消费的继承选择。两者皆无的前缀（例如切在第一轮请求之前的轮内切点）会记录源会话首次请求的路由，而不是部署默认值。与继承 header 不同的提供方或模型会像 `selectModel` 一样，在子会话的首次请求中加入模型切换提示。
 
 替换第 k 轮提示词的分支在 `completedPrefixBefore(events, k)` 处 fork：在该轮 `turn/start` 之前应用同一条已结束轮次规则；若尚无已结束轮次，则取首个输入之前的最后一个独立事件。第 k − 1 轮运行期间排队的提示词在该轮内拼接，因此子会话仍会把它继承为待处理的 next-turn 输入，并在自己的 `followup` 之前运行它；分支需用 `agent.inbox.remove` 移除 `inheritedNextTurnPrompts(events, cut)` 列出的每条提示词。`forkLineage` 投影通过 follow 基线、列表提示（包括缓存的冷会话行）与 `faceOf('forkLineage')` 提供 header 中的父会话、切点 seq（父子会话相同）、最后一个继承 `turn/end` 的轮次以及 `createdAt`；继承前缀折叠完成后它保持不变。在同一切点 fork 的兄弟会话共享 `parentSession` 与 `cutSeq`。
 
@@ -113,7 +115,7 @@ GUI 模型选择要求确切提供方／模型对出现在可用目录中；不�
 
 #### KV Cache 影响
 
-无直接影响；模型请求仍由 Agent 和 LLM（大语言模型）包拥有。
+本控制器创建、恢复、复用或 fork 的每个 Agent 都通过 `AgentOptions.cacheSessionId`，以其 fork 家族的根作为提供方侧提示词缓存的键。根的查找沿 `parentSession` 从 fork 子会话走到其父会话，先读取实时 header，否则读取存储的 header。遍历在 subagent 子会话处停止（它自成家族的根），也在缺失或无法读取的祖先处停止（该祖先成为根）；无法读取时会记录警告。因此，在按 Session 设置缓存键或上游亲和性的适配器上（例如走 OpenRouter 的 [pi-ai](../../llm/llm-pi-ai/README.zh.md#model-experience)），fork 子会话及其兄弟会话会复用父会话的缓存前缀。模型请求仍由 Agent 和 LLM（大语言模型）包拥有。
 
 ## 已知限制与延期工作
 
@@ -127,6 +129,7 @@ GUI 模型选择要求确切提供方／模型对出现在可用目录中；不�
 - 受理/运行的展示记忆只存在于客户端内存，页面重载后即丢失。
 - 该记忆不在 tab 之间共享：同一会话可能在一个 tab 中已转正，在另一个 tab 中仍显示为 `New Session`。
 - 冷会话列表行只有在该投影单元挂载期间写入过投影缓存检查点后才携带 `forkLineage`；在此之前该行只有 `parentSessionId` 而没有切点，`session.projections` 会从日志折叠出该值。
+- 压缩与 Session 标题请求，以及 fork 模式的 subagent 子会话，以各自的 Session 作为提示词缓存的键，因此不会复用 fork 家族的缓存前缀。
 
 
 <a id="dev-note"></a>

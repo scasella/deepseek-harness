@@ -1,4 +1,4 @@
-/** The Loom service owns the `loomBranch` unit, telemetry redaction, and the fork-family Remote for its plugin lifetime. */
+/** The Loom service owns the `loomBranch` and `loomMark` units, telemetry redaction, and the fork-family Remote for its plugin lifetime. */
 import { Context } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -8,8 +8,8 @@ import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import type { SessionTelemetryRecord } from '@deepseek-ai/dsh-session-telemetry'
 import type { RemoteAccessResource } from '@deepseek-ai/dsh-typert-protocol'
 import Loom from '../src/index.ts'
-import { loomBranchProjection } from '../src/projection.ts'
-import type { LoomBranchRecord, LoomRunId, LoomSetId } from '../src/types.ts'
+import { loomBranchProjection, loomMarkProjection } from '../src/projection.ts'
+import type { LoomBranchRecord, LoomSetId } from '../src/types.ts'
 
 declare module '@deepseek-ai/dsh-session/types' {
   interface PluginRecordMap {
@@ -29,9 +29,8 @@ function branch(overrides: Partial<LoomBranchRecord> = {}): LoomBranchRecord {
     setId: brandString<LoomSetId>('set-1'),
     sourceSessionId: SOURCE,
     atSeq: SessionSeq(0),
-    variant: 1,
-    variantCount: 2,
     kind: 'regenerate',
+    index: 0,
     ...overrides,
   }
 }
@@ -75,37 +74,50 @@ function waterfall(ctx: Context, record: SessionTelemetryRecord): SessionTelemet
 }
 
 describe('Loom service', () => {
-  it('registers loomBranch and redaction for its plugin lifetime', async () => {
+  it('registers its projection units and redaction for its plugin lifetime', async () => {
     const { ctx } = await fixture()
     const fiber = ctx.plugin(Loom)
     await fiber
     const session = ctx.sessions.create(SOURCE)
     expect(ctx.sessionProjections.stateOf(session, 'loomBranch')).toEqual({ inheritedEventCount: 0, branch: null })
+    expect(ctx.sessionProjections.stateOf(session, 'loomMark')).toEqual({ inheritedEventCount: 0, mark: null })
     expect(waterfall(ctx, ledger('plugin:loom/branch', { secret: true })).body).toBeNull()
     await fiber.dispose()
     expect(ctx.sessionProjections.stateOf(session, 'loomBranch')).toBeUndefined()
+    expect(ctx.sessionProjections.stateOf(session, 'loomMark')).toBeUndefined()
     expect(waterfall(ctx, ledger('plugin:loom/branch', { secret: true })).body).toEqual({ secret: true })
+  })
+
+  it('validates its admission limits at load', async () => {
+    expect(Loom.Config({})).toEqual({ maxBranchesPerRequest: 8, maxConcurrentBranches: 4, concurrentWritableBranches: false })
+    expect(() => Loom.Config({ maxConcurrentBranches: 0 })).toThrow()
+    expect(() => Loom.Config({ maxBranchesPerRequest: 1.5 })).toThrow()
+    const { ctx } = await fixture()
+    await expect(ctx.plugin(Loom, { maxBranchesPerRequest: 0 })).rejects.toThrow()
   })
 })
 
-describe('loomBranch projection', () => {
-  async function projected(): Promise<{ ctx: Context; source: Session }> {
-    const { ctx } = await fixture()
-    ctx.sessionProjections.register(loomBranchProjection)
-    return { ctx, source: ctx.sessions.create(SOURCE) }
-  }
+async function projected(): Promise<{ ctx: Context; source: Session }> {
+  const { ctx } = await fixture()
+  ctx.sessionProjections.register(loomBranchProjection)
+  ctx.sessionProjections.register(loomMarkProjection)
+  return { ctx, source: ctx.sessions.create(SOURCE) }
+}
 
-  it('keeps the first valid own branch record and publishes it as the client view', async () => {
+describe('loomBranch projection', () => {
+  it('keeps the first valid own branch record and publishes its membership as the client view', async () => {
     const { ctx, source } = await projected()
+    expect(ctx.sessionProjections.snapshot(source, ['loomBranch']).values.loomBranch).toBeNull()
     appendPluginRecord(source, 'plugin:loom/test-other', { note: 'other' })
-    appendPluginRecord(source, 'plugin:loom/branch', branch({ variant: 3, variantCount: 2 }))
+    appendPluginRecord(source, 'plugin:loom/branch', { ...branch(), index: -1 })
     expect(ctx.sessionProjections.stateOf(source, 'loomBranch')).toEqual({ inheritedEventCount: 0, branch: null })
-    appendPluginRecord(source, 'plugin:loom/branch', branch({ variantKey: 'k', runId: brandString<LoomRunId>('run') }))
+    const seq = appendPluginRecord(source, 'plugin:loom/branch', branch({ kind: 'variants', index: 3, variantKey: 'k' }))
     const first = ctx.sessionProjections.stateOf(source, 'loomBranch')
-    appendPluginRecord(source, 'plugin:loom/branch', branch({ variant: 2 }))
+    appendPluginRecord(source, 'plugin:loom/branch', branch({ index: 2 }))
     expect(ctx.sessionProjections.stateOf(source, 'loomBranch')).toBe(first)
-    expect(first).toEqual({ inheritedEventCount: 0, branch: branch({ variantKey: 'k', runId: brandString<LoomRunId>('run') }) })
-    expect(ctx.sessionProjections.snapshot(source, ['loomBranch']).values.loomBranch).toEqual(first)
+    const view = { setId: 'set-1', kind: 'variants', index: 3, variantKey: 'k', createdAt: source.eventAt(seq)?.time }
+    expect(first).toEqual({ inheritedEventCount: 0, branch: view })
+    expect(ctx.sessionProjections.snapshot(source, ['loomBranch']).values.loomBranch).toEqual(view)
   })
 
   it('ignores branch records a fork inherited and takes its own after the cut', async () => {
@@ -113,16 +125,48 @@ describe('loomBranch projection', () => {
     appendPluginRecord(source, 'plugin:loom/branch', branch())
     const child = ctx.sessions.fork(source)
     expect(ctx.sessionProjections.stateOf(child, 'loomBranch')).toEqual({ inheritedEventCount: 1, branch: null })
-    const own = branch({ sourceSessionId: SOURCE, atSeq: SessionSeq(0), setId: brandString<LoomSetId>('set-2') })
-    appendPluginRecord(child, 'plugin:loom/branch', own)
-    expect(ctx.sessionProjections.stateOf(child, 'loomBranch')).toEqual({ inheritedEventCount: 1, branch: own })
+    appendPluginRecord(child, 'plugin:loom/branch', branch({ setId: brandString<LoomSetId>('set-2'), kind: 'steer' }))
+    expect(ctx.sessionProjections.stateOf(child, 'loomBranch')?.branch).toMatchObject({ setId: 'set-2', kind: 'steer', index: 0 })
   })
 
-  it('refuses persisted state that is not a valid view', () => {
+  it('refuses persisted state that is not a valid state', () => {
+    const view = { setId: 'set-1', kind: 'edit', index: 0, createdAt: 5 }
     expect(loomBranchProjection.stateSchema.safeParse({ inheritedEventCount: -1, branch: null }).success).toBe(false)
-    expect(loomBranchProjection.stateSchema.safeParse({ inheritedEventCount: 2, branch: branch(), extra: 1 }).success).toBe(false)
-    expect(loomBranchProjection.stateSchema.parse({ inheritedEventCount: 2, branch: branch() }))
-      .toEqual({ inheritedEventCount: 2, branch: branch() })
+    expect(loomBranchProjection.stateSchema.safeParse({ inheritedEventCount: 2, branch: { ...view, extra: 1 } }).success).toBe(false)
+    expect(loomBranchProjection.stateSchema.parse({ inheritedEventCount: 2, branch: view }))
+      .toEqual({ inheritedEventCount: 2, branch: view })
+  })
+})
+
+describe('loomMark projection', () => {
+  it('follows the last valid own mark record and ignores repeats', async () => {
+    const { ctx, source } = await projected()
+    const view = () => ctx.sessionProjections.snapshot(source, ['loomMark']).values.loomMark
+    expect(view()).toBeNull()
+    appendPluginRecord(source, 'plugin:loom/test-other', { note: 'other' })
+    appendPluginRecord(source, 'plugin:loom/mark', { version: 1, mark: 'shelved' } as never)
+    appendPluginRecord(source, 'plugin:loom/mark', { version: 1, mark: null })
+    const empty = ctx.sessionProjections.stateOf(source, 'loomMark')
+    expect(empty).toEqual({ inheritedEventCount: 0, mark: null })
+    appendPluginRecord(source, 'plugin:loom/mark', { version: 1, mark: 'keep' })
+    const kept = ctx.sessionProjections.stateOf(source, 'loomMark')
+    appendPluginRecord(source, 'plugin:loom/mark', { version: 1, mark: 'keep' })
+    expect(ctx.sessionProjections.stateOf(source, 'loomMark')).toBe(kept)
+    expect(view()).toEqual({ mark: 'keep' })
+    appendPluginRecord(source, 'plugin:loom/mark', { version: 1, mark: 'set-aside' })
+    expect(view()).toEqual({ mark: 'set-aside' })
+    appendPluginRecord(source, 'plugin:loom/mark', { version: 1, mark: null })
+    expect(view()).toBeNull()
+  })
+
+  it('ignores marks a fork inherited', async () => {
+    const { ctx, source } = await projected()
+    appendPluginRecord(source, 'plugin:loom/mark', { version: 1, mark: 'keep' })
+    const child = ctx.sessions.fork(source)
+    expect(ctx.sessionProjections.stateOf(child, 'loomMark')).toEqual({ inheritedEventCount: 1, mark: null })
+    appendPluginRecord(child, 'plugin:loom/mark', { version: 1, mark: 'set-aside' })
+    expect(ctx.sessionProjections.stateOf(child, 'loomMark')?.mark).toEqual({ mark: 'set-aside' })
+    expect(loomMarkProjection.stateSchema.safeParse({ inheritedEventCount: 0, mark: { mark: 'other' } }).success).toBe(false)
   })
 })
 

@@ -1112,6 +1112,34 @@ export interface InspectorOptions {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-inspector -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-experimental-loom -->
+<a id="deepseek-aidsh-experimental-loom"></a>
+
+## `@deepseek-ai/dsh-experimental-loom`
+
+- `inject`: `remoteAccess` · `sessionController` · `sessionProjections` · `sessions` · `typert`
+- `source`: [`packages/experimental/loom/src/index.ts:71`](../packages/experimental/loom/src/index.ts)
+
+```ts config-catalog
+/** Admission limits after schema defaults. */
+export type ResolvedConfig = Required<Config>
+
+/** Branch admission limits; omitted fields take their schema defaults. */
+export interface Config {
+  /** Largest number of children one `loom.branch` call may create; a larger request fails before any fork. Default 8. */
+  readonly maxBranchesPerRequest?: number
+  /** Largest number of Loom children that are being admitted or running their first prompt at once, across every set. Default 4. */
+  readonly maxConcurrentBranches?: number
+  /**
+   * Whether children whose inherited sandbox mode can write their folder may
+   * run at once. When false, the default, such children that share a folder
+   * run one at a time; read-only children are not limited by it.
+   */
+  readonly concurrentWritableBranches?: boolean
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-loom -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-experimental-ptc-runtime-python -->
 <a id="deepseek-aidsh-experimental-ptc-runtime-python"></a>
 
@@ -4682,7 +4710,6 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-experimental-client-ui-loom` | — | [`packages/experimental/client-ui-loom/src/index.ts`](../packages/experimental/client-ui-loom/src/index.ts) |
 | `@deepseek-ai/dsh-experimental-client-ui-voice-input` | — | [`packages/experimental/client-ui-voice-input/src/index.ts`](../packages/experimental/client-ui-voice-input/src/index.ts) |
 | `@deepseek-ai/dsh-experimental-computer-use-cua-driver-native` | `computerUse` · `tools` · `systemPrompt` | [`packages/experimental/computer-use-cua-driver-native/src/index.ts`](../packages/experimental/computer-use-cua-driver-native/src/index.ts) |
-| `@deepseek-ai/dsh-experimental-loom` | `remoteAccess` · `sessionController` · `sessionProjections` · `sessions` · `typert` | [`packages/experimental/loom/src/index.ts`](../packages/experimental/loom/src/index.ts) |
 | `@deepseek-ai/dsh-experimental-session-inspector` | — | [`packages/experimental/session-inspector/src/index.ts`](../packages/experimental/session-inspector/src/index.ts) |
 | `@deepseek-ai/dsh-experimental-tool-worktree` | `tools` · `worktrees` | [`packages/experimental/tool-worktree/src/index.ts`](../packages/experimental/tool-worktree/src/index.ts) |
 | `@deepseek-ai/dsh-fs-observation-policy` | — | [`packages/fs/fs-observation-policy/src/index.ts`](../packages/fs/fs-observation-policy/src/index.ts) |

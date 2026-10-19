@@ -1,0 +1,194 @@
+/* Loom entries in a completed Turn's action row after Branch: the Branch ×N
+   caret, the variant pager, the Regenerate split button, and the private
+   marks. Icon buttons match the row's 28px actions and labelled buttons its
+   Usage pill; both follow the Settings font-size axis. */
+
+.action {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: calc(28px + var(--dsh-content-font-delta, 0px));
+  height: calc(28px + var(--dsh-content-font-delta, 0px));
+  padding: 6px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.pill {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: calc(28px + var(--dsh-content-font-delta, 0px));
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: calc(var(--dsh-content-font-size-secondary, 13px) - 1px);
+  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pill svg {
+  flex: none;
+  width: calc(15px + var(--dsh-content-font-delta, 0px));
+  height: calc(15px + var(--dsh-content-font-delta, 0px));
+}
+
+/* A caret attached to the control before it, with the row's stat-pill rebate. */
+.caret {
+  width: calc(20px + var(--dsh-content-font-delta, 0px));
+  padding: 6px 2px;
+  margin-left: -6px;
+}
+
+.open {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.pressed {
+  color: var(--dsw-alias-label-primary);
+}
+
+.action:disabled,
+.pill:disabled,
+.action[data-unavailable] {
+  cursor: default;
+  opacity: 0.4;
+}
+
+@media (hover: hover) {
+  .action:not(:disabled, [data-unavailable]):hover,
+  .pill:not(:disabled):hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-secondary);
+  }
+}
+
+.action:focus-visible,
+.pill:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: -2px;
+}
+
+/* A thin rule opens each group after Branch. */
+.sep {
+  flex: none;
+  align-self: center;
+  width: 0;
+  height: 12px;
+  margin-right: 2px;
+  border-left: 0.5px solid var(--dsw-alias-border-l3);
+}
+
+.split,
+.marks,
+.pager {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pager {
+  gap: 0;
+}
+
+.pager .sep {
+  margin-right: 8px;
+}
+
+.count {
+  min-width: 22px;
+  padding: 0 2px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: calc(var(--dsh-content-font-size-secondary, 13px) - 1px);
+  font-variant-numeric: tabular-nums;
+  line-height: 24px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.countLong {
+  display: none;
+}
+
+.status {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+/* In a narrow Chat column the labelled buttons keep their glyphs and move
+   their names to the accessible name and the hover tooltip. The nearest
+   inline-size container is the Chat scroller, whose content box is the
+   column's width whenever the column is narrower than its maximum. */
+@container (max-width: 735px) {
+  .pill {
+    justify-content: center;
+    width: calc(28px + var(--dsh-content-font-delta, 0px));
+    padding: 6px;
+  }
+
+  .label {
+    display: none;
+  }
+}
+
+/* Without hover no tooltip names the marks, so they keep their labels and the
+   marks group wraps onto its own line instead. */
+@media (hover: none) {
+  .marks .pill {
+    width: auto;
+    padding: 6px 8px;
+  }
+
+  .marks .label {
+    display: inline;
+  }
+}
+
+/* On a phone the pager takes its own row under the actions, with 44px targets
+   and the full "Variant k of N". The row wraps there, so a group's leading
+   rule would start a line as a lone bar. */
+@media (max-width: 480px) {
+  .pager {
+    order: 10;
+    flex: 1 0 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .pager .sep,
+  .marks > .sep,
+  .split > .sep {
+    display: none;
+  }
+
+  .pagerButton {
+    width: 44px;
+    height: 44px;
+    border: 0.5px solid var(--dsw-alias-border-l3);
+    border-radius: var(--dsw-radius-md);
+  }
+
+  .count {
+    flex: 1 1 auto;
+    font-size: 13px;
+  }
+
+  .countShort {
+    display: none;
+  }
+
+  .countLong {
+    display: inline;
+  }
+}

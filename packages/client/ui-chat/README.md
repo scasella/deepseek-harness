@@ -42,7 +42,9 @@ Native message images use separate user and output positions. The `conversation.
 
 The session-scoped `conversation.chat.user.content` Factory renders only the user content stack: text, extra blocks, image/file attachments in input order, and reference summaries. Its [`UserContentInput`](src/client/contract/slots.ts) carries prepared `content`, transform `facts`, display props, and explicit `loadImage`; node-owned injections provide reference actions. It calls the shared `conversation.user.text` Factory for text and its own image Slot for images. Direct callers need a Session binding and supply their own row wrapper.
 
-`UserStyleBubble` and the [source-specific wrappers](<src/client/chat/MessageItem.tsx#L157-L309>) retain the user row, keys, pending/echo markers, timestamps, copy controls, and other message actions. The content Factory reads neither source-specific models nor private Context, and is not a global user-content override entry point.
+`UserStyleBubble` and the [source-specific wrappers](<src/client/chat/MessageItem.tsx#L165-L362>) retain the user row, keys, pending/echo markers, timestamps, copy controls, and other message actions. The content Factory reads neither source-specific models nor private Context, and is not a global user-content override entry point.
+
+The `user` Node registration declares the session-scoped `conversation.chat.user-actions` list Slot, rendered after Copy in the bubble's action row. Entries receive `UserActionOwnerProps`: `turn`, `messageSeq`, the `text` that Copy writes, `hasAttachments`, and `opensTurn`, which is true only for the user message that opened its Turn. Admitted steering renders through `SteeringMessageNodeView` without the Slot; pending echoes and user messages outside a Turn render no entries.
 
 Standalone Markdown images show contained previews and open the shared image lightbox; local paths resolve against the viewed workspace after settlement. Image file links keep their sidebar activation and show a thumbnail after hover dwell or keyboard focus. Escape dismisses the thumbnail. Failed images retain a localized status and their description; no duplicate-image filtering is applied.
 
@@ -81,6 +83,8 @@ Preference menus restore focus to their trigger without scrolling before publish
 Artifact extensions can subscribe to one Turn and Node kind through `ChatNodeStore.turnDataSource`. The source includes hidden Nodes and exposes their business data in anchor order. Membership updates incrementally; only observed collections materialize ordered arrays, and unrelated Turns or kinds do not notify them.
 
 The completed-turn action footer follows the recorded Turn end. Its action row starts 20px below preceding prose or extension content. Actions remain visible only on the latest Turn when its final visible content is a reply; other endings and historical Turns reveal actions on hover or keyboard focus. Devices without hover keep actions visible.
+
+The `turn-tail` registration declares two session-scoped list Slots in that action row: `conversation.chat.assistant-actions` between Copy and Branch, and `conversation.chat.assistant-actions.after` after Branch and before the usage and time items. Entries of both receive `AssistantActionOwnerProps`: the closing message's `messageId`, the `turn` Location, and `turnEndSeq`, the `turn/end` seq where Branch forks. `conversation.chat.turnTail` entries receive the closing message's seq instead. A Turn whose closing message has no durable id renders neither Slot. While an `.after` entry renders content, the row wraps instead of overflowing.
 
 -----
 

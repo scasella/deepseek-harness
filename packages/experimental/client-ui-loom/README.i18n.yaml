@@ -3,38 +3,41 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/experimental/client-ui-loom/README.md
 /:
-  en: eb8909ab48de6d1b
-  zh: a44452794db5afbf
+  en: 1171a2d329980c38
+  zh: 12403adaab75f8f7
 /deepseek-ai-dsh-experimental-client-ui-loom:
   en: 2cccae0479fa38fe
   zh: 652c99ce2816ef21
 /deepseek-ai-dsh-experimental-client-ui-loom/summary:
-  en: cda1922721c3a634
-  zh: a2481eb72ff617d3
+  en: 0eeb838e6dd7382a
+  zh: b89fd1692690adc7
 /deepseek-ai-dsh-experimental-client-ui-loom/table-of-contents:
   en: d152484eb41ac6b4
   zh: 364c80ee00a374ff
 /deepseek-ai-dsh-experimental-client-ui-loom/use-this-package:
-  en: c450e1428e5ce9a6
-  zh: a1f65fd16d44bbe5
+  en: c98f6c17a28ce630
+  zh: 2b64e39ae196a03a
+/deepseek-ai-dsh-experimental-client-ui-loom/use-this-package/branch-from-a-turn:
+  en: fe87fa037ae4b0f9
+  zh: ab1bd94ce1add517
 /deepseek-ai-dsh-experimental-client-ui-loom/use-this-package/the-loom-tab:
-  en: 7b3414fce4a8929c
-  zh: 9cde3837d9643f8b
+  en: 11a774174e9c3abe
+  zh: 71f4b8b558619c0e
 /deepseek-ai-dsh-experimental-client-ui-loom/understand-the-implementation:
-  en: 90b0baed9a05dcf4
-  zh: cccf8c4ba196e8a0
+  en: 72bb1db4e8b27207
+  zh: c1743576b820cf2a
 /deepseek-ai-dsh-experimental-client-ui-loom/further-exploration:
   en: 0479b537d05f4235
   zh: 5404decd18ff61f3
 /deepseek-ai-dsh-experimental-client-ui-loom/model-experience:
-  en: ad6bf1fb30029d9a
-  zh: 245c92e002972bcf
+  en: 6b9497868078625a
+  zh: 4082d897c0d74dc5
 /deepseek-ai-dsh-experimental-client-ui-loom/model-experience/kv-cache-effect:
-  en: 116451a350c87e7e
-  zh: 59041ef58023cc30
+  en: 4e7c43fb6e515dc9
+  zh: e200eea5f4b4d41d
 /deepseek-ai-dsh-experimental-client-ui-loom/known-limitations-and-deferred-work:
-  en: 0cb4175c54621e0e
-  zh: 65d24b4296e3c2f1
+  en: d240f7437f89efef
+  zh: df3463ca98141077
 /deepseek-ai-dsh-experimental-client-ui-loom/known-limitations-and-deferred-work/dev-note:
   en: 0225ba087c5266f3
   zh: 4e706f1b2b984e63

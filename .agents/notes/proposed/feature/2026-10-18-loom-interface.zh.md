@@ -33,8 +33,10 @@ Loom 分支始终是通过 `SessionController.fork` 创建的顶层 fork Session
 
 ### 未决问题的决定
 
-- **fork 路由（L11）。** fork 已经沿用父 Session 日志中记录的路由继续运行：`session-fork.host.spec.ts` 断言了这一点，2026-10-18 的一次真实 API 检查在另一个默认模型下也确认了这一点。L11 因此缩减为两项：通过 `selectForNextRequest` 为每个分支显式覆盖路由（该方法从不保存全局默认值）；切点位于首个请求之前时，采用父 Session 第 1 轮次的路由。
+- **fork 路由（L11）。** fork 已经沿用父 Session 日志中记录的路由继续运行：`session-fork.host.spec.ts` 断言了这一点，2026-10-18 的一次真实 API 检查在另一个默认模型下也确认了这一点。L11 因此缩减为两项：通过 `selectForNextRequest` 为每个分支显式覆盖路由（该方法从不保存全局默认值）；切点位于首个请求之前时，采用父 Session 第 1 轮次的路由；尚未被任何 header 消费的继承选择优先于该路由。
+- **fork 家族缓存键。** Session Controller 创建、恢复、复用或 fork 的每个 Agent 都携带 `AgentOptions.cacheSessionId`，即沿 `parentSession` 到达的根。循环把它作为 `GenerateOptions.cacheSessionId` 标记在每个请求上，pi-ai 把它作为 `sessionId` 选项发送（OpenRouter `x-session-id`、`prompt_cache_key`）。独立字段让 `sessionId` 继续服务于重放游标、归属标识与 Agent 查找。subagent 子会话自成家族的根；压缩、Session 标题与 fork 模式 subagent 的请求仍以各自的 Session 作为键。
 - **继承的排队提示词。** 只有 Loom 丢弃它们。产品的 Branch 按钮保持现有行为；改变该行为需要升级指南，不在本计划范围内。
+- **首个自身轮次的变体。** 对 fork 自己开始的首个轮次执行 regenerate 或 edit 时，会在该 fork 的切点处 fork 其父会话，使子会话加入该 fork 的变体，而不是嵌套在其下方。请求未指定路由时，子会话采用该 fork 在该轮次之前记录的最后一个 `model/selection`，因此“与此分支相同”依然成立。运行器自行要求对父会话拥有 `loom/branch` 权限，因为网关只授权了请求所指定的 fork。
 - **Weave。** 一种文本写作模式，其文档保存在 `plugin:loom/weave-*` 记录中。Weave 生成的文本不进入 Chat 界面。「在 Chat 中继续」操作不在范围内。
 - **筛选计量（L18）。** 只统计 Weave 中的选择，计为每次选择的 log2 n 之和（Σ log2 n）。采用决定会被记录，但不计入。
 - **限定范围的搜索（L22）。** 侧边栏搜索的默认范围保持不变；Loom 显式传入搜索范围。
@@ -77,7 +79,7 @@ Loom 分支始终是通过 `SessionController.fork` 创建的顶层 fork Session
 - **无密钥，在 CI 中运行。** 逐文件 100% 覆盖率的单元测试、手写或回放的会话快照，以及使用 `DSH_SNAPSHOT=replay` 的 Web ARIA 预期输出。这些都不产生费用。
 - **真实 API，在本地运行。** 真实 API 测试套件以 `OPENROUTER_DEEPSEEK_API_KEY` 为前提，该变量为空时自动跳过；运行命令为 `DEEPSEEK_API_KEY= pnpm run test:e2e <files>`，否则 `.env` 中未充值的 `DEEPSEEK_API_KEY` 会让以 DeepSeek 密钥为前提的套件运行并失败。测试 overlay 使用普通模型 id `deepseek/deepseek-v4.1-flash-1017` 并固定模型提供商，从不使用账户预设，因此不会有账户专属的 id 进入 fixture（测试前置数据）。真实浏览器运行使用隔离的 `DSH_HOME`、3080 以外的端口，以及 `--patch apps/web/tests/pin-browse-picker.overlay.yml`。
 
-每个阶段都为自己改动的内容增加真实 API 用例：S0 验证 fork 路由（session-controller 中的 `fork-route.e2e.ts`）。跨 fork 的缓存复用尚未解决：在 OpenRouter 路由上，pi-ai 把每个 Session 自己的 id 作为 `x-session-id` 亲和性请求头发送；2026-10-18 的一次探查中，同一 id 下重复的请求读取了 1,536 个缓存 token，换一个 id 则为零。S2 真实执行重新生成与分支，并检查子 Session 的路由、提示词以及 `cacheReadTokens > 0`，这需要每个 fork 家族使用同一个亲和性键；S3 隔离两个以不同内容写入同一文件的分支；S5 在编辑工具结果后继续；S6 检查正文 logprobs、思考模式下不存在推理 logprobs、句中续写，以及带工具历史时的拒绝。
+每个阶段都为自己改动的内容增加真实 API 用例：S0 验证 fork 路由（session-controller 中的 `fork-route.e2e.ts`）。跨 fork 的缓存复用需要每个 fork 家族使用同一个亲和性键：在 OpenRouter 路由上，pi-ai 把请求的 Session id 作为 `x-session-id` 亲和性请求头发送；2026-10-18 的一次探查中，同一 id 下重复的请求读取了 1,536 个缓存 token，换一个 id 则为零。S2 以根为每个家族设置键，`fork-route.e2e.ts` 检查 fork 子会话首次请求的 `cacheReadTokens > 0`，以及不保存默认值的路由覆盖；S2 还真实执行重新生成与分支，并检查子 Session 的路由与提示词；S3 隔离两个以不同内容写入同一文件的分支；S5 在编辑工具结果后继续；S6 检查正文 logprobs、思考模式下不存在推理 logprobs、句中续写，以及带工具历史时的拒绝。
 
 ## 考虑过的替代方案
 
@@ -103,7 +105,7 @@ Loom 分支始终是通过 `SessionController.fork` 创建的顶层 fork Session
 ## 风险
 
 - **花费。** 重新生成 ×N、变体和 autoloom 会成倍增加调用次数。S2 把 `maxBranchesPerRequest` 与 `maxConcurrentBranches`、S3 把 autoloom 预算作为经过校验的 `Config` 字段加入，成本预览始终注明「按标价计算」。
-- **共享文件夹。** 没有 L12 时，并发写入的分支会在同一个文件夹上竞争。除非用户选择逐个运行，否则运行器拒绝在没有隔离的情况下并发运行具有写权限的分支。
+- **共享文件夹。** 没有 L12 时，写入的分支共用同一个文件夹。除非设置了 `concurrentWritableBranches`，运行器会按文件夹串行运行可写的 Loom 子会话；在 worktree 隔离落地之前，后运行的子会话能看到先运行的子会话所做的改动。
 - **遥测。** 由反馈触发的导出包含插件记录与 logprobs；Loom 挂载一个脱敏监听器。
 - **记录持久性。** 格式迁移时，实验性记录只会尽力保留；README 会说明这一点。
 - **需要人工参与。** 组合包图标与新字形（keep、set aside、multiverse、weave、bottom sheet）需要设计师批准；zh 文案需要译者评审；需要决定是否在 CI 中配置 OpenRouter 密钥（在此之前真实 API 套件只在本地运行）。这些事项阻塞合入 master，不阻塞分支上的工作。

@@ -14,6 +14,9 @@ const ROWS = [
   { id: 'move', label: 'keys.fixed.move', bindings: [{ code: 'ArrowUp', modifiers: [] }, { code: 'ArrowDown', modifiers: [] }] },
   { id: 'collapse-expand', label: 'keys.fixed.collapseExpand', bindings: [{ code: 'ArrowLeft', modifiers: [] }, { code: 'ArrowRight', modifiers: [] }] },
   { id: 'open', label: 'keys.fixed.open', bindings: [{ code: 'Enter', modifiers: [] }] },
+  { id: 'branch', label: 'keys.fixed.branch', bindings: [{ code: 'KeyG', modifiers: [] }] },
+  { id: 'keep', label: 'keys.fixed.keep', bindings: [{ code: 'KeyK', modifiers: [] }] },
+  { id: 'set-aside', label: 'keys.fixed.setAside', bindings: [{ code: 'KeyX', modifiers: [] }] },
 ] as const satisfies readonly { id: string; label: string; bindings: readonly [ShortcutBinding, ...ShortcutBinding[]] }[]
 
 /**

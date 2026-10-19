@@ -220,3 +220,74 @@
   flex-basis: 100%;
   margin: 0;
 }
+
+/* A Session's private mark follows its label, in the label's own color. */
+.markGlyph {
+  display: inline-flex;
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* Running children of a branch point, beside the point's own metric. */
+.badge {
+  flex: none;
+  padding: 0 6px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+/* Prompt-variant tallies under the tree. */
+.tallies {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 8px 0;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.tallyHeading {
+  margin: 0 0 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-weight: 500;
+}
+
+.tallyLines {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tallyLine {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 0 8px;
+}
+
+.tallyPosition {
+  grid-row: span 2;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.tallyPrompt {
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tallyCounts {
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+}

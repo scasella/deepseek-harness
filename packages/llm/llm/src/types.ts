@@ -563,6 +563,15 @@ export interface GenerateOptions {
    */
   sessionId?: Branded<'SessionId'>
   /**
+   * Session whose provider-side prompt cache this request shares, stamped by
+   * the loop from `AgentOptions.cacheSessionId`; a fork family shares its
+   * root's identity. Adapters that map `sessionId` to prompt-cache or
+   * upstream-affinity metadata send this identity there instead; omission
+   * keys that metadata by `sessionId`. Replay, attribution, and Agent lookup
+   * keep reading `sessionId`.
+   */
+  cacheSessionId?: Branded<'SessionId'>
+  /**
    * Provider-neutral classification for an auxiliary model call. Adapters may
    * map the purpose to model-hidden transport metadata. Ordinary conversation
    * requests leave it unset.

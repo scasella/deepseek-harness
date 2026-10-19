@@ -203,6 +203,13 @@ interface AgentOptions {
   reasoningEffort?: ReasoningEffortId
   /** Maximum output tokens for each conversation-model request. */
   maxTokens?: number
+  /**
+   * Session whose provider-side prompt cache this agent's conversation-model
+   * requests share, stamped on each request as `GenerateOptions.cacheSessionId`;
+   * omission keys the cache by the agent's own Session. Runtime-only: the loop
+   * never logs it.
+   */
+  cacheSessionId?: SessionId
 }
 ```
 

@@ -16,7 +16,7 @@ import type { TurnOutlineEntry } from '@deepseek-ai/dsh-session-turn-outline/cli
 import { ClippedText } from './clipped.tsx'
 import { cutReading, exactCount, plainPreview, plural, type LoomTranslate } from './format.ts'
 import {
-  forkCutOf, inheritedCounts, inheritedSplitOf, ownCounts, projectionValuesOf, sessionTitle, variantsOf,
+  forkCutOf, inheritedCounts, inheritedSplitOf, lastInheritedTurnOf, ownCounts, projectionValuesOf, sessionTitle, variantsOf,
   type LoomCounts, type LoomSplit,
 } from './lineage.ts'
 import type { LoomViewProps } from './LoomView.tsx'
@@ -75,7 +75,7 @@ export function ReadingPane(props: ReadingPaneProps) {
   const inheritedOutline = split === undefined ? [] : outline.filter(entry => entry.seq <= split.cutSeq)
   const counts = useMemo<PaneCounts>(() => ({ own: ownCounts(values), inherited: inheritedCounts(values) }), [values])
   // A cut inside a turn inherits that turn's start, so the outline names it; `cutTurn` names only completed turns.
-  const lastInheritedTurn = inheritedOutline.at(-1)?.turn ?? split?.cutTurn ?? 0
+  const lastInheritedTurn = split === undefined ? 0 : lastInheritedTurnOf(values, split)
 
   return (
     <article className={css.document} data-loom-reader={sessionId}>

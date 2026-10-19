@@ -1,0 +1,37 @@
+- region "Branch after turn 2":
+  - text: Branch after turn 2 6 branches
+  - list:
+    - listitem:
+      - textbox "Steering line 1":
+        - /placeholder: What should this branch do?
+        - text: LOOM_GUARDS Answer in one word.
+      - button "Remove line 1"
+    - listitem:
+      - textbox "Steering line 2":
+        - /placeholder: What should this branch do?
+        - text: LOOM_GUARDS Answer in one word.
+      - button "Remove line 2"
+    - listitem:
+      - textbox "Steering line 3":
+        - /placeholder: What should this branch do?
+        - text: LOOM_GUARDS Answer in French.
+      - button "Remove line 3"
+  - button "Add branch"
+  - text: "Rows 1 and 2 share a line: samples of one prompt"
+  - term: Samples per line
+  - definition:
+    - radiogroup "Samples per line":
+      - radio "×1"
+      - radio "×2" [checked]
+      - radio "×3"
+      - radio "×4"
+  - term: Model
+  - definition:
+    - text: DeepSeek-V4-Flash
+    - button "Change"
+    - text: Same as parent
+  - term: Workspace
+  - definition: Children share this folder, including edits earlier branches make
+  - text: Nothing runs until you start
+  - button "Cancel"
+  - button "Start 6 branches"

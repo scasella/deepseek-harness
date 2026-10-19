@@ -1530,7 +1530,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'loom',
     summary: 'Loom Host service.',
-    description: 'Loom Host service. It registers the `loomBranch` projection unit and the telemetry redaction rule for `plugin:loom/*` records for its own lifetime, and exposes the `loom` Remote namespace.',
+    description: 'Loom Host service. It registers the `loomBranch` and `loomMark` projection units, the telemetry redaction rule for `plugin:loom/*` records, and the branch runner for its own lifetime, and exposes the `loom` Remote namespace.',
     methods: [
       {
         signature: '@Remote async family(request: LoomFamilyRequest, signal: AbortSignal): Promise<LoomFamily>',
@@ -1545,6 +1545,34 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'request', description: 'Session and event to read.' }, { name: 'signal', description: 'cancellation for the Session read.' }],
         returns: 'the request view.',
         throws: ['RemoteError `session/not-found` when the Session does not exist.', 'RemoteError `loom/seq-out-of-range` when `seq` is not a seq of the log or precedes the first request settlement.', 'RemoteError `gateway/internal` when the log holds no `request/header` before the addressed request.'],
+      },
+      {
+        signature: '@Remote branch(request: LoomBranchRequest): Promise<LoomBranchValue>',
+        description: 'Branch one Session into a set of fork children, each cut at the request\'s turn boundary and sent its own prompt. A regenerate or edit of the first turn a fork Session started itself forks that fork\'s parent at the fork\'s cut instead, so the children become further variants beside the fork. Without a `selection`, those children take the route the fork selected before that turn. When that parent no longer exists, the children are cut in the addressed fork instead, below it. Every request validation runs before any fork, except that the Session Controller validates `selection` in each child\'s fork, so an unavailable route fails each child with `session/model-unavailable` and not the request. A child is forked only when a concurrency slot admits it, so a queued child has no Session; the runner removes the next-turn prompts the child inherited from the cut, writes its `plugin:loom/branch` record, and then sends its prompt. A retry with the same `requestId` for the same Session returns the first result. The Gateway authorizes the addressed Session through its `sessionId` field; the method itself requires `loom/branch` on a fork parent it branches instead.',
+        parameters: [{ name: 'request', description: 'addressed Session, cut, prompts, and optional route.' }],
+        returns: 'the set and each child as it stood when the call returned; a child the service\'s unloading withdrew meanwhile reads `cancelled`.',
+        throws: ['RemoteError `session/not-found` (the addressed Session), `remote-access/denied` (the fork parent, while it exists), `gateway/bad-request`, `loom/too-many-branches`, `loom/empty-line`, `loom/turn-unavailable`, or `gateway/cancelled` (the service unloaded before the set existed), each before any fork.'],
+      },
+      {
+        signature: '@Remote setStatus(request: LoomSetStatusRequest): LoomSetStatus',
+        description: 'Read every child of one branch set from Host memory, which a Host restart clears.',
+        parameters: [{ name: 'request', description: 'the set.' }],
+        returns: 'each child\'s state, Session, and failure.',
+        throws: ['RemoteError `loom/set-not-found` for a set this Host does not hold or whose addressed Session the caller cannot access.'],
+      },
+      {
+        signature: '@Remote cancel(request: LoomCancelRequest): LoomCancelValue',
+        description: 'Withdraw queued children of one branch set before they have a Session.',
+        parameters: [{ name: 'request', description: 'the set and, optionally, the child indices to withdraw.' }],
+        returns: 'the indices withdrawn by this call.',
+        throws: ['RemoteError `loom/set-not-found` for a set this Host does not hold or whose addressed Session the caller cannot access.'],
+      },
+      {
+        signature: '@Remote async mark(request: LoomMarkRequest): Promise<LoomMarkValue>',
+        description: 'Set or clear the private mark of one Session, activating it when it is cold, and flush the `plugin:loom/mark` record. A request for the mark the Session already holds writes nothing. Feedback events are never written. The Gateway authorizes the Session through its `sessionId` field.',
+        parameters: [{ name: 'request', description: 'the Session and its new mark.' }],
+        returns: 'the mark in force.',
+        throws: ['RemoteError from resolving the Session\'s Agent, such as `session/not-found`.'],
       },
     ],
   },
@@ -4748,7 +4776,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AgentOptions',
-    declaration: 'export interface AgentOptions {\n    provider?: string;\n    model?: string;\n    reasoningEffort?: ReasoningEffortId;\n    maxTokens?: number;\n}',
+    declaration: 'export interface AgentOptions {\n    provider?: string;\n    model?: string;\n    reasoningEffort?: ReasoningEffortId;\n    maxTokens?: number;\n    cacheSessionId?: SessionId;\n}',
   },
   {
     name: 'AgentPresetComposition',
@@ -5588,7 +5616,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'GenerateOptions',
-    declaration: 'export interface GenerateOptions {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: RequestMessage[];\n    system?: string;\n    tools?: ToolSchema[];\n    toolHistory?: ToolHistory;\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    purpose?: \'compaction\' | \'session-title\';\n}',
+    declaration: 'export interface GenerateOptions {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: RequestMessage[];\n    system?: string;\n    tools?: ToolSchema[];\n    toolHistory?: ToolHistory;\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    cacheSessionId?: Branded<\'SessionId\'>;\n    purpose?: \'compaction\' | \'session-title\';\n}',
   },
   {
     name: 'GenericCallView',
@@ -6007,6 +6035,38 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type LogExporterOptions = Omit<OTLPExporterNodeConfigBase, \'selfObsMeterProvider\'> & {\n    url: string;\n};',
   },
   {
+    name: 'LoomBranchChild',
+    declaration: 'export type LoomBranchChild = {\n    readonly index: number;\n    readonly state: \'started\';\n    readonly sessionId: SessionId;\n} | {\n    readonly index: number;\n    readonly state: \'queued\';\n} | {\n    readonly index: number;\n    readonly state: \'cancelled\';\n} | {\n    readonly index: number;\n    readonly state: \'failed\';\n    readonly code: RemoteErrorCode;\n    readonly message: string;\n    readonly sessionId?: SessionId;\n};',
+  },
+  {
+    name: 'LoomBranchRequest',
+    declaration: 'export type LoomBranchRequest = LoomRegenerateRequest | LoomSteerRequest | LoomEditRequest | LoomVariantsRequest;',
+  },
+  {
+    name: 'LoomBranchRequestBase',
+    declaration: 'export interface LoomBranchRequestBase {\n    readonly sessionId: SessionId;\n    readonly requestId: LoomBranchRequestId;\n    readonly selection?: ModelSelection;\n}',
+  },
+  {
+    name: 'LoomBranchRequestId',
+    declaration: 'export type LoomBranchRequestId = Branded<\'LoomBranchRequestId\'>;',
+  },
+  {
+    name: 'LoomBranchValue',
+    declaration: 'export interface LoomBranchValue {\n    readonly setId: LoomSetId;\n    readonly children: readonly LoomBranchChild[];\n}',
+  },
+  {
+    name: 'LoomCancelRequest',
+    declaration: 'export interface LoomCancelRequest {\n    readonly setId: LoomSetId;\n    readonly indices?: readonly number[];\n}',
+  },
+  {
+    name: 'LoomCancelValue',
+    declaration: 'export interface LoomCancelValue {\n    readonly cancelled: readonly number[];\n}',
+  },
+  {
+    name: 'LoomEditRequest',
+    declaration: 'export interface LoomEditRequest extends LoomBranchRequestBase {\n    readonly kind: \'edit\';\n    readonly turn: number;\n    readonly text: string;\n}',
+  },
+  {
     name: 'LoomFamily',
     declaration: 'export interface LoomFamily {\n    readonly rootId: LoomNodeId;\n    readonly focusId: LoomNodeId;\n    readonly nodes: readonly LoomFamilyNode[];\n}',
   },
@@ -6019,8 +6079,24 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface LoomFamilyRequest {\n    readonly sessionId: SessionId;\n}',
   },
   {
+    name: 'LoomMark',
+    declaration: 'export type LoomMark = \'keep\' | \'set-aside\';',
+  },
+  {
+    name: 'LoomMarkRequest',
+    declaration: 'export interface LoomMarkRequest {\n    readonly sessionId: SessionId;\n    readonly mark: LoomMark | null;\n}',
+  },
+  {
+    name: 'LoomMarkValue',
+    declaration: 'export interface LoomMarkValue {\n    readonly mark: LoomMark | null;\n}',
+  },
+  {
     name: 'LoomNodeId',
     declaration: 'export type LoomNodeId = Branded<\'LoomNodeId\'>;',
+  },
+  {
+    name: 'LoomRegenerateRequest',
+    declaration: 'export interface LoomRegenerateRequest extends LoomBranchRequestBase {\n    readonly kind: \'regenerate\';\n    readonly turn: number;\n    readonly count: number;\n}',
   },
   {
     name: 'LoomRequestAtRequest',
@@ -6045,6 +6121,34 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'LoomRequestView',
     declaration: 'export interface LoomRequestView {\n    readonly route: LoomRequestRoute;\n    readonly systemPrompt: LoomRequestSystemPrompt;\n    readonly tools: LoomRequestTools;\n    readonly messages: readonly LoomRequestMessage[];\n    readonly inheritedTurns: number;\n    readonly ownTurns: number;\n}',
+  },
+  {
+    name: 'LoomSetChildState',
+    declaration: 'export type LoomSetChildState = \'started\' | \'queued\' | \'failed\' | \'cancelled\';',
+  },
+  {
+    name: 'LoomSetId',
+    declaration: 'export type LoomSetId = Branded<\'LoomSetId\'>;',
+  },
+  {
+    name: 'LoomSetStatus',
+    declaration: 'export interface LoomSetStatus {\n    readonly setId: LoomSetId;\n    readonly sourceSessionId: SessionId;\n    readonly children: readonly LoomSetStatusChild[];\n}',
+  },
+  {
+    name: 'LoomSetStatusChild',
+    declaration: 'export interface LoomSetStatusChild {\n    readonly index: number;\n    readonly state: LoomSetChildState;\n    readonly sessionId?: SessionId;\n    readonly code?: RemoteErrorCode;\n    readonly message?: string;\n}',
+  },
+  {
+    name: 'LoomSetStatusRequest',
+    declaration: 'export interface LoomSetStatusRequest {\n    readonly setId: LoomSetId;\n}',
+  },
+  {
+    name: 'LoomSteerRequest',
+    declaration: 'export interface LoomSteerRequest extends LoomBranchRequestBase {\n    readonly kind: \'steer\';\n    readonly afterTurn: number;\n    readonly lines: readonly string[];\n}',
+  },
+  {
+    name: 'LoomVariantsRequest',
+    declaration: 'export interface LoomVariantsRequest extends LoomBranchRequestBase {\n    readonly kind: \'variants\';\n    readonly afterTurn: number;\n    readonly lines: readonly string[];\n    readonly samples: number;\n}',
   },
   {
     name: 'LspHover',
@@ -7236,7 +7340,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionForkRequest',
-    declaration: 'export interface SessionForkRequest {\n    readonly sessionId: SessionId;\n    readonly atSeq?: number;\n    readonly allowMigration?: boolean;\n}',
+    declaration: 'export interface SessionForkRequest {\n    readonly sessionId: SessionId;\n    readonly atSeq?: number;\n    readonly allowMigration?: boolean;\n    readonly selection?: ModelSelection;\n}',
   },
   {
     name: 'SessionForkSource',

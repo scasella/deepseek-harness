@@ -5,9 +5,10 @@
  * positions (`level`, `posinset`, `setsize`) each row announces.
  */
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
-import type { LoomFamily, LoomFamilyNode } from '@deepseek-ai/dsh-experimental-loom/types'
+import type { LoomFamily, LoomFamilyNode, LoomMark } from '@deepseek-ai/dsh-experimental-loom/types'
 import type { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
-import { forkCutOf, openedTurnAt, ownCounts, ownTokens, projectionValuesOf, sessionTitle } from './lineage.ts'
+import type { LoomMarkOverride } from './branching.ts'
+import { forkCutOf, markOf, openedTurnAt, ownCounts, ownTokens, projectionValuesOf, sessionTitle } from './lineage.ts'
 
 /** Activity of one Session row: running, ended with own turns, or without own turns yet. */
 export type LoomRowStatus = 'running' | 'done' | 'blank'
@@ -52,11 +53,17 @@ export interface LoomSessionRow extends LoomRowBase {
   readonly status: LoomRowStatus
   /** Whether this row is the Session the Loom tab belongs to. */
   readonly current: boolean
+  /** Private mark the Session shows, or null. */
+  readonly mark: LoomMark | null
+  /** Last turn the Session opened, from its outline; absent before the outline arrives or without turns. */
+  readonly lastTurn?: number
 }
 
 /** One cut of a parent Session that its child rows were forked at. */
 export interface LoomPointRow extends LoomRowBase {
   readonly kind: 'point'
+  /** Session whose cut this point is. */
+  readonly parentSessionId: SessionId
   /** Cut seq; absent for children whose lineage has not arrived. */
   readonly cutSeq?: SessionSeq
   /** Last inherited turn; absent for a cut inside the first turn or an unknown cut. */
@@ -67,6 +74,8 @@ export interface LoomPointRow extends LoomRowBase {
   readonly branchCount: number
   /** Sum of the children's own tokens; absent while no child reports usage. */
   readonly tokens?: number
+  /** Number of children at this cut that are running. */
+  readonly running: number
 }
 
 /** One visible tree row. */
@@ -82,6 +91,8 @@ export interface LoomTreeInput {
   readonly running: (sessionId: SessionId) => boolean | undefined
   /** Row ids the user collapsed; every other expandable row is expanded. */
   readonly collapsed: ReadonlySet<string>
+  /** Marks this browser is saving, by Session. */
+  readonly marks: Readonly<Record<SessionId, LoomMarkOverride>>
 }
 
 /** Visible rows and the family size. */
@@ -120,7 +131,7 @@ function byCut(left: PointGroup, right: PointGroup): number {
  * @returns visible rows in document order and the family size.
  */
 export function buildLoomTree(input: LoomTreeInput): LoomTree {
-  const { family, list, currentSessionId, running, collapsed } = input
+  const { family, list, currentSessionId, running, collapsed, marks } = input
   const childrenOf = new Map<string, LoomFamilyNode[]>()
   for (const node of family.nodes) {
     if (node.parentId === undefined) continue
@@ -165,6 +176,7 @@ export function buildLoomTree(input: LoomTreeInput): LoomTree {
   }
 
   const rows: LoomTreeRow[] = []
+  const isRunning = (node: LoomFamilyNode): boolean => running(node.sessionId) ?? node.running
   const tokensOf = (sessionId: SessionId): number | undefined => ownTokens(projectionValuesOf(list, sessionId))
   const visitSession = (
     node: LoomFamilyNode,
@@ -176,9 +188,11 @@ export function buildLoomTree(input: LoomTreeInput): LoomTree {
     const id = sessionRowId(node.sessionId)
     const points = pointsOf(node)
     const expanded = points.length > 0 && !collapsed.has(id)
-    const counts = ownCounts(projectionValuesOf(list, node.sessionId))
+    const values = projectionValuesOf(list, node.sessionId)
+    const counts = ownCounts(values)
     const tokens = tokensOf(node.sessionId)
-    const live = running(node.sessionId) ?? node.running
+    const live = isRunning(node)
+    const lastTurn = values?.turnOutline?.at(-1)?.turn
     rows.push({
       kind: 'session',
       id,
@@ -196,6 +210,8 @@ export function buildLoomTree(input: LoomTreeInput): LoomTree {
       // A fork that never ran a turn of its own has not ended anything.
       status: live ? 'running' : node.blank || counts?.turns === 0 ? 'blank' : 'done',
       current: node.sessionId === currentSessionId,
+      mark: markOf(values?.loomMark, marks[node.sessionId]),
+      ...lastTurn === undefined ? {} : { lastTurn },
     })
     if (!expanded) return
     points.forEach((point, index) => {
@@ -205,6 +221,7 @@ export function buildLoomTree(input: LoomTreeInput): LoomTree {
       rows.push({
         kind: 'point',
         id: point.id,
+        parentSessionId: node.sessionId,
         level: level + 1,
         parentRowId: id,
         posinset: index + 1,
@@ -218,6 +235,7 @@ export function buildLoomTree(input: LoomTreeInput): LoomTree {
         ...point.openedTurn === undefined ? {} : { openedTurn: point.openedTurn },
         branchCount: point.children.length,
         ...known.length === 0 ? {} : { tokens: known.reduce((sum, value) => sum + value, 0) },
+        running: point.children.filter(isRunning).length,
       })
       if (!pointExpanded) return
       point.children.forEach((child, childIndex) => {

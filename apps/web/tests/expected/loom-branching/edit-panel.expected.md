@@ -1,0 +1,6 @@
+- dialog "Edit turn 2 into a new branch":
+  - paragraph: Edit turn 2 into a new branch
+  - textbox "Edited prompt": LOOM_BRANCHING Take the other approach from here.
+  - text: This conversation stays unchanged
+  - button "Cancel"
+  - button "Branch"

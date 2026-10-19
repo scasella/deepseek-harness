@@ -1,0 +1,10 @@
+- region "Running branches":
+  - status: 1 running · 1 queued
+  - button "Cancel queued"
+  - list:
+    - listitem:
+      - button "Open Branch 1": Branch 1
+      - text: running
+    - listitem:
+      - text: Branch 2 queued
+      - button "Cancel Branch 2": Cancel

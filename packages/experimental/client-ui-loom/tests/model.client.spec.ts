@@ -196,7 +196,9 @@ describe('Loom family outline', () => {
 
   it('nests children under one branch point per cut with APG positions and the current path', () => {
     const { list, family } = scenario()
-    const tree = buildLoomTree({ family, list, currentSessionId: B, running: id => id === C ? true : undefined, collapsed: new Set() })
+    const tree = buildLoomTree({
+      family, list, currentSessionId: B, running: id => id === C ? true : undefined, collapsed: new Set(), marks: {},
+    })
     expect(tree.sessionCount).toBe(5)
     expect(sessions(tree.rows)).toEqual(['s:root', 'p:root:10', 's:a', 'p:a:30', 's:d', 's:b', 'p:root:20', 's:c'])
     type Rows = [LoomSessionRow, LoomPointRow, LoomSessionRow, LoomPointRow, LoomSessionRow, LoomSessionRow, LoomPointRow, LoomSessionRow]
@@ -219,7 +221,7 @@ describe('Loom family outline', () => {
       fork(B, ROOT, 5, 1, 1),
     ])
     const family = familyOf(list, A)
-    const open = buildLoomTree({ family, list, currentSessionId: A, running: () => undefined, collapsed: new Set() })
+    const open = buildLoomTree({ family, list, currentSessionId: A, running: () => undefined, collapsed: new Set(), marks: {} })
     expect(sessions(open.rows)).toEqual(['s:root', 'p:root:5', 's:b', 'p:root:?', 's:a'])
     const unknown = open.rows[3] as LoomPointRow
     expect(unknown).toMatchObject({ branchCount: 1, onPath: true })
@@ -229,11 +231,11 @@ describe('Loom family outline', () => {
     expect(open.rows[4]).toMatchObject({ status: 'blank', title: 'A' })
     expect((open.rows[4] as LoomSessionRow).tokens).toBeUndefined()
     expect((open.rows[4] as LoomSessionRow).steps).toBeUndefined()
-    const pointClosed = buildLoomTree({ family, list, currentSessionId: A, running: () => undefined, collapsed: new Set(['p:root:5']) })
+    const pointClosed = buildLoomTree({ family, list, currentSessionId: A, running: () => undefined, collapsed: new Set(['p:root:5']), marks: {} })
     expect(sessions(pointClosed.rows)).toEqual(['s:root', 'p:root:5', 'p:root:?', 's:a'])
     expect(pointClosed.rows[1]).toMatchObject({ expanded: false })
     const rootClosed = buildLoomTree({
-      family, list, currentSessionId: A, running: () => undefined, collapsed: new Set([sessionRowId(ROOT)]),
+      family, list, currentSessionId: A, running: () => undefined, collapsed: new Set([sessionRowId(ROOT)]), marks: {},
     })
     expect(sessions(rootClosed.rows)).toEqual(['s:root'])
     expect(rootClosed.rows[0]).toMatchObject({ expandable: true, expanded: false })
@@ -250,7 +252,9 @@ describe('Loom family outline', () => {
       fork(B, ROOT, 15, 2, 1),
       fork(C, ROOT, 8, 3, 1),
     ])
-    const tree = buildLoomTree({ family: familyOf(list, A), list, currentSessionId: A, running: () => undefined, collapsed: new Set() })
+    const tree = buildLoomTree({
+      family: familyOf(list, A), list, currentSessionId: A, running: () => undefined, collapsed: new Set(), marks: {},
+    })
     const points = tree.rows.filter((item): item is LoomPointRow => item.kind === 'point')
     expect(points.map(point => [point.id, point.cutTurn, point.openedTurn])).toEqual([
       ['p:root:8', 1, 1], ['p:root:12', 1, 2], ['p:root:15', 1, 2],
@@ -265,7 +269,9 @@ describe('Loom family outline', () => {
         sessionStats: { ...figures(1, 2), fork: { own: figures(0, 0), inherited: figures(1, 2) } },
       },
     })])
-    const tree = buildLoomTree({ family: familyOf(list, A), list, currentSessionId: A, running: () => undefined, collapsed: new Set() })
+    const tree = buildLoomTree({
+      family: familyOf(list, A), list, currentSessionId: A, running: () => undefined, collapsed: new Set(), marks: {},
+    })
     expect(tree.rows.at(-1)).toMatchObject({ sessionId: A, turns: 0, status: 'blank' })
   })
 
@@ -277,7 +283,7 @@ describe('Loom family outline', () => {
       nodes: [...familyOf(list, ROOT).nodes].sort((left, right) => left.sessionId === A ? -1 : right.sessionId === A ? 1 : 0),
     }
     expect(family.nodes.map(node => node.sessionId)).toEqual([A, ROOT, B])
-    const tree = buildLoomTree({ family, list, currentSessionId: ROOT, running: () => undefined, collapsed: new Set() })
+    const tree = buildLoomTree({ family, list, currentSessionId: ROOT, running: () => undefined, collapsed: new Set(), marks: {} })
     expect(sessions(tree.rows)).toEqual(['s:root', 'p:root:5', 's:b', 'p:root:?', 's:a'])
   })
 
@@ -285,9 +291,9 @@ describe('Loom family outline', () => {
     const list = listOf([row(ROOT)])
     const family = familyOf(list, ROOT)
     const bare = { ...list, byId: {} }
-    expect(buildLoomTree({ family, list: bare, currentSessionId: ROOT, running: () => false, collapsed: new Set() }).rows[0]).toMatchObject({ title: 'root' })
+    expect(buildLoomTree({ family, list: bare, currentSessionId: ROOT, running: () => false, collapsed: new Set(), marks: {} }).rows[0]).toMatchObject({ title: 'root' })
     const empty = buildLoomTree({
-      family: { ...family, nodes: [] }, list, currentSessionId: ROOT, running: () => false, collapsed: new Set(),
+      family: { ...family, nodes: [] }, list, currentSessionId: ROOT, running: () => false, collapsed: new Set(), marks: {},
     })
     expect(empty.rows).toEqual([])
   })

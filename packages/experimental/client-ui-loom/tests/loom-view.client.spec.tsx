@@ -11,9 +11,12 @@ import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts
 import type { SessionStatusSnapshot } from '@deepseek-ai/dsh-client-ui-session/client'
 import type { KeyedSnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import type { LoomRequestView } from '@deepseek-ai/dsh-experimental-loom/types'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { LoomSetId } from '@deepseek-ai/dsh-experimental-loom/types'
 import { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type { SessionStatsFigures } from '@deepseek-ai/dsh-session-stats/client'
 import type {} from '@deepseek-ai/dsh-session-turn-outline/client'
+import type { LoomBranchingState } from '../src/client/branching.ts'
 import { createLoomFamilySources, type LoomFamilyState } from '../src/client/family.ts'
 import { en, zh } from '../src/client/locales.ts'
 import { LoomView, type LoomViewProps } from '../src/client/LoomView.tsx'
@@ -120,7 +123,9 @@ function bench(options: {
   reader?: (key: string) => LoomReaderState | undefined
   request?: (key: string) => LoomRequestState | undefined
   phase?: SessionListState['phase']
+  branching?: LoomBranchingState
 } = {}) {
+  const branching = createSnapshotStore<LoomBranchingState>(options.branching ?? { sets: [], forms: {}, marks: {} })
   const sessions = createSnapshotStore<SessionListState>({ ...listOf(options.rows ?? ROWS), phase: options.phase ?? 'ready' })
   const statuses = createSnapshotStore<SessionStatusSnapshot>(new Map())
   const families = createLoomFamilySources({ sessions })
@@ -136,6 +141,8 @@ function bench(options: {
     loadOlder: vi.fn(),
     completeViewRequest: vi.fn(),
     insetComposerStart: vi.fn(),
+    openForm: vi.fn(),
+    setMark: vi.fn(async () => ({ ok: true as const })),
     renderFactorySlot: vi.fn((_name: string, props: { text: string }): ReactNode => <div data-testid="reasoning-body">{props.text}</div>),
   }
   const props = {
@@ -149,12 +156,13 @@ function bench(options: {
     useLoomReader: readers.hook,
     useLoomRequest: requests.hook,
     useStore: bindSnapshotSelector(store),
+    useLoomBranching: bindSnapshotSelector(branching),
     actions: store.actions,
     t: options.locale === 'zh' ? makeTranslate(zh, commonZh) : makeTranslate(en, commonEn),
     ...injected,
   } as LoomViewProps
   const view = render(<LoomView {...props} />)
-  return { view, store, sessions, statuses, readers, requests, injected }
+  return { view, store, sessions, statuses, readers, requests, injected, branching }
 }
 
 function treeRows(): HTMLElement[] {
@@ -228,7 +236,7 @@ describe('Loom tab tree', () => {
     expect(document.activeElement).toBe(at(0))
     expect(fireEvent.keyDown(at(0), { key: 'ArrowRight', ctrlKey: true })).toBe(true)
     expect(rows()).toHaveLength(1)
-    expect(fireEvent.keyDown(at(0), { key: 'g' })).toBe(true)
+    expect(fireEvent.keyDown(at(0), { key: 'q' })).toBe(true)
     expect(fireEvent.keyDown(at(0), { key: 'ArrowUp' })).toBe(false)
     expect(document.activeElement).toBe(at(0))
   })
@@ -321,6 +329,80 @@ describe('Loom tab tree', () => {
     cleanup()
     const other = bench({ viewRequest: { view: 'trajectory', focus: 'call-1' } })
     expect(other.injected.completeViewRequest).not.toHaveBeenCalled()
+  })
+
+  it('opens the Branch ×N form for the focused node with g, and toggles marks with k and x', () => {
+    const rows = ROWS.map(item => item.id === B
+      ? { ...item, projectionValues: { ...item.projectionValues, loomMark: { mark: 'keep' as const } } }
+      : item.id === C ? { ...item, projectionValues: { ...item.projectionValues, turnOutline: [] } } : item)
+    const { injected, statuses } = bench({ rows })
+    act(() => { statuses.set(new Map([[A, { running: true, pendingInteraction: undefined, completionUnread: false }]])) })
+    const at = (index: number): HTMLElement => treeRows()[index]!
+    expect(names()[3]).toBe('Downward-only jitter, 1 turn · 4 steps, own 1.5K tok, ended, kept')
+    expect(at(3).querySelector('svg')).toBeTruthy()
+    expect(names()[1]).toBe('After turn 1, 2 branches, 3K tok total, 1 running')
+    expect(at(1).textContent).toContain('1 running')
+    fireEvent.keyDown(at(0), { key: 'g' })
+    expect(injected.openForm).toHaveBeenLastCalledWith(B, { sourceSessionId: ROOT, afterTurn: 2 })
+    fireEvent.keyDown(at(1), { key: 'g' })
+    expect(injected.openForm).toHaveBeenLastCalledWith(B, { sourceSessionId: ROOT, afterTurn: 1 })
+    fireEvent.keyDown(at(2), { key: 'g' })
+    expect(injected.openForm).toHaveBeenLastCalledWith(B, { sourceSessionId: A, afterTurn: 1 })
+    fireEvent.keyDown(at(4), { key: 'g' })
+    fireEvent.keyDown(at(5), { key: 'g' })
+    expect(injected.openForm).toHaveBeenCalledTimes(3)
+    fireEvent.keyDown(at(3), { key: 'k' })
+    expect(injected.setMark).toHaveBeenLastCalledWith(B, null)
+    fireEvent.keyDown(at(3), { key: 'x' })
+    expect(injected.setMark).toHaveBeenLastCalledWith(B, 'set-aside')
+    fireEvent.keyDown(at(2), { key: 'k' })
+    expect(injected.setMark).toHaveBeenLastCalledWith(A, 'keep')
+    fireEvent.keyDown(at(1), { key: 'x' })
+    expect(injected.setMark).toHaveBeenCalledTimes(3)
+    expect(screen.getByText('branch')).toBeTruthy()
+    cleanup()
+    // Before the parent's outline arrives, a point with an ended cut turn is still branchable after that turn.
+    const bare = bench({ rows: [row(ROOT, 'Failing delay test'), ...ROWS.slice(1)] })
+    fireEvent.keyDown(treeRows()[1]!, { key: 'g' })
+    expect(bare.injected.openForm).toHaveBeenCalledWith(B, { sourceSessionId: ROOT, afterTurn: 1 })
+  })
+
+  it('shows a mark this browser saves, and reports a failed save under the tree', () => {
+    const { branching } = bench()
+    act(() => { branching.set({ sets: [], forms: {}, marks: { [A]: { status: 'saving', mark: 'set-aside' } } }) })
+    expect(treeRows()[2]!.getAttribute('aria-label')).toContain(', set aside')
+    act(() => { branching.set({ sets: [], forms: {}, marks: { [A]: { status: 'failed', failure: { code: 'session/not-found', unknownOutcome: false } } } }) })
+    expect(screen.getByRole('status').textContent).toBe('This Session was not found')
+  })
+
+  it('tallies the prompt variants of a variants set under the tree', () => {
+    const variant = (id: SessionId, index: number, key: string, createdAt: number, mark?: 'keep' | 'set-aside') => {
+      const base = fork(id, `variant ${id}`, 10, createdAt, 1)
+      return {
+        ...base,
+        projectionValues: {
+          ...base.projectionValues,
+          loomBranch: { setId: brandString<LoomSetId>('set-v'), kind: 'variants' as const, index, variantKey: key, createdAt },
+          turnOutline: [...OUTLINE.slice(0, 1), { turn: 2, seq: SessionSeq(15), prompt: `**Line** ${key}`, response: '' }],
+          ...mark === undefined ? {} : { loomMark: { mark } },
+        },
+      }
+    }
+    bench({ rows: [ROWS[0]!, variant(A, 0, 'one', 1, 'keep'), variant(B, 1, 'one', 2), variant(C, 2, 'two', 3, 'set-aside')] })
+    const tallies = screen.getByRole('region', { name: 'Prompt variants' })
+    expect(tallies.textContent).toContain('Prompt variants after turn 1')
+    expect([...tallies.querySelectorAll('li')].map(item => item.textContent)).toEqual([
+      '1Line one2 samples · 1 kept · 0 set aside',
+      '2Line two1 sample · 0 kept · 1 set aside',
+    ])
+    cleanup()
+    const unloaded = variant(A, 0, 'one', 1)
+    const firstOnly = { ...unloaded, projectionValues: { ...unloaded.projectionValues, turnOutline: OUTLINE.slice(0, 1) } }
+    bench({ sessionId: A, rows: [ROWS[0]!, firstOnly] })
+    expect(screen.getByRole('region', { name: 'Prompt variants' }).textContent).toContain('Prompt not loaded yet')
+    cleanup()
+    bench()
+    expect(screen.queryByRole('region', { name: 'Prompt variants' })).toBeNull()
   })
 
   it('marks a running Session from live status', () => {

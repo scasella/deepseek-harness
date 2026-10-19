@@ -71,7 +71,7 @@ import type {
 
 export type * from './types.ts'
 export { ApiSessionNotFound } from './agent.ts'
-export { completedPrefixBefore, inheritedNextTurnPrompts } from './fork-cut.ts'
+export { completedPrefixBefore, inheritedNextTurnPrompts, latestCompletedPrefixBoundary } from './fork-cut.ts'
 export { SessionFileReferences } from './file-references.ts'
 export { SessionSkillCatalog } from './skill-catalog.ts'
 

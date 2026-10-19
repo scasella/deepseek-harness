@@ -61,7 +61,35 @@ export interface TurnTailOwnerProps {
 
 /** Owner currency of finalized-assistant actions. */
 export interface AssistantActionOwnerProps {
-  messageId: MessageId
+  /** Durable id of the Turn's closing assistant message. */
+  readonly messageId: MessageId
+  /** The completed Turn that message closes. */
+  readonly turn: TurnLocation
+  /**
+   * Seq of the Turn's `turn/end`, where the built-in Branch action forks.
+   * It differs from `TurnTailOwnerProps.seq`, the closing assistant message's
+   * seq. Absent when the Location index has not recorded the end.
+   */
+  readonly turnEndSeq?: SessionSeq
+}
+
+/** Owner currency of the actions under one user-authored message. */
+export interface UserActionOwnerProps {
+  /** Turn that holds the message. */
+  readonly turn: number
+  /** Seq of the message's `user/message` event. */
+  readonly messageSeq: SessionSeq
+  /** The message's text parts joined in order, as Copy writes them. */
+  readonly text: string
+  /** Whether the message carries image or file attachments besides its text. */
+  readonly hasAttachments: boolean
+  /**
+   * Whether the message opened its Turn: it was admitted before or in the
+   * Turn's first step, and no loaded user-authored message precedes it in the
+   * Turn. A prompt claimed after an idle steering message in the same step
+   * does not open the Turn.
+   */
+  readonly opensTurn: boolean
 }
 
 /**
@@ -479,11 +507,31 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'conversation.chat.turnTail': { kind: 'list'; scope: 'session'; owner: TurnTailOwnerProps }
     /**
-     * Ordered actions for one finalized assistant message. Each entry receives
-     * the durable message id; a fresh `id` adds an action and reusing one replaces
-     * that entry. With no entries, the standard action row remains unchanged.
+     * Ordered actions for one finalized assistant message, rendered in the
+     * completed Turn's action row between Copy and Branch. Each entry receives
+     * the durable message id, the Turn, and its `turn/end` seq; a Turn whose
+     * closing message has no durable id renders no entries. A fresh `id` adds an
+     * action and reusing one replaces that entry. With no entries, the standard
+     * action row remains unchanged.
      */
     'conversation.chat.assistant-actions': { kind: 'list'; scope: 'session'; owner: AssistantActionOwnerProps }
+    /**
+     * Ordered actions after Branch and before the usage and time items in the
+     * same action row, with the owner props and durable-id rule of
+     * `conversation.chat.assistant-actions`. Entries are flex items of the row;
+     * while any entry renders content the row wraps instead of overflowing, so
+     * an entry can take its own line with `order` and `flex-basis: 100%`.
+     */
+    'conversation.chat.assistant-actions.after': { kind: 'list'; scope: 'session'; owner: AssistantActionOwnerProps }
+    /**
+     * Ordered actions after Copy in the action row of a `user` Chat Node, the
+     * user message a Turn claims from the queue. Admitted steering messages,
+     * pending echoes, and messages outside a Turn render no entries. Each entry
+     * receives the Turn, the message seq, its text, whether it has attachments,
+     * and whether it opened the Turn. A fresh `id` adds an action and reusing
+     * one replaces that entry.
+     */
+    'conversation.chat.user-actions': { kind: 'list'; scope: 'session'; owner: UserActionOwnerProps }
     /**
      * Frame-wide quota notice chain. The Chat-owned host in `shell.overlay`
      * offers the one live notice; the first entry whose selector claims its

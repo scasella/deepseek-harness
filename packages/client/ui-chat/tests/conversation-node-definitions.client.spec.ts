@@ -31,6 +31,8 @@ import { turnErrorDefinition } from '../src/client/conversation-nodes/turn-error
 import { turnMaxTokensDefinition } from '../src/client/conversation-nodes/turn-max-tokens.ts'
 import { turnTailDefinition } from '../src/client/conversation-nodes/turn-tail.ts'
 import { turnProcessDefinition } from '../src/client/conversation-nodes/turn-process.ts'
+import { userMessageOpensTurn } from '../src/client/chat/user-message-opening.ts'
+import { EMPTY_CHAT_SNAPSHOT } from '../src/client/contract/snapshot.ts'
 import type {
   AssistantChatData, ManualCompactionChatData, RetryChatData, ToolChatData, TurnTailChatData,
 } from '../src/client/contract/chat-nodes.ts'
@@ -713,6 +715,71 @@ describe('built-in conversation node Definitions', () => {
     value.flush()
     expect(inputs(snapshot(value)).at(-1)).toEqual(['steering', 'exchange'])
     expect(bottomTurns(snapshot(value))).toEqual([3])
+  })
+
+  it('marks only the first user-authored message admitted before or in Step 1 as opening its Turn', () => {
+    const prompt = textMessage('open-prompt', 'first task')
+    const steer = textMessage('open-steer', 'adjust course')
+    const idle = textMessage('open-idle', 'idle steer')
+    const queued = textMessage('open-queued', 'queued prompt')
+    const early = textMessage('open-early', 'admitted before the step')
+    const wake = { ...textMessage('open-wake', 'scheduled work'), source: { kind: 'schedule' } }
+    const late = textMessage('open-late', 'prompt claimed with a notice')
+    const current = snapshot(assembler([
+      at(1, 'agent/inbox/spliced', { target: 'next-turn', start: 0, inserted: [prompt] }),
+      at(2, 'turn/start', { turn: 1 }),
+      at(3, 'agent/inbox/spliced', { target: 'next-turn', start: 0, removedCount: 1, inserted: [] }),
+      at(4, 'step/start', { turn: 1, step: 1 }),
+      at(5, 'user/message', prompt, { surfaceOp: 'append' }),
+      at(6, 'step/end', { turn: 1, step: 1 }),
+      at(7, 'agent/inbox/spliced', { target: 'next-step', start: 0, inserted: [steer] }),
+      at(8, 'agent/inbox/spliced', { target: 'next-step', start: 0, removedCount: 1, inserted: [] }),
+      at(9, 'step/start', { turn: 1, step: 2 }),
+      at(10, 'user/message', steer, { surfaceOp: 'append' }),
+      at(11, 'assistant/message', { turn: 1, step: 2, message: assistantMessage('open-answer-1', 'done') }, { surfaceOp: 'append' }),
+      at(12, 'step/end', { turn: 1, step: 2 }),
+      at(13, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
+      // One claim takes the idle steer, then the queued prompt, for Step 1.
+      at(14, 'agent/inbox/spliced', { target: 'next-step', start: 0, inserted: [idle] }),
+      at(15, 'agent/inbox/spliced', { target: 'next-turn', start: 0, inserted: [queued] }),
+      at(16, 'turn/start', { turn: 2 }),
+      at(17, 'agent/inbox/spliced', { target: 'next-step', start: 0, removedCount: 1, inserted: [] }),
+      at(18, 'agent/inbox/spliced', { target: 'next-turn', start: 0, removedCount: 1, inserted: [] }),
+      at(19, 'step/start', { turn: 2, step: 1 }),
+      at(20, 'user/message', idle, { surfaceOp: 'append' }),
+      at(21, 'user/message', queued, { surfaceOp: 'append' }),
+      at(22, 'assistant/message', { turn: 2, step: 1, message: assistantMessage('open-answer-2', 'noted') }, { surfaceOp: 'append' }),
+      at(23, 'step/end', { turn: 2, step: 1 }),
+      at(24, 'turn/end', { turn: 2, reason: { kind: 'completed' } }),
+      at(25, 'agent/inbox/spliced', { target: 'next-turn', start: 0, inserted: [early] }),
+      at(26, 'turn/start', { turn: 3 }),
+      at(27, 'agent/inbox/spliced', { target: 'next-turn', start: 0, removedCount: 1, inserted: [] }),
+      at(28, 'user/message', early, { surfaceOp: 'append' }),
+      at(29, 'turn/end', { turn: 3, reason: { kind: 'completed' } }),
+      // A notice claimed with the prompt wakes Turn 4 ahead of it; the prompt still opens the Turn.
+      at(30, 'agent/inbox/spliced', { target: 'next-turn', start: 0, inserted: [wake, late] }),
+      at(31, 'turn/start', { turn: 4 }),
+      at(32, 'agent/inbox/spliced', { target: 'next-turn', start: 0, removedCount: 2, inserted: [] }),
+      at(33, 'step/start', { turn: 4, step: 1 }),
+      at(34, 'user/message', wake, { surfaceOp: 'append' }),
+      at(35, 'user/message', late, { surfaceOp: 'append' }),
+    ]))
+    const opening = current.order
+      .map(key => current.nodes.get(key))
+      .filter(candidate => candidate?.kind === 'user' || candidate?.kind === 'steering')
+      .map(candidate => [candidate?.kind, (candidate?.data as { seq: number }).seq, userMessageOpensTurn(current, candidate!)])
+    expect(opening).toEqual([
+      ['user', 5, true],
+      ['steering', 10, false],
+      ['steering', 20, true],
+      ['user', 21, false],
+      ['user', 28, true],
+      ['user', 35, true],
+    ])
+    expect(current.nodes.get(current.locations.getTurn(4)[0]!)?.kind).toBe('turn-trigger')
+    const outside = { ...current.nodes.get(current.order[0]!)!, location: { kind: 'session' as const } }
+    expect(userMessageOpensTurn(current, outside)).toBe(false)
+    expect(userMessageOpensTurn(EMPTY_CHAT_SNAPSHOT, current.nodes.get(current.order[0]!)!)).toBe(false)
   })
 
   it('replays pending splice chains and scopes steering to the current claim', () => {

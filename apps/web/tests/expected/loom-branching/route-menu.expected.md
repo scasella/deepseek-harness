@@ -1,0 +1,4 @@
+- menu:
+  - menuitem "Same as parent"
+  - menuitem "DeepSeek · DeepSeek-V4-Flash"
+  - menuitem "DeepSeek · DeepSeek-V4-Flash-Vision-Exp"

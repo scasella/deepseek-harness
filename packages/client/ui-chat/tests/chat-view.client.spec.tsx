@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useEffect, useMemo } from 'react'
 import type {
+  AssistantActionOwnerProps, UserActionOwnerProps,
   AssistantMessageNode, ChatFlowHookContext, ChatFlowOwnerProps, ChatFlowSlotProps, ForkCutOwnerProps,
   ChatNode, ChatNodeHookContext, ChatNodeOwnerProps, ChatSnapshot,
   ChatViewSlotProps, CommandNode, CompactionSummaryNode, ContextMessageNode, ConversationNode,
@@ -42,7 +43,7 @@ import { en, zh } from '../src/client/locale.ts'
 import { AssistantNodeView } from '../src/client/chat/AssistantNodeView.tsx'
 import { CommandNodeView, ManualCompactionNodeView } from '../src/client/chat/CommandNodeView.tsx'
 import {
-  CompactionNodeView, ContextMessageNodeView, RetryNodeView, TurnErrorNodeView,
+  CompactionNodeView, ContextMessageNodeView, RetryNodeView, SteeringMessageNodeView, TurnErrorNodeView,
   TurnMaxTokensNodeView, UnknownNodeView, UserMessageNodeView,
 } from '../src/client/chat/MessageItem.tsx'
 import { TurnTailNodeView } from '../src/client/chat/TurnTailNodeView.tsx'
@@ -278,7 +279,13 @@ type ToolOwner = Pick<ChatNodeOwnerProps, 'openFile' | 'inspectCall'> & {
 
 const renderCommandSlot: React.ComponentProps<typeof CommandNodeView>['renderSlot'] =
   (_key, _owner, opts) => opts?.fallback ?? null
-const renderTurnTailSlot: React.ComponentProps<typeof TurnTailNodeView>['renderSlot'] = () => null
+type TurnTailSlotRenderer = React.ComponentProps<typeof TurnTailNodeView>['renderSlot']
+type UserActionsSlotRenderer = React.ComponentProps<typeof UserMessageNodeView>['renderSlot']
+/** One owner offered to an assistant action seat, with the seat that received it. */
+interface AssistantSeatCall {
+  readonly seat: 'conversation.chat.assistant-actions' | 'conversation.chat.assistant-actions.after'
+  readonly owner: AssistantActionOwnerProps
+}
 
 function HarnessChatFlow({ standard, owner, hookContext, renderSlot }: {
   readonly standard: HarnessStandardProps
@@ -294,7 +301,10 @@ function HarnessChatFlow({ standard, owner, hookContext, renderSlot }: {
   return <ChatFlow {...shared} {...owner} {...hooks} renderSlot={renderSlot} />
 }
 
-function HarnessChatNode({ standard, owner, hookContext, usePerformanceUsage, toolOwners, fallback, renderAssistantSlot }: {
+function HarnessChatNode({
+  standard, owner, hookContext, usePerformanceUsage, toolOwners, fallback, renderAssistantSlot,
+  renderTurnTailSlot, renderUserActionsSlot,
+}: {
   readonly standard: HarnessStandardProps
   readonly owner: RoutedChatNodeOwner
   readonly hookContext: ChatNodeHookContext
@@ -302,6 +312,8 @@ function HarnessChatNode({ standard, owner, hookContext, usePerformanceUsage, to
   readonly toolOwners: ToolOwner[]
   readonly fallback: React.ReactNode
   readonly renderAssistantSlot: React.ComponentProps<typeof AssistantNodeView>['renderSlot']
+  readonly renderTurnTailSlot: TurnTailSlotRenderer
+  readonly renderUserActionsSlot: UserActionsSlotRenderer
 }) {
   const hooks = useMemo(() => ({
     useTurnData: CHAT_NODE_INJECT.hooks.turnData(standard, hookContext),
@@ -312,9 +324,9 @@ function HarnessChatNode({ standard, owner, hookContext, usePerformanceUsage, to
   const nodeProps = { ...shared, ...owner, ...hooks }
   switch (owner.node.kind) {
     case 'user':
-      return <UserMessageNodeView {...nodeProps} node={owner.node} />
+      return <UserMessageNodeView {...nodeProps} node={owner.node} renderSlot={renderUserActionsSlot} />
     case 'steering':
-      return <UserMessageNodeView {...nodeProps} node={owner.node} />
+      return <SteeringMessageNodeView {...nodeProps} node={owner.node} />
     case 'context':
       return <ContextMessageNodeView {...nodeProps} node={owner.node} />
     case 'assistant-step':
@@ -433,11 +445,28 @@ function makeHarness(
   }
   const renderAssistantSlot: React.ComponentProps<typeof AssistantNodeView>['renderSlot'] = (name, owner, options) =>
     name === 'conversation.chat.message.images' ? renderImages(name, owner, options) : renderReasoningSlot(name, owner, options)
+  // The action seats record each owner and render one marker per seat standing for a plugin action.
+  const assistantSeatCalls: AssistantSeatCall[] = []
+  const renderTurnTailSlot: TurnTailSlotRenderer = (key: string, owner: object) => {
+    if (key === 'conversation.chat.turnTail') return null
+    if (key !== 'conversation.chat.assistant-actions' && key !== 'conversation.chat.assistant-actions.after') {
+      throw new Error(`Undeclared turn-tail child: ${key}`)
+    }
+    assistantSeatCalls.push({ seat: key, owner: owner as AssistantActionOwnerProps })
+    return <span data-testid={key} />
+  }
+  const userActionOwners: UserActionOwnerProps[] = []
+  const renderUserActionsSlot: UserActionsSlotRenderer = (key: string, owner: object) => {
+    if (key !== 'conversation.chat.user-actions') throw new Error(`Undeclared user child: ${key}`)
+    userActionOwners.push(owner as UserActionOwnerProps)
+    return <span data-testid={key} />
+  }
   const renderNodeSlot: NodeRenderer = (key, owner, opts) => {
     if (nodeSlotOverride !== undefined) return nodeSlotOverride(key, owner, opts)
     return <HarnessChatNode standard={props} owner={owner}
       hookContext={opts.hookContext} usePerformanceUsage={usePerformanceUsage}
-      toolOwners={toolOwners} fallback={opts.fallback} renderAssistantSlot={renderAssistantSlot} />
+      toolOwners={toolOwners} fallback={opts.fallback} renderAssistantSlot={renderAssistantSlot}
+      renderTurnTailSlot={renderTurnTailSlot} renderUserActionsSlot={renderUserActionsSlot} />
   }
   // The fork-cut Seat records each owner and renders a marker standing for a plugin band.
   const forkCutOwners: ForkCutOwnerProps[] = []
@@ -549,7 +578,7 @@ function makeHarness(
     openFile, openUserFile, loadOlder, loadThrough, openView,
     setOutline: (value: unknown) => { outlineValue = value },
     setProjection: (key: string, value: unknown) => { projectionValues.set(key, value) },
-    forkCutOwners,
+    forkCutOwners, assistantSeatCalls, userActionOwners,
     chatScroll, forkAt, toolOwners,
     setPerformanceUsage: (mode: 'compact' | 'detailed') => { performanceUsage.set(mode) },
     setGrouped: (value: ConversationGroupedView<ProcessGroupData> | undefined) => {
@@ -3320,6 +3349,74 @@ describe('ChatView', () => {
     }, { running: true })
     const view = render(<h.ChatView {...h.props} />)
     expect(view.queryByText(/首 token|tok\/s/)).toBeNull()
+  })
+
+  it('offers the closing message, its Turn, and the turn/end seq to the action seats on either side of Branch', () => {
+    const closing: AssistantMessageNode = { ...assistant(2, 'answer'), messageId: MessageId('closing-1') }
+    const h = makeHarness({
+      nodes: [userInTurn(1, 'hi', 1), closing, userInTurn(4, 'again', 2), assistant(5, 'unrated', 2)],
+      turnTimings: new Map([[1, { startTime: 1_000, endTime: 3_000 }], [2, { startTime: 4_000, endTime: 6_000 }]]),
+      turnEnds: new Map([[1, 3], [2, 6]]),
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    // Turn 2's closing message has no durable id, so neither seat renders there.
+    expect(new Set(h.assistantSeatCalls.map(call => call.owner.turn.turn))).toEqual(new Set([1]))
+    const before = h.assistantSeatCalls.findLast(call => call.seat === 'conversation.chat.assistant-actions')
+    const after = h.assistantSeatCalls.findLast(call => call.seat === 'conversation.chat.assistant-actions.after')
+    expect(before?.owner).toEqual({ messageId: 'closing-1', turn: before?.owner.turn, turnEndSeq: 3 })
+    expect(after?.owner).toEqual(before?.owner)
+    // The fork boundary is the `turn/end` seq, not the closing message's seq.
+    expect(before?.owner.turn.end?.seq).toBe(3)
+    expect(before?.owner.turnEndSeq).not.toBe(closing.seq)
+    const footer = view.container.querySelector<HTMLElement>('[data-turn-tail="1"]')!
+    const row = footer.querySelector<HTMLElement>('[data-clock="end"]')!
+    expect([...row.querySelectorAll('button, [data-testid]')].map(element =>
+      element.getAttribute('data-testid') ?? element.getAttribute('aria-label'))).toEqual([
+      '复制', 'conversation.chat.assistant-actions', '在新对话中分支', 'conversation.chat.assistant-actions.after',
+    ])
+    // The after seat precedes the end group that holds the clock.
+    const afterMarker = within(row).getByTestId('conversation.chat.assistant-actions.after')
+    expect(afterMarker.nextElementSibling).toBe(row.lastElementChild)
+    expect(row.lastElementChild?.textContent).not.toBe('')
+    expect(view.container.querySelector('[data-turn-tail="2"] [data-testid]')).toBeNull()
+  })
+
+  it('offers each user message in a Turn its seq, text, attachment presence, and whether it opened the Turn', () => {
+    const withFile: UserMessageNode & { turn: number } = {
+      ...user(4, 'see attached'),
+      content: [
+        { type: 'text', text: 'see ' },
+        { type: 'text', text: 'attached' },
+        { type: 'file', attachment: { attachmentId: 'sha256:aa', name: 'notes.txt', bytes: 12 } },
+      ] as never,
+      turn: 2,
+    }
+    const h = makeHarness({
+      nodes: [
+        userInTurn(1, 'first', 1),
+        userInTurn(2, 'second in the same Turn', 1),
+        withFile,
+        steering(5, 'steer', 2),
+        user(7, 'outside any Turn'),
+      ],
+      turnTimings: new Map([[1, { startTime: 1_000 }], [2, { startTime: 3_000 }]]),
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    const latest = new Map(h.userActionOwners.map(owner => [owner.messageSeq, owner]))
+    expect([...latest.values()].sort((left, right) => left.messageSeq - right.messageSeq)).toEqual([
+      { turn: 1, messageSeq: 1, text: 'first', hasAttachments: false, opensTurn: true },
+      { turn: 1, messageSeq: 2, text: 'second in the same Turn', hasAttachments: false, opensTurn: false },
+      { turn: 2, messageSeq: 4, text: 'see attached', hasAttachments: true, opensTurn: true },
+    ])
+    // Steering and a user message outside a Turn render Copy without the seat.
+    const seats = view.container.querySelectorAll('[data-testid="conversation.chat.user-actions"]')
+    expect(seats).toHaveLength(3)
+    for (const seat of seats) {
+      expect(seat.previousElementSibling?.getAttribute('aria-label')).toBe('复制')
+    }
+    const steeringRow = view.container.querySelector<HTMLElement>('[data-chat-flow-kind="steering"]')!
+    expect(within(steeringRow).getByRole('button', { name: '复制' })).toBeTruthy()
+    expect(within(steeringRow).queryByTestId('conversation.chat.user-actions')).toBeNull()
   })
 
   it('keeps only the latest turn tail actions permanently visible', () => {

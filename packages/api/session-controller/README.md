@@ -60,7 +60,9 @@ During uninterrupted following, transcript and steering echoes stay in Chat thro
 
 The user-invocable `skills/list` metadata includes the winning provider’s optional instruction-file `path`. The composer can preview that file without loading every skill body or activating a cold Agent.
 
-Fork copies the exact inclusive event prefix selected by `atSeq`, including a cut inside an open turn. The child records its inherited marker before synthetic fork results and closing events. Omitting `atSeq` selects the latest completed turn and its standalone tail, stopping before the next turn or queued input; a nonexistent event is rejected. The chat action selects a completed turn.
+Fork copies the exact inclusive event prefix selected by `atSeq`, including a cut inside an open turn. The child records its inherited marker before synthetic fork results and closing events. Omitting `atSeq` selects the latest completed turn and its standalone tail, stopping before the next turn or queued input; a nonexistent event is rejected. The Host entry exports that rule as `latestCompletedPrefixBoundary(events)`, so a caller that forks later can pass the cut it computed as `atSeq`. The chat action selects a completed turn.
+
+A fork `selection` routes the child's next request: it is validated like `selectModel`, an unavailable route fails with `session/model-unavailable` before any child exists, and the child records it as `model/selection` before it is published. The source is not written and the deployment default is never saved. Without `selection`, the child keeps the route its prefix carries: the last inherited `request/header`, or an inherited pick that no header consumed. A prefix holding neither, such as a cut inside the first turn before its request, records the route of the source's first request instead of the deployment default. A provider or model that differs from the inherited header adds the model-switch notice to the child's first request, as `selectModel` does.
 
 A branch that replaces turn k's prompt forks at `completedPrefixBefore(events, k)`: the same completed-turn rule applied before that turn's `turn/start`, or, before the first completed turn, the last standalone event ahead of the first input. A prompt queued while turn k − 1 ran is spliced inside that turn, so the child still inherits it as pending next-turn input and would run it before its own `followup`; the branch removes each prompt that `inheritedNextTurnPrompts(events, cut)` lists with `agent.inbox.remove`. The `forkLineage` projection carries the header parent, the cut seq (equal in parent and child), the turn of the last inherited `turn/end`, and `createdAt` through follow baselines, list hints including cached cold rows, and `faceOf('forkLineage')`; it stays constant after the inherited prefix. Siblings forked at one cut share `parentSession` and `cutSeq`.
 
@@ -113,7 +115,7 @@ None, as invoked Agent commands own any model-visible effect.
 
 #### KV Cache effect
 
-No direct effect; model requests remain owned by the Agent and LLM packages.
+Every Agent this controller creates, resumes, reuses, or forks keys its provider-side prompt cache by its fork-family root through `AgentOptions.cacheSessionId`. The root is found by following `parentSession` from a fork child to its parent, reading a live header first and a stored one otherwise. The walk stops at a subagent child, which roots its own family, and at a missing or unreadable ancestor, which becomes the root; an unreadable one is logged as a warning. A fork child and its siblings therefore reuse the parent's cached prefix on adapters that key caches or upstream affinity by Session, such as [pi-ai](../../llm/llm-pi-ai/README.md#model-experience) on OpenRouter. Model requests remain owned by the Agent and LLM packages.
 
 ## Known Limitations and Deferred Work
 
@@ -127,6 +129,7 @@ No direct effect; model requests remain owned by the Agent and LLM packages.
 - Accepted/running display memory lives only in Client memory and is lost on page reload.
 - That memory is not shared between tabs: one tab can show a converted row while another still shows `New Session` for the same Session.
 - A cold Session-list row carries `forkLineage` only after a projection-cache checkpoint written while the unit was mounted; until then the row has `parentSessionId` without the cut, and `session.projections` folds the value from the log.
+- Compaction and Session-title requests, and fork-mode subagent children, key the prompt cache by their own Session, so they do not reuse a fork family's cached prefix.
 
 
 <a id="dev-note"></a>

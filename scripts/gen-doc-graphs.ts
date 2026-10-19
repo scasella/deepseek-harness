@@ -291,7 +291,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'experimental-loom',
     title: 'Experimental Loom fork-family Remote',
     mode: 'core',
-    note: 'Reads fork families from the Session list, folds own branch records into the loomBranch projection, and removes Loom record payloads from exported telemetry.',
+    note: 'Reads fork families from the Session list, starts, follows, and cancels branch sets, folds own branch and mark records into the loomBranch and loomMark projections, and removes Loom record payloads from exported telemetry.',
   },
   {
     key: 'sessionController',

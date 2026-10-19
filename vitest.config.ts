@@ -272,8 +272,9 @@ export default defineConfig({
         // exemption while gating the newly stateful Host half and vocabulary.
         'packages/client/ui-conversation/src/client/*',
         // Chat presentation and assembly retain the same GUI debt exemption;
-        // package wiring and the new approval-detail adapter remain gated.
-        'packages/client/ui-chat/src/client/chat/!(ApprovalCommand).{ts,tsx}',
+        // package wiring, the approval-detail adapter, and the pure
+        // opening-user-message reader remain gated.
+        'packages/client/ui-chat/src/client/chat/!(ApprovalCommand|user-message-opening).{ts,tsx}',
         'packages/client/ui-chat/src/client/conversation-nodes/*',
         'packages/client/ui-chat/src/client/details/*',
         'packages/client/ui-chat/src/client/model/*',

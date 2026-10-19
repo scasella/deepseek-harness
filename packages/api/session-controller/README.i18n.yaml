@@ -15,8 +15,8 @@
   en: 1fdf707322fb6996
   zh: 0204f7e9d4aa3cce
 /session-controller/use-this-package:
-  en: 196b995e1b330512
-  zh: 81623771582d924f
+  en: 06e70b0e8457c90f
+  zh: 7761d7673e9e2bde
 /session-controller/client-references:
   en: 41bdda1ac32df558
   zh: aa5d0e325924066b
@@ -30,11 +30,11 @@
   en: 30b917bf822bb4df
   zh: b0b023b5b526c317
 /session-controller/model-experience/kv-cache-effect:
-  en: 22fc0c9dbedd3bb6
-  zh: fad040ca55fd0e0a
+  en: 9f2d46881fff7b27
+  zh: 751dae70ea770454
 /session-controller/known-limitations-and-deferred-work:
-  en: c5115d7742b22400
-  zh: 80d0f02de2a5d427
+  en: 47ffc85597f01d40
+  zh: 3773a25f26e69e7d
 /session-controller/known-limitations-and-deferred-work/dev-note:
   en: e67f633dc6fe7773
   zh: e88aeb617ffb74ea

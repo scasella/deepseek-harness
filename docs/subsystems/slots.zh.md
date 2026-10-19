@@ -136,7 +136,10 @@ Factory: conversation.content [ConversationContent]
 │     ├─ id=chat [ChatView]
 │     │  └─ conversation.chat.flow [ChatFlow]
 │     │     ├─ conversation.chat.node [ChatNodeSeat dispatch]
-│     │     │  ├─ key=user,steering [UserMessageNodeView]
+│     │     │  ├─ key=user [UserMessageNodeView]
+│     │     │  │  ├─ calls Factory: conversation.chat.user.content
+│     │     │  │  └─ conversation.chat.user-actions
+│     │     │  ├─ key=steering [SteeringMessageNodeView]
 │     │     │  │  └─ calls Factory: conversation.chat.user.content
 │     │     │  ├─ key=assistant-step [AssistantNodeView / AssistantMarkdown]
 │     │     │  │  ├─ conversation.chat.message.images [MessageImages]
@@ -152,7 +155,8 @@ Factory: conversation.content [ConversationContent]
 │     │     │  │  └─ conversation.chat.commandview
 │     │     │  └─ key=turn-tail [TurnTailNodeView]
 │     │     │     ├─ conversation.chat.turnTail
-│     │     │     └─ conversation.chat.assistant-actions
+│     │     │     ├─ conversation.chat.assistant-actions
+│     │     │     └─ conversation.chat.assistant-actions.after
 │     │     └─ conversation.chat.fork-cut
 │     └─ id=trajectory [TrajectoryView / TrajectoryTable]
 │        └─ conversation.trajectory.images [MessageImages]

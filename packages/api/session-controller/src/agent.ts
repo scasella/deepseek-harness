@@ -11,11 +11,12 @@ import type {} from '@deepseek-ai/dsh-agent-default-model'
 import type {} from '@deepseek-ai/dsh-agent-preset-registry'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
-import type { Session, SessionId } from '@deepseek-ai/dsh-session'
+import type { Session, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionInspection } from '@deepseek-ai/dsh-session-persistence'
 import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
 import { RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-typert-registry'
+import { headerRoute } from './request-route.ts'
 import type { ModelSelection } from './types.ts'
 
 /** Cold Session identity absent from persistence. */
@@ -301,18 +302,7 @@ export class ApiSessionAgentController {
       get current(): AgentModelSelection {
         if (picked !== undefined) return picked
         const loggedHeader = agent.session.requestHeader()
-        if (loggedHeader === undefined) return defaultModel.currentSelection()
-        const logged = loggedHeader.config
-        return {
-          provider: logged.provider,
-          model: logged.model,
-          // An effort the adapter defaulted is not a conversation choice: restoring
-          // it as one would make an unchanged default read as a request change.
-          ...(logged.reasoningEffort === undefined
-            || loggedHeader.adapterDefaults?.reasoningEffort === true
-            ? {}
-            : { reasoningEffort: logged.reasoningEffort }),
-        }
+        return loggedHeader === undefined ? defaultModel.currentSelection() : headerRoute(loggedHeader)
       },
       set current(next: AgentModelSelection) {
         picked = next
@@ -432,6 +422,7 @@ export class ApiSessionAgentController {
       throw new ApiSessionSubagentOwnership(sessionId)
     }
     const composition = await this.composeAgent(this.presetForObservation(observation))
+    const agentOptions = this.agentOptions(await this.forkFamilyRoot(observation.header))
     const published = this.ctx.sessions.get(sessionId)
     const live = this.ctx.agents.get(sessionId)
     if (published !== undefined && hasApiSessionSubagentOwner(this.ctx, published, live)) {
@@ -439,7 +430,7 @@ export class ApiSessionAgentController {
     }
     return (await this.ctx.agents.resume({
       resumeSessionId: sessionId,
-      agentOptions: this.agentOptions(),
+      agentOptions,
       setup: composition.setup,
     })).agent
   }
@@ -477,23 +468,26 @@ export class ApiSessionAgentController {
       return this.createAgent(sessionId, request.cwd, await this.composeAgent(request.agentPreset))
     }
     let reusable: boolean
+    let header: SessionHeader
     {
       using observed = observation
-      if (hasApiSessionSubagentOwner(this.ctx, { header: observed.header }, undefined)) {
+      header = observed.header
+      if (hasApiSessionSubagentOwner(this.ctx, { header }, undefined)) {
         throw new ApiSessionSubagentOwnership(sessionId)
       }
-      if (observed.header.cwd !== request.cwd) {
-        throw new ApiSessionCwdConflict(sessionId, request.cwd, observed.header.cwd)
+      if (header.cwd !== request.cwd) {
+        throw new ApiSessionCwdConflict(sessionId, request.cwd, header.cwd)
       }
       reusable = request.reusable(sessionId) && !observed.events.some(event => event.type === 'turn/start')
     }
     const composition = await this.composeAgent(request.agentPreset)
     if (!reusable) return this.createMinted(request.cwd, composition)
     this.assertPresetApplicable(sessionId, request.agentPreset)
+    const agentOptions = this.agentOptions(await this.forkFamilyRoot(header))
     try {
       return (await this.ctx.agents.resume({
         resumeSessionId: sessionId,
-        agentOptions: this.agentOptions(),
+        agentOptions,
         setup: this.reuseSetup(composition),
       })).agent
     } catch (error: unknown) {
@@ -568,7 +562,7 @@ export class ApiSessionAgentController {
     }
     return (await this.ctx.agents.create({
       sessionId,
-      agentOptions: this.agentOptions(),
+      agentOptions: this.agentOptions(sessionId),
       meta: {
         cwd,
         ...(composition.agentPreset === undefined ? {} : { agentPreset: composition.agentPreset }),
@@ -577,9 +571,57 @@ export class ApiSessionAgentController {
     })).agent
   }
 
-  private agentOptions(): AgentOptions {
+  /**
+   * Build the options of an Agent this controller creates or resumes: the
+   * deployment's current default route, which a logged or selected route
+   * replaces on every request, and the prompt-cache Session its requests share.
+   * @param cacheSessionId - root of the Agent's fork family, from {@link forkFamilyRoot}.
+   * @returns the creation options for `ctx.agents.create` or `ctx.agents.resume`.
+   */
+  agentOptions(cacheSessionId: SessionId): AgentOptions {
     const { provider, model } = this.ctx.agentDefaultModel.currentSelection()
-    return { provider, model }
+    return { provider, model, cacheSessionId }
+  }
+
+  /**
+   * Resolve the root of a Session's fork family, whose identity keys the
+   * provider-side prompt cache of every member through
+   * `AgentOptions.cacheSessionId`, so siblings and their parent reuse one
+   * cached prefix. The walk climbs `parentSession` while the Session's origin
+   * is not `subagent` (a subagent child roots its own family), reading an
+   * attached header first and a stored one otherwise. It stops at an ancestor
+   * whose header is missing or cannot be read, and returns that ancestor, so
+   * every Session below it resolves the same root; a failed read is logged
+   * and costs only cache reuse. A repeated identity ends the walk.
+   * @param header - lineage fields of the Session whose root is resolved.
+   * @returns the root identity; `header.id` when the Session has no fork parent.
+   */
+  async forkFamilyRoot(header: Pick<SessionHeader, 'id' | 'parentSession' | 'origin'>): Promise<SessionId> {
+    const visited = new Set<SessionId>([header.id])
+    let current = header
+    while (current.origin !== 'subagent' && current.parentSession !== undefined && !visited.has(current.parentSession)) {
+      const parentId = current.parentSession
+      visited.add(parentId)
+      const parent = this.ctx.sessions.get(parentId)?.header ?? await this.storedHeader(parentId)
+      if (parent === undefined) return parentId
+      current = parent
+    }
+    return current.id
+  }
+
+  /** @returns the stored header of one Session, or undefined when it is absent or unreadable. */
+  private async storedHeader(sessionId: SessionId): Promise<SessionHeader | undefined> {
+    let stored
+    try {
+      stored = await this.ctx.get('sessionPersistence')?.stat(sessionId)
+    } catch (lineageReadFailed: unknown) {
+      // The family root only keys provider cache reuse; resuming must not depend on an ancestor's header.
+      this.ctx.logger.warn(
+        `session-controller: prompt-cache family root stops at "${sessionId}" because its header could not be read: ${String(lineageReadFailed)}`,
+      )
+      return undefined
+    }
+    return stored?.header
   }
 
   private installSelection(agent: Agent): void {

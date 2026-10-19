@@ -10,7 +10,7 @@ import type { Scoped } from '@deepseek-ai/dsh-scope'
 import type {
   LlmAttemptId, LlmCallConfig, LlmFailure, MessageId, ReasoningEffortId, ResolvedRetryPolicy, StreamChunk,
 } from '@deepseek-ai/dsh-llm'
-import type { AgentCancelCause, Session, SessionSeq, UserMessage } from '@deepseek-ai/dsh-session'
+import type { AgentCancelCause, Session, SessionId, SessionSeq, UserMessage } from '@deepseek-ai/dsh-session'
 export type { AgentCancelCause } from '@deepseek-ai/dsh-session'
 import type { Agent, InboxTarget } from './types.ts'
 export type { Agent } from './types.ts'
@@ -32,6 +32,13 @@ export interface AgentOptions {
   reasoningEffort?: ReasoningEffortId
   /** Maximum output tokens for each conversation-model request. */
   maxTokens?: number
+  /**
+   * Session whose provider-side prompt cache this agent's conversation-model
+   * requests share, stamped on each request as `GenerateOptions.cacheSessionId`;
+   * omission keys the cache by the agent's own Session. Runtime-only: the loop
+   * never logs it.
+   */
+  cacheSessionId?: SessionId
 }
 
 /** Options for {@link Agent.cancel}. */

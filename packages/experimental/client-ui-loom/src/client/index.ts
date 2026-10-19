@@ -4,13 +4,21 @@ import loomRemote from '@deepseek-ai/dsh-experimental-loom/remote'
 import { mountLoom } from './mount.ts'
 
 export { inject } from './mount.ts'
+export type {
+  LoomBranchDraft, LoomBranchForm, LoomBranchingState, LoomFailure, LoomMarkOverride, LoomOutcome, LoomTrackedChild,
+  LoomTrackedSet,
+} from './branching.ts'
+export type { LoomDockProps } from './dock.ts'
+export type { EditBranchProps } from './EditBranch.tsx'
 export type { LoomFamilyState } from './family.ts'
 export type { ForkBandProps } from './ForkBand.tsx'
-export type { LoomLinkInjected } from './links.ts'
+export type { LoomBranchingInjected, LoomLinkInjected } from './links.ts'
 export type { LoomKey } from './locales.ts'
 export type { LoomViewInjected, LoomViewProps } from './LoomView.tsx'
 export type { LoomReaderDocument, LoomReaderState, LoomReaderTurn } from './reader.ts'
 export type { LoomRequestState } from './requests.ts'
+export type { LoomRouteOption, LoomRoutesState } from './routes.ts'
+export type { LoomTailProps } from './tail.ts'
 export type { VariantChipProps } from './VariantChip.tsx'
 export type { LoomViewState } from './view-store.ts'
 

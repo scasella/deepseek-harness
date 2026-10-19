@@ -3,14 +3,17 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/subsystems/loom.md
 /loom:
-  en: 29b6193507fb091d
-  zh: 178836b07b7ead69
+  en: 55690b3f32454c09
+  zh: 838834f427d7b927
 /loom/fork-families:
   en: e6d9ffc68a802a8c
   zh: fc622c4906411fa7
-/loom/branch-membership:
-  en: 30fcee7edba8d342
-  zh: 5165c2b91f9acee3
+/loom/branch-sets:
+  en: 2a1a3f666a29e4af
+  zh: 102afd92dc9bc5e1
+/loom/branch-membership-and-marks:
+  en: 57eba82f51ae1718
+  zh: 1b9c4da06fddeece
 /loom/what-the-model-saw:
   en: d54e444289916267
   zh: 8604feb2f30414a7

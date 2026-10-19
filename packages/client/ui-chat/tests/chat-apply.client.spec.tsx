@@ -31,6 +31,7 @@ import { ActivityPill, UsagePill } from '../src/client/chat/StatsPills.tsx'
 import { createFlowMotion, type InputFoldDriver } from '../src/client/chat/flow-motion.ts'
 import { CHAT_FLOW_INJECT, CHAT_NODE_INJECT } from '../src/client/apply.ts'
 import { UserContent } from '../src/client/chat/UserContent.tsx'
+import { SteeringMessageNodeView, UserMessageNodeView } from '../src/client/chat/MessageItem.tsx'
 
 declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
   interface ConversationTurnDataMap {
@@ -188,6 +189,36 @@ describe('Chat apply wiring', () => {
     expect(b.runtime.slots.entriesOfSlot('conversation.chat.fork-cut')).toEqual([])
     await b.chat.dispose()
     expect(b.runtime.slots.spec('conversation.chat.fork-cut')).toBeUndefined()
+  })
+
+  it('declares the after-Branch and user action Seats on their row renderers and removes them with Chat', async () => {
+    const b = await bench()
+    onTestFinished(() => b.runtime.dispose())
+    const nodeEntry = (key: string) => b.runtime.slots.entries('conversation.chat.node').find(entry => entry.options.key === key)
+    const seats = ['conversation.chat.assistant-actions.after', 'conversation.chat.user-actions'] as const
+    expect(nodeEntry('turn-tail')?.children).toEqual({
+      'conversation.chat.turnTail': { kind: 'list', scope: 'session' },
+      'conversation.chat.assistant-actions': { kind: 'list', scope: 'session' },
+      'conversation.chat.assistant-actions.after': { kind: 'list', scope: 'session' },
+    })
+    expect(nodeEntry('user')?.children).toEqual({ 'conversation.chat.user-actions': { kind: 'list', scope: 'session' } })
+    expect(nodeEntry('user')?.component).toBe(UserMessageNodeView)
+    // Steering keeps a renderer without the user-actions Seat.
+    expect(nodeEntry('steering')?.children).toBeUndefined()
+    expect(nodeEntry('steering')?.component).toBe(SteeringMessageNodeView)
+    function Action() { return null }
+    const disposers = [
+      b.runtime.ctx.slots.register({ name: 'conversation.chat.assistant-actions.after', id: 'action', order: 0 }, Action),
+      b.runtime.ctx.slots.register({ name: 'conversation.chat.user-actions', id: 'action', order: 0 }, Action),
+    ]
+    for (const seat of seats) {
+      expect(b.runtime.slots.spec(seat)).toMatchObject({ kind: 'list', scope: 'session' })
+      expect(b.runtime.slots.entriesOfSlot(seat).map(entry => entry.component)).toEqual([Action])
+    }
+    for (const dispose of disposers) dispose()
+    for (const seat of seats) expect(b.runtime.slots.entriesOfSlot(seat)).toEqual([])
+    await b.chat.dispose()
+    for (const seat of seats) expect(b.runtime.slots.spec(seat)).toBeUndefined()
   })
 
   it('lets another registrant replace one composer stats pill by id', async () => {

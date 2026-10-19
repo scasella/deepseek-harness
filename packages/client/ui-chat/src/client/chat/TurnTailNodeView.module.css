@@ -10,3 +10,13 @@
   margin-top: 4px;
   margin-left: -6px;
 }
+
+/* While an after-Branch entry renders content, the row wraps instead of
+   overflowing, so such an entry can take its own line with `order` and
+   `flex-basis: 100%`. Rows without that content keep one fixed-height line. */
+.actions:has(> [data-slot='conversation.chat.assistant-actions.after']:not(:empty)) {
+  flex-wrap: wrap;
+  row-gap: 4px;
+  height: auto;
+  min-height: calc(28px + var(--dsh-content-font-delta, 0px));
+}

@@ -1,9 +1,10 @@
 import { memo, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { PendingSubmission } from '@deepseek-ai/dsh-api-session-controller/client'
-import type { PropsRenderFactories } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PropsRenderFactories, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import type { UserTextFacts } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { JsonBlock, StateDot, TextShimmer } from '@deepseek-ai/dsh-client-ui-primitives'
+import { SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type {
   ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps, UserContentAttachment, UserContentData, UserContentInput,
 } from '../contract/slots.ts'
@@ -11,6 +12,7 @@ import type { ModelRetryNode, TurnErrorNode, UserMessageNode } from '../contract
 import { CompactionItem } from './CompactionItem.tsx'
 import { ContextInjectionRow } from './ContextInjectionRow.tsx'
 import { MessageIconActions } from './MessageIconActions.tsx'
+import { userMessageOpensTurn } from './user-message-opening.ts'
 import css from './MessageItem.module.css'
 
 const EMPTY_TEXT_FACTS: Readonly<Partial<UserTextFacts>> = {}
@@ -167,8 +169,8 @@ function UserStyleBubble({
 }: {
   content: readonly unknown[]
   renderFactorySlot: PropsRenderFactories['renderFactorySlot']
-  /** Optional IconActions (or similar) below the bubble; receives the joined text. */
-  actions?: (text: string) => ReactNode
+  /** Optional IconActions (or similar) below the bubble; receives the prepared contents. */
+  actions?: (content: UserContentData) => ReactNode
   /** Whether this is the Host-authoritative pre-admission steering projection. */
   pending?: boolean
   /** Whether this is a local submission echo (invisible marker; the echo renders exactly like its durable replacement). */
@@ -206,7 +208,7 @@ function UserStyleBubble({
         facts,
         interactive,
       })}
-      {actions?.(prepared.text)}
+      {actions?.(prepared)}
     </div>
   )
 }
@@ -228,9 +230,9 @@ export function PendingSteeringBubble({ content, loadImage, renderFactorySlot, t
       renderFactorySlot={renderFactorySlot}
       loadImage={loadImage}
       pending
-      actions={text => (
+      actions={prepared => (
         <MessageIconActions
-          text={text}
+          text={prepared.text}
           clock="start"
           className={css.actions}
           t={t}
@@ -281,9 +283,9 @@ export function PendingSubmissionBubble({ submission, loadImage, renderFactorySl
       loadImage={loadImage}
       pending={submission.placement === 'steering'}
       echo
-      actions={text => (
+      actions={prepared => (
         <MessageIconActions
-          text={text}
+          text={prepared.text}
           time={submission.time}
           clock="start"
           className={css.actions}
@@ -294,10 +296,13 @@ export function PendingSubmissionBubble({ submission, loadImage, renderFactorySl
   )
 }
 
-/** User and admitted-steering keyed Chat renderer. */
-export const UserMessageNodeView = memo(function UserMessageNodeView({
-  node, renderFactorySlot, loadImage, t,
-}: ChatNodeViewProps<'user' | 'steering'>) {
+/** Durable user or admitted-steering bubble with its clock, Copy, and optional plugin actions after Copy. */
+function DurableUserBubble({ node, renderFactorySlot, loadImage, t, extraActions }: Pick<
+  ChatNodeViewProps<'user' | 'steering'>, 'node' | 'renderFactorySlot' | 'loadImage' | 't'
+> & {
+  /** Plugin actions after Copy, built from the prepared contents. */
+  readonly extraActions?: ((content: UserContentData) => ReactNode) | undefined
+}): ReactNode {
   const data = node.data
   return (
     <UserStyleBubble
@@ -307,17 +312,53 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
       loadImage={loadImage}
       {...data.referenceLabels === undefined ? {} : { referenceLabels: data.referenceLabels }}
       {...data.skillNames === undefined ? {} : { skillNames: data.skillNames }}
-      actions={text => (
+      actions={prepared => (
         <MessageIconActions
-          text={text}
+          text={prepared.text}
           time={data.time}
           clock="start"
           className={css.actions}
+          extraActions={extraActions?.(prepared)}
           t={t}
         />
       )}
     />
   )
+}
+
+/** Props of the `user` renderer, which declares the user-actions seat. */
+type UserMessageNodeViewProps = ChatNodeViewProps<'user'> & PropsRenderSlots<'conversation.chat.user-actions'>
+
+/** User-message keyed Chat renderer with the `conversation.chat.user-actions` seat after Copy. */
+export const UserMessageNodeView = memo(function UserMessageNodeView({
+  node, renderFactorySlot, renderSlot, loadImage, useChat, t,
+}: UserMessageNodeViewProps) {
+  const location = node.location
+  const turn = location.kind === 'turn' || location.kind === 'step' ? location.turn.turn : undefined
+  const opensTurn = useChat(snapshot => userMessageOpensTurn(snapshot, node))
+  const seq = node.data.seq
+  return (
+    <DurableUserBubble
+      node={node}
+      renderFactorySlot={renderFactorySlot}
+      loadImage={loadImage}
+      t={t}
+      extraActions={turn === undefined ? undefined : content => renderSlot('conversation.chat.user-actions', {
+        turn,
+        messageSeq: SessionSeq(seq),
+        text: content.text,
+        hasAttachments: content.attachments.length > 0,
+        opensTurn,
+      })}
+    />
+  )
+})
+
+/** Admitted-steering keyed Chat renderer; steering hosts no plugin actions. */
+export const SteeringMessageNodeView = memo(function SteeringMessageNodeView({
+  node, renderFactorySlot, loadImage, t,
+}: ChatNodeViewProps<'steering'>) {
+  return <DurableUserBubble node={node} renderFactorySlot={renderFactorySlot} loadImage={loadImage} t={t} />
 })
 
 /** Injected-context keyed Chat renderer. */

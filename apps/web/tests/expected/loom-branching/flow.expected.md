@@ -1,0 +1,31 @@
+- button "Inherited from parent · turn 1 · 1 step"
+- group "Branched from Loom branching after turn 1":
+  - text: Branched from Loom branching after turn 1
+  - 'button "Open parent: Loom branching"': Open parent
+- group "Variants after turn 1":
+  - 'button "Variant 1 of 5: Branch A"': 1 Branch A
+  - 'button "Variant 2 of 5: Loom branching"': 2 Loom branching
+  - 'button "Variant 3 of 5: Loom branching"': 3 Loom branching
+  - 'button "Variant 4 of 5: Loom branching"': 4 Loom branching
+  - 'button "Variant 5 of 5: Loom branching"': 5 Loom branching
+- text: LOOM_BRANCHING Take the other approach from here. {{clock}}
+- button "Copy"
+- button "Edit and branch"
+- status: Completed
+- button "Completed in {{duration}}" [disabled]
+- paragraph: LOOM_BRANCHING Branch A answers turn 2.
+- button "Copy"
+- button "Good response"
+- button "Bad response"
+- button "Branch into a new conversation"
+- button "Branch several"
+- group "Variant 1 of 5":
+  - button "Previous variant" [disabled]
+  - button "Next variant"
+- button "Regenerate once": Regenerate
+- button "Regenerate several"
+- group "Private marks":
+  - button "Keep" [pressed]
+  - button "Set aside"
+- button "Usage 7.2K tok"
+- text: {{clock}}

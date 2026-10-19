@@ -1,0 +1,35 @@
+- text: LOOM_GUARDS Plan the change. {{clock}}
+- button "Copy"
+- button "Edit and branch"
+- status: Completed
+- button "Completed in {{duration}}" [disabled]
+- paragraph: LOOM_GUARDS Root answers turn 1.
+- button "Copy"
+- button "Good response"
+- button "Bad response"
+- button "Branch into a new conversation"
+- button "Branch several"
+- button "Regenerate once": Regenerate
+- button "Regenerate several"
+- button "Usage 4.2K tok"
+- text: {{clock}} LOOM_GUARDS Write the change. {{clock}}
+- button "Copy"
+- button "Edit and branch"
+- status: Completed
+- button "Completed in {{duration}}" [disabled]
+- paragraph: LOOM_GUARDS Root starts turn 2.
+- text: LOOM_GUARDS Also add a test. {{clock}}
+- button "Copy"
+- paragraph: LOOM_GUARDS Root answers turn 2.
+- button "Copy"
+- button "Good response"
+- button "Bad response"
+- button "Branch into a new conversation"
+- button "Branch several"
+- button "Regenerate once": Regenerate
+- button "Regenerate several"
+- group "Private marks":
+  - button "Keep"
+  - button "Set aside"
+- button "Usage 14.4K tok"
+- text: {{clock}}

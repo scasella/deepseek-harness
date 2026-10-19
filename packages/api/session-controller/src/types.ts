@@ -333,6 +333,14 @@ export interface SessionForkRequest {
   readonly atSeq?: number
   /** False asks the Host to check for required migration before forking. Defaults to true. */
   readonly allowMigration?: boolean
+  /**
+   * Route for the child's next request, validated like `selectModel` and
+   * recorded in the child only; the deployment default is never saved.
+   * Omission keeps the route the inherited prefix carries: its last request
+   * header, or a pick no header consumed. A prefix holding neither takes the
+   * route of the source's first request.
+   */
+  readonly selection?: ModelSelection
 }
 
 /** Identity of a newly forked Session. */

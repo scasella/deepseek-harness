@@ -36,9 +36,12 @@ function extendThroughStandalone(
 
 /**
  * Latest completed-turn prefix: the last `turn/end` plus the standalone events
- * after it, stopping before the next turn or queued input.
+ * after it, stopping before the next turn or queued input. `session.fork`
+ * uses this cut when `atSeq` is omitted; a caller that forks later passes the
+ * value it computed as `atSeq` to keep the cut fixed while the source grows.
  * @param events - complete log with contiguous seqs from zero.
- * @returns the inclusive fork boundary, or undefined before the first completed turn.
+ * @returns the inclusive fork boundary for `session.fork`'s `atSeq`, or
+ *   undefined when the log has no `turn/end`.
  */
 export function latestCompletedPrefixBoundary(events: readonly SessionEvent[]): SessionSeq | undefined {
   const lastTurnEnd = events.findLast(event => event.type === 'turn/end')

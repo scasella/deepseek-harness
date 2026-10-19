@@ -191,6 +191,22 @@ function resolveSamplingParams(
 }
 
 /**
+ * Resolve pi-ai's `sessionId` option, which pi-ai uses as a prompt-cache and
+ * upstream-affinity key (OpenRouter `x-session-id`, `prompt_cache_key`, the
+ * Codex WebSocket connection, and their per-protocol equivalents): the
+ * request's `cacheSessionId`, else its `sessionId`. pi-ai also keys its Codex
+ * WebSocket-to-SSE fallback by this value, so one WebSocket failure on the
+ * Codex route switches every Session that shares the key, such as a whole
+ * fork family, to SSE for the process lifetime.
+ * @param request - the request whose cache identity is resolved.
+ * @returns the key to send, or `undefined` when the request names no Session.
+ */
+function resolveCacheSession(request: Pick<GenerateOptions, 'sessionId' | 'cacheSessionId'>): string | undefined {
+  const session = request.cacheSessionId ?? request.sessionId
+  return session === undefined ? undefined : String(session)
+}
+
+/**
  * The profile default this exact model can actually take, for DESCRIBING it.
  * A configured level the model does not support yields none rather than
  * throwing: `resolveModel` builds the model catalog, and a catalog that fails
@@ -426,6 +442,7 @@ export class PiAiAdapter extends LlmAdapter {
       options.reasoningEffort ?? profile.reasoning,
     )
     const samplingParams = resolveSamplingParams(model, profile, options.stop, reasoning)
+    const cacheSession = resolveCacheSession(options)
     const apiKey = await this.config.resolveApiKey(options.provider, profile)
 
     const consumer = new AbortController()
@@ -462,7 +479,7 @@ export class PiAiAdapter extends LlmAdapter {
         ...profileOptions(profile, reasoning, apiKey),
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
-        ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
+        ...cacheSession === undefined ? {} : { sessionId: cacheSession },
         ...samplingParams === undefined ? {} : { samplingParams },
         signal: watchdog.signal,
         // Profile headers are deployment-owned; attribution names are

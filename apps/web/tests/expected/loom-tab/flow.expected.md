@@ -7,6 +7,7 @@
   - 'button "Variant 2 of 2: Loom family"': 2 Loom family
 - text: LOOM_TAB_A Take the other approach from here. {{clock}}
 - button "Copy"
+- button "Edit and branch"
 - status: Completed
 - button "Completed in {{duration}}"
 - paragraph: LOOM_TAB_A This branch continues from the inherited answer.
@@ -14,5 +15,14 @@
 - button "Good response"
 - button "Bad response"
 - button "Branch into a new conversation"
+- button "Branch several"
+- group "Variant 1 of 2":
+  - button "Previous variant" [disabled]
+  - button "Next variant"
+- button "Regenerate once": Regenerate
+- button "Regenerate several"
+- group "Private marks":
+  - button "Keep"
+  - button "Set aside"
 - button "Usage 7.5K tok"
 - text: {{clock}}

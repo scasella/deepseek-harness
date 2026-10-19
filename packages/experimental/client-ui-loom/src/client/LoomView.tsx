@@ -13,7 +13,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { LoomFamilyState } from './family.ts'
-import type { LoomLinkInjected } from './links.ts'
+import type { LoomBranchingInjected } from './links.ts'
 import type { NS } from './locales.ts'
 import { LoomTree } from './LoomTree.tsx'
 import { ReadingPane } from './ReadingPane.tsx'
@@ -26,7 +26,7 @@ import css from './LoomView.module.css'
 export const LOOM_VIEW_ID = 'loom'
 
 /** Sources and callbacks the Loom view receives. */
-export interface LoomViewInjected extends LoomLinkInjected {
+export interface LoomViewInjected extends LoomBranchingInjected {
   readonly keyedHooks: {
     readonly loomFamily: (key: string) => ObservableSnapshot<LoomFamilyState>
     /** Path documents keyed by Session id, bound as `useLoomReader(sessionId)`. */

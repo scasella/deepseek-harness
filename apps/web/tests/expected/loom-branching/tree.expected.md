@@ -1,0 +1,16 @@
+- tree "Fork family":
+  - treeitem "Loom branching, 2 turns · 2 steps, own 11.4K tok, ended" [expanded] [level=1]: Loom branching 2 turns · 2 steps 11.4K tok
+  - treeitem "After turn 1, 5 branches, 22.9K tok total" [expanded] [level=2]: After turn 1 5 branches 22.9K tok total
+  - treeitem "Branch A, 1 turn · 1 step, own 7.2K tok, ended, kept" [expanded] [level=3] [selected]: Branch A 1 turn · 1 step 7.2K tok
+  - treeitem "After turn 2, 2 branches, 15.7K tok total" [expanded] [level=4]: After turn 2 2 branches 15.7K tok total
+  - treeitem "Branch A, 1 turn · 1 step, own 7.9K tok, ended, kept" [level=5]: Branch A 1 turn · 1 step 7.9K tok
+  - treeitem "Branch A, 1 turn · 1 step, own 7.9K tok, ended, set aside" [level=5]: Branch A 1 turn · 1 step 7.9K tok
+  - treeitem "Loom branching, 0 turns · 0 steps, own 0 tok, no turns yet" [level=3]: Loom branching 0 turns · 0 steps 0 tok
+  - treeitem "Loom branching, 1 turn · 1 step, own 0 tok, ended" [level=3]: Loom branching 1 turn · 1 step 0 tok
+  - treeitem "Loom branching, 1 turn · 1 step, own 7.9K tok, ended" [level=3]: Loom branching 1 turn · 1 step 7.9K tok
+  - treeitem "Loom branching, 1 turn · 1 step, own 7.9K tok, ended" [level=3]: Loom branching 1 turn · 1 step 7.9K tok
+
+- region "Prompt variants":
+  - paragraph: Prompt variants after turn 2
+  - list:
+    - listitem: 1 LOOM_BRANCHING Answer in one word. 2 samples · 1 kept · 1 set aside

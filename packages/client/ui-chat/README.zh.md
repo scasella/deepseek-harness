@@ -42,7 +42,9 @@ kind: "package-reference"
 
 Session 作用域的 `conversation.chat.user.content` Factory 只渲染用户内容区域：文本、额外内容块、按输入顺序排列的图片／文件附件及引用摘要。[`UserContentInput`](src/client/contract/slots.ts) 携带预处理的 `content`、变换 `facts`、显示 props 和显式 `loadImage`；引用动作由节点自己的 Injection 提供。正文调用共享 `conversation.user.text` Factory，图片调用自身拥有的图片 Slot。直接调用需要 Session 绑定，行包装层由调用方提供。
 
-`UserStyleBubble` 和[各来源包装层](<src/client/chat/MessageItem.tsx#L157-L309>) 保留用户行、key、pending／echo 标记、时间、复制控件及其他消息操作。内容 Factory 不读取来源专属模型或私有 Context，也不是全局用户内容替换入口。
+`UserStyleBubble` 和[各来源包装层](<src/client/chat/MessageItem.tsx#L165-L362>) 保留用户行、key、pending／echo 标记、时间、复制控件及其他消息操作。内容 Factory 不读取来源专属模型或私有 Context，也不是全局用户内容替换入口。
+
+`user` 节点注册声明会话作用域的列表 Slot `conversation.chat.user-actions`，渲染在气泡操作行的复制按钮之后。条目接收 `UserActionOwnerProps`：`turn`、`messageSeq`、复制写入的 `text`、`hasAttachments`，以及 `opensTurn`；只有开启其所在轮次的用户消息的 `opensTurn` 为 true。已入档的 steering 通过 `SteeringMessageNodeView` 渲染，不含该 Slot；pending 回显和不属于任何轮次的用户消息不渲染条目。
 
 独立的 Markdown 图片以内嵌预览显示，点击打开共享图片浮层；本地路径在消息落定后基于当前查看的工作区解析。图片文件链接保持点击打开侧栏，鼠标停留或键盘聚焦时显示缩略图，Esc 关闭缩略图。图片加载失败时保留本地化状态与图片说明；不执行重复图片过滤。
 
@@ -81,6 +83,8 @@ Assistant 尝试结束且没有可见消息时，Chat 隐藏已发布的 Node，
 产物扩展可通过 `ChatNodeStore.turnDataSource` 订阅一个 Turn 中指定类型的节点数据。来源包含隐藏节点，并按锚点顺序提供其业务数据。成员关系增量更新；只有被订阅的集合才生成有序数组，其他 Turn 或类型的更新不通知该集合。
 
 已完成轮次的操作页脚位于记录的轮次结束之后。操作行与前方正文或扩展内容相隔 20px。只有最新轮次且最后可见内容为回复时，操作常显；其他结尾及历史轮次在悬停或键盘聚焦时显示操作。不支持悬停的设备始终显示操作。
+
+`turn-tail` 注册在该操作行中声明两个会话作用域的列表 Slot：`conversation.chat.assistant-actions` 位于复制与分支之间，`conversation.chat.assistant-actions.after` 位于分支之后、用量与时间项之前。两者的条目都接收 `AssistantActionOwnerProps`：收尾消息的 `messageId`、`turn` Location，以及 `turnEndSeq`，即分支操作 fork 所在的 `turn/end` seq。`conversation.chat.turnTail` 的条目接收的则是收尾消息的 seq。收尾消息没有持久 id 的轮次不渲染这两个 Slot。`.after` 条目渲染内容时，操作行换行而不是溢出。
 
 -----
 

@@ -12,16 +12,25 @@
       "path": "../../../vendor/cordis"
     },
     {
+      "path": "../../../vendor/schemastery"
+    },
+    {
       "path": "../../api/remote-access/tsconfig.host.json"
     },
     {
       "path": "../../api/session-controller/tsconfig.host.json"
     },
     {
+      "path": "../../core/agent"
+    },
+    {
       "path": "../../core/session"
     },
     {
       "path": "../../llm/llm"
+    },
+    {
+      "path": "../../sandbox/sandbox-policy"
     },
     {
       "path": "../../session/session-projection"
@@ -34,6 +43,9 @@
     },
     {
       "path": "../../util/brand"
+    },
+    {
+      "path": "../../util/values"
     }
   ]
 }

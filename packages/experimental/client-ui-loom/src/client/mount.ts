@@ -10,15 +10,24 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
+import { BranchCaret } from './BranchCaret.tsx'
+import { BranchForm } from './BranchForm.tsx'
+import { createLoomBranching, type LoomBranchingInputs } from './branching.ts'
+import { EditBranch } from './EditBranch.tsx'
 import { createLoomFamilySources, type LoomFamilySources } from './family.ts'
 import { ForkBand } from './ForkBand.tsx'
-import type { LoomLinkInjected } from './links.ts'
+import type { LoomBranchingInjected, LoomLinkInjected } from './links.ts'
 import { en, NS, zh, type LoomKey } from './locales.ts'
 import { LOOM_VIEW_ID, LoomView, type LoomViewInjected } from './LoomView.tsx'
 import { createLoomReaderSources, type LoomReaderInputs } from './reader.ts'
+import { MarkGroup } from './MarkGroup.tsx'
+import { RegenerateSplit } from './RegenerateSplit.tsx'
 import { createLoomRequestSources, type LoomRequestInputs } from './requests.ts'
+import { createLoomRoutes } from './routes.ts'
+import { RunningStrip } from './RunningStrip.tsx'
 import { registerLoomTreeKeys } from './shortcuts.ts'
 import { VariantChip } from './VariantChip.tsx'
+import { VariantPager } from './VariantPager.tsx'
 import { createLoomViewStore } from './view-store.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -44,15 +53,23 @@ const UI_SERVICES = ['remote.loom', 'sessions', 'locale', 'slots', 'uiConversati
 /** Remote read of one step's request, supplied by the plugin that mounted the `loom` namespace. */
 export type LoomRequestRead = LoomRequestInputs['read']
 
+/** The mounted `loom` Remote calls the slot entries use. */
+export interface LoomRemoteCalls extends Pick<LoomBranchingInputs, 'branch' | 'cancel' | 'setStatus' | 'mark'> {
+  /** `loom.requestAt`. */
+  readonly requestAt: LoomRequestRead
+}
+
 /**
- * Register the Loom dictionaries, sources, fork band, header chip, and view
- * tab on the calling fiber; disposing the fiber removes every registration and
- * releases every Session a reader retained.
+ * Register the Loom dictionaries, sources, branching state, fork band, header
+ * chip, turn-tail actions, Edit & branch, dock entries, and view tab on the
+ * calling fiber, and attach the route list while the `session` Remote is
+ * mounted; disposing the fiber removes every registration, releases every
+ * Session a reader retained, and drops the branching state.
  * @param ctx - Client context carrying the Session list, locale, slots, Conversation assembly, and navigation.
- * @param readRequest - the `loom.requestAt` Remote read.
+ * @param calls - the `loom` Remote calls.
  * @returns family sources, for callers that read families outside a slot.
  */
-export function registerLoom(ctx: Context, readRequest: LoomRequestRead): LoomFamilySources {
+export function registerLoom(ctx: Context, calls: LoomRemoteCalls): LoomFamilySources {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'client-ui-loom: dictionaries')
   const t = ctx.locale.bind(NS)
   const families = createLoomFamilySources({ sessions: ctx.sessions.list })
@@ -61,12 +78,26 @@ export function registerLoom(ctx: Context, readRequest: LoomRequestRead): LoomFa
     chat: binding => ctx.uiConversation.binding(binding).target('chat'),
   }
   const readers = createLoomReaderSources(readerInputs)
-  const requests = createLoomRequestSources({ read: readRequest })
+  const requests = createLoomRequestSources({ read: calls.requestAt })
+  const branching = createLoomBranching({
+    branch: calls.branch,
+    cancel: calls.cancel,
+    setStatus: calls.setStatus,
+    mark: calls.mark,
+    refreshProjection: sessionId => ctx.sessions.refreshProjections(sessionId),
+    openSession: (sessionId) => { ctx.uiWorkspace.openSession(sessionId) },
+  })
+  const routes = createLoomRoutes()
   ctx.effect(() => () => {
+    branching.dispose()
     requests.dispose()
     readers.dispose()
     families.dispose()
   }, 'client-ui-loom: sources')
+  // The route pickers appear only while the stable `session` Remote is mounted.
+  ctx.inject(['remote.session'], (scope) => {
+    scope.effect(() => routes.attach(() => scope.remote.session.modelCatalog()), 'client-ui-loom: route list')
+  })
 
   const links: LoomLinkInjected = {
     keyedHooks: { loomFamily: key => families.source(key) },
@@ -77,8 +108,23 @@ export function registerLoom(ctx: Context, readRequest: LoomRequestRead): LoomFa
       })
     },
   }
-  const view: LoomViewInjected = {
+  const branchingFace: LoomBranchingInjected = {
     ...links,
+    hooks: { loomBranching: branching.state, loomRoutes: routes.state },
+    startBranches: (draft, options) => branching.start(draft, options),
+    cancelBranches: (setId, indices) => branching.cancel(setId, indices),
+    adoptSet: (set) => { branching.adopt(set) },
+    refreshSet: (setId) => { branching.refresh(setId) },
+    dismissSet: (setId) => { branching.dismiss(setId) },
+    setMark: (sessionId, mark) => branching.setMark(sessionId, mark),
+    openForm: (owner, target) => { branching.openForm(owner, target) },
+    editForm: (owner, edit) => { branching.editForm(owner, edit) },
+    closeForm: (owner) => { branching.closeForm(owner) },
+    submitForm: owner => branching.submitForm(owner),
+    loadRoutes: () => { routes.load() },
+  }
+  const view: LoomViewInjected = {
+    ...branchingFace,
     keyedHooks: {
       loomFamily: key => families.source(key),
       loomReader: key => readers.source(key),
@@ -105,6 +151,44 @@ export function registerLoom(ctx: Context, readRequest: LoomRequestRead): LoomFa
     locale: NS,
     inject: () => links,
   }, VariantChip))
+  const tailEntries = [
+    // The caret sits directly after Branch; each later entry opens its own group with a rule.
+    { id: 'loom-branch-caret', order: 0, component: BranchCaret },
+    { id: 'loom-pager', order: 10, component: VariantPager },
+    { id: 'loom-regenerate', order: 20, component: RegenerateSplit },
+    { id: 'loom-marks', order: 30, component: MarkGroup },
+  ] as const
+  for (const entry of tailEntries) {
+    ctx.slots.inject('conversation.chat.assistant-actions.after', () => ctx.slots.register({
+      name: 'conversation.chat.assistant-actions.after',
+      id: entry.id,
+      order: entry.order,
+      locale: NS,
+      inject: () => branchingFace,
+    }, entry.component))
+  }
+  ctx.slots.inject('conversation.chat.user-actions', () => ctx.slots.register({
+    name: 'conversation.chat.user-actions',
+    id: 'loom-edit-branch',
+    order: 10,
+    locale: NS,
+    inject: () => branchingFace,
+  }, EditBranch))
+  // Between the Goal card (10) and the queue panel (20), which stays attached to the composer card.
+  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+    name: 'conversation.input.dock',
+    id: 'loom-running',
+    order: 14,
+    locale: NS,
+    inject: () => branchingFace,
+  }, RunningStrip))
+  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+    name: 'conversation.input.dock',
+    id: 'loom-branch-form',
+    order: 16,
+    locale: NS,
+    inject: () => branchingFace,
+  }, BranchForm))
   ctx.slots.inject('conversation.view', () => ctx.slots.register({
     name: 'conversation.view',
     id: LOOM_VIEW_ID,
@@ -130,7 +214,14 @@ export async function mountLoom(ctx: Context, contribution: TypertRemoteContribu
   const disposeRemote = await ctx.remote.$mount(contribution)
   // The mounted namespace is its own service, so only a fiber injecting `remote.loom` may read it.
   const ui = ctx.inject(UI_SERVICES, (inner) => {
-    registerLoom(inner, (request, signal) => inner.remote.loom.requestAt(request, signal))
+    const loom = inner.remote.loom
+    registerLoom(inner, {
+      requestAt: (request, signal) => loom.requestAt(request, signal),
+      branch: request => loom.branch(request),
+      cancel: request => loom.cancel(request),
+      setStatus: request => loom.setStatus(request),
+      mark: request => loom.mark(request),
+    })
   })
   const keys = ctx.inject(['locale', 'shortcuts'], (inner) => { registerLoomTreeKeys(inner, inner.locale.bind(NS)) })
   try { await ui } catch (error) {

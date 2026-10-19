@@ -232,7 +232,7 @@ git add packages/llm/llm-pi-ai/src/provider-data.generated.ts
 
 #### KV Cache 影响
 
-转换保持逻辑请求顺序，图片句柄与卸载占位符则会添加模型可见文本。即使附件身份与请求字节保持稳定，执行世界路径变化也会改写历史句柄，并可能从该图片起阻止复用。更换适配器实例、提供方、模型或其他上游 token 具有相同的后缀影响。一次省略决策会把较早图片换成占位文本，因此复用在该消息处结束；省略永不回退，此后前缀保持稳定。
+转换保持逻辑请求顺序，图片句柄与卸载占位符则会添加模型可见文本。即使附件身份与请求字节保持稳定，执行世界路径变化也会改写历史句柄，并可能从该图片起阻止复用。更换适配器实例、提供方、模型或其他上游 token 具有相同的后缀影响。一次省略决策会把较早图片换成占位文本，因此复用在该消息处结束；省略永不回退，此后前缀保持稳定。pi-ai 以其 `sessionId` 选项作为提示词缓存与上游亲和性的键：OpenRouter `x-session-id`、`prompt_cache_key`、Codex WebSocket 连接，以及各协议的对应字段。适配器在此发送请求的 `cacheSessionId`，缺省时发送其 `sessionId`。[Session Controller](../../api/session-controller/README.zh.md#model-experience) 把 `cacheSessionId` 设为 fork 家族的根，因此 fork 子会话会到达持有其父会话缓存前缀的上游。pi-ai 也以该值作为 Codex WebSocket 回退到 SSE 的键，因此 Codex 路由上一次 WebSocket 失败，会使整个 fork 家族在进程存续期间改用 SSE。
 
 ### 提供方响应
 

@@ -1,0 +1,8 @@
+- region "Running branches":
+  - status: 1 failed
+  - list:
+    - listitem:
+      - button "Open Branch 1": Branch 1
+      - text: ended
+    - listitem: Branch 2 failed · Could not create this branch; start it again
+  - button "Dismiss"

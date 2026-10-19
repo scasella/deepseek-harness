@@ -1,0 +1,25 @@
+- region "Branch after turn 2":
+  - text: Branch after turn 2 2 branches
+  - list:
+    - listitem:
+      - textbox "Steering line 1":
+        - /placeholder: What should this branch do?
+        - text: LOOM_BRANCHING Answer in one word.
+  - button "Add branch"
+  - term: Samples per line
+  - definition:
+    - radiogroup "Samples per line":
+      - radio "×1"
+      - radio "×2" [checked]
+      - radio "×3"
+      - radio "×4"
+  - term: Model
+  - definition:
+    - text: DeepSeek-V4-Flash
+    - button "Change"
+    - text: Same as parent
+  - term: Workspace
+  - definition: Children share this folder, including edits earlier branches make
+  - text: Nothing runs until you start
+  - button "Cancel"
+  - button "Start 2 branches"

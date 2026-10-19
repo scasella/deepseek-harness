@@ -9,19 +9,32 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { resolveSlotLabel, type StoredEntry } from '@deepseek-ai/dsh-client-ui-slots'
 import type { LoomRequestView } from '@deepseek-ai/dsh-experimental-loom/types'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { LoomSetId } from '@deepseek-ai/dsh-experimental-loom/types'
 import { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type { TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
 import { ForkBand } from '../src/client/ForkBand.tsx'
 import type { LoomLinkInjected } from '../src/client/links.ts'
 import { LoomView, type LoomViewInjected } from '../src/client/LoomView.tsx'
-import { inject, mountLoom, registerLoom } from '../src/client/mount.ts'
+import { BranchCaret } from '../src/client/BranchCaret.tsx'
+import { BranchForm } from '../src/client/BranchForm.tsx'
+import { EditBranch } from '../src/client/EditBranch.tsx'
+import type { LoomBranchingInjected } from '../src/client/links.ts'
+import { MarkGroup } from '../src/client/MarkGroup.tsx'
+import { inject, mountLoom, registerLoom, type LoomRemoteCalls } from '../src/client/mount.ts'
+import { RegenerateSplit } from '../src/client/RegenerateSplit.tsx'
+import { RunningStrip } from '../src/client/RunningStrip.tsx'
+import { VariantPager } from '../src/client/VariantPager.tsx'
 import { VariantChip } from '../src/client/VariantChip.tsx'
 import { apply as hostApply } from '../src/index.ts'
 
 const CONTRIBUTION: TypertRemoteContribution = { package: '@deepseek-ai/dsh-experimental-loom', descriptors: [] }
 const ROOT = SessionId('root')
 const CHILD = SessionId('child')
-const SLOTS = ['conversation.chat.fork-cut', 'conversation.session.header.actions', 'conversation.view'] as const
+const SLOTS = [
+  'conversation.chat.fork-cut', 'conversation.session.header.actions', 'conversation.view',
+  'conversation.chat.assistant-actions.after', 'conversation.chat.user-actions', 'conversation.input.dock',
+] as const
 
 const VIEW: LoomRequestView = {
   route: { provider: 'deepseek', model: 'v4' },
@@ -40,17 +53,26 @@ function forked(child: string): SessionListState {
   return { ids: rows.map(row => row.id), byId: Object.fromEntries(rows.map(row => [row.id, row])), phase: 'ready', projectionsBySession: {} }
 }
 
-async function fixture(options: { shortcuts?: boolean } = {}) {
+async function fixture(options: { shortcuts?: boolean; sessionRemote?: boolean } = {}) {
   const ctx = new Context()
   const unmount = vi.fn(async () => {})
   const mounted: TypertRemoteContribution[] = []
   const requestAt = vi.fn(async () => ({ ok: true as const, value: VIEW }))
+  const SET = brandString<LoomSetId>('set-1')
+  const branch = vi.fn(async () => ({ ok: true as const, value: { setId: SET, children: [{ index: 0, state: 'started' as const, sessionId: CHILD }] } }))
+  const cancel = vi.fn(async () => ({ ok: true as const, value: { cancelled: [] } }))
+  const setStatus = vi.fn(async () => ({ ok: true as const, value: { setId: SET, sourceSessionId: ROOT, children: [] } }))
+  const mark = vi.fn(async () => ({ ok: true as const, value: { mark: 'keep' as const } }))
+  const modelCatalog = vi.fn(async () => ({
+    ok: true as const,
+    value: { default: { provider: 'p', model: 'm' }, routableProviders: ['p'], groups: [{ id: 'p', name: 'P', models: [{ id: 'm', name: 'M' }] }], failures: [] },
+  }))
   class TestRemote extends Service {
     constructor() { super(ctx, 'remote') }
     // Like the Gateway, the mounted namespace lives on a fiber outside the caller's ancestry.
     async $mount(value: TypertRemoteContribution) {
       mounted.push(value)
-      const namespace = ctx.plugin({ apply: (inner) => { inner.provide('remote.loom', { requestAt }) } })
+      const namespace = ctx.plugin({ apply: (inner) => { inner.provide('remote.loom', { requestAt, branch, cancel, setStatus, mark }) } })
       await namespace
       return async () => {
         await namespace.dispose()
@@ -59,6 +81,7 @@ async function fixture(options: { shortcuts?: boolean } = {}) {
     }
   }
   new TestRemote()
+  if (options.sessionRemote !== false) ctx.provide('remote.session', { modelCatalog } as never)
   const list = createSnapshotStore<SessionListState>({ ids: [], byId: {}, phase: 'pending', projectionsBySession: {} })
   const release = vi.fn()
   const loadOlder = vi.fn(() => Promise.reject(new Error('page failed')))
@@ -93,9 +116,19 @@ async function fixture(options: { shortcuts?: boolean } = {}) {
   const entry = (name: typeof SLOTS[number], component: unknown): StoredEntry | undefined =>
     ctx.slots.entries(name).find(candidate => candidate.component === component)
   return {
-    ctx, unmount, mounted, list, requestAt, retain, release, loadOlder, refreshProjections, conversationBinding,
-    openSession, fixed, unregister, declare, collapse, entry, chat,
+    ctx, unmount, mounted, list, requestAt, branch, cancel, setStatus, mark, modelCatalog, retain, release, loadOlder,
+    refreshProjections, conversationBinding, openSession, fixed, unregister, declare, collapse, entry, chat, SET,
   }
+}
+
+/** The fixture's Remote calls as `registerLoom` takes them. */
+function calls(b: Awaited<ReturnType<typeof fixture>>): LoomRemoteCalls {
+  return { requestAt: b.requestAt, branch: b.branch, cancel: b.cancel, setStatus: b.setStatus, mark: b.mark }
+}
+
+/** Narrow an entry's injected face to the branching verbs it must carry. */
+function isBranching(value: Record<string, unknown>): value is Record<string, unknown> & LoomBranchingInjected {
+  return isLinks(value) && typeof value.startBranches === 'function' && typeof value.loadRoutes === 'function'
 }
 
 /** Narrow an entry's injected face to the Loom links it must carry. */
@@ -137,10 +170,23 @@ describe('Loom browser plugin', () => {
         ['loom.tree.move', 'tree', ['ArrowUp', 'ArrowDown'], 'Move in the fork family tree'],
         ['loom.tree.collapse-expand', 'tree', ['ArrowLeft', 'ArrowRight'], 'Collapse or expand a fork family node'],
         ['loom.tree.open', 'tree', ['Enter'], 'Read a Session from the fork family tree'],
+        ['loom.tree.branch', 'tree', ['KeyG'], 'Open the Branch ×N form for the focused node of the fork family tree'],
+        ['loom.tree.keep', 'tree', ['KeyK'], 'Keep or unkeep the focused Session of the fork family tree'],
+        ['loom.tree.set-aside', 'tree', ['KeyX'], 'Set aside or restore the focused Session of the fork family tree'],
       ])
+      const after = b.ctx.slots.entries('conversation.chat.assistant-actions.after')
+      expect(after.map(item => [item.options.id, item.options.order, item.component])).toEqual([
+        ['loom-branch-caret', 0, BranchCaret],
+        ['loom-pager', 10, VariantPager],
+        ['loom-regenerate', 20, RegenerateSplit],
+        ['loom-marks', 30, MarkGroup],
+      ])
+      expect(b.entry('conversation.chat.user-actions', EditBranch)).toMatchObject({ options: { id: 'loom-edit-branch', order: 10 }, locale: 'loom' })
+      expect(b.entry('conversation.input.dock', RunningStrip)).toMatchObject({ options: { id: 'loom-running', order: 14 }, locale: 'loom' })
+      expect(b.entry('conversation.input.dock', BranchForm)).toMatchObject({ options: { id: 'loom-branch-form', order: 16 }, locale: 'loom' })
       await fiber.dispose()
       expect(b.unmount).toHaveBeenCalledOnce()
-      expect(b.unregister).toHaveBeenCalledTimes(3)
+      expect(b.unregister).toHaveBeenCalledTimes(6)
       for (const name of SLOTS) expect(b.ctx.slots.entries(name)).toEqual([])
       expect(b.ctx.locale.bind('loom')('view.loom')).toBe('view.loom')
     } finally { await b.ctx.fiber.dispose() }
@@ -182,6 +228,69 @@ describe('Loom browser plugin', () => {
     } finally { await b.ctx.fiber.dispose() }
   })
 
+  it('wires the branching verbs to the loom Remote and the route list to the session Remote', async () => {
+    const b = await fixture()
+    try {
+      const fiber = b.ctx.plugin({ inject: [...inject], apply: ctx => mountLoom(ctx, CONTRIBUTION) })
+      await fiber
+      const face = injectedOf(b.entry('conversation.chat.assistant-actions.after', BranchCaret), isBranching)
+      for (const component of [VariantPager, RegenerateSplit, MarkGroup]) {
+        expect(b.entry('conversation.chat.assistant-actions.after', component)!.inject!()).toBe(face)
+      }
+      expect(b.entry('conversation.chat.user-actions', EditBranch)!.inject!()).toBe(face)
+      expect(b.entry('conversation.input.dock', RunningStrip)!.inject!()).toBe(face)
+      expect(b.entry('conversation.input.dock', BranchForm)!.inject!()).toBe(face)
+      const view = injectedOf(b.entry('conversation.view', LoomView), isView)
+      expect(view.hooks.loomBranching).toBe(face.hooks.loomBranching)
+      expect(view.openForm).toBe(face.openForm)
+
+      await expect(face.startBranches({ kind: 'regenerate', sessionId: ROOT, turn: 1, count: 1 }, { ownerSessionId: ROOT, openStarted: true }))
+        .resolves.toEqual({ ok: true })
+      expect(b.branch).toHaveBeenCalledWith(expect.objectContaining({ kind: 'regenerate', sessionId: ROOT, turn: 1, count: 1 }))
+      expect(b.openSession).toHaveBeenCalledWith(CHILD)
+      expect(face.hooks.loomBranching.getSnapshot().sets.map(set => set.setId)).toEqual([b.SET])
+      face.refreshSet(b.SET)
+      expect(b.setStatus).toHaveBeenCalledWith({ setId: b.SET })
+      face.adoptSet({ setId: brandString<LoomSetId>('set-2'), sourceSessionId: ROOT, ownerSessionId: ROOT })
+      expect(b.setStatus).toHaveBeenCalledTimes(2)
+      await expect(face.cancelBranches(b.SET, [1])).resolves.toEqual({ ok: true })
+      expect(b.cancel).toHaveBeenCalledWith({ setId: b.SET, indices: [1] })
+      face.dismissSet(b.SET)
+      expect(face.hooks.loomBranching.getSnapshot().sets.map(set => set.setId)).toEqual(['set-2'])
+      await expect(face.setMark(CHILD, 'keep')).resolves.toEqual({ ok: true })
+      expect(b.mark).toHaveBeenCalledWith({ sessionId: CHILD, mark: 'keep' })
+      expect(b.refreshProjections).toHaveBeenCalledWith(CHILD)
+      face.openForm(ROOT, { sourceSessionId: ROOT, afterTurn: 1 })
+      face.editForm(ROOT, { rows: ['Try C'] })
+      await face.submitForm(ROOT)
+      expect(b.branch).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'steer', sessionId: ROOT, afterTurn: 1, lines: ['Try C'] }))
+      expect(face.hooks.loomBranching.getSnapshot().forms).toEqual({})
+      face.openForm(ROOT, { sourceSessionId: ROOT, afterTurn: 2 })
+      face.closeForm(ROOT)
+      expect(face.hooks.loomBranching.getSnapshot().forms).toEqual({})
+
+      expect(face.hooks.loomRoutes.getSnapshot()).toEqual({ status: 'idle' })
+      face.loadRoutes()
+      await vi.waitFor(() => { expect(face.hooks.loomRoutes.getSnapshot().status).toBe('ready') })
+      expect(face.hooks.loomRoutes.getSnapshot()).toEqual({
+        status: 'ready', options: [{ selection: { provider: 'p', model: 'm' }, providerName: 'P', modelName: 'M', efforts: [] }],
+      })
+      await fiber.dispose()
+      expect(face.hooks.loomRoutes.getSnapshot()).toEqual({ status: 'unavailable' })
+    } finally { await b.ctx.fiber.dispose() }
+  })
+
+  it('keeps the route pickers hidden while the session Remote is not mounted', async () => {
+    const b = await fixture({ sessionRemote: false })
+    try {
+      await b.ctx.plugin({ inject: [...inject], apply: ctx => mountLoom(ctx, CONTRIBUTION) })
+      const face = injectedOf(b.entry('conversation.input.dock', BranchForm), isBranching)
+      face.loadRoutes()
+      expect(face.hooks.loomRoutes.getSnapshot()).toEqual({ status: 'unavailable' })
+      expect(b.modelCatalog).not.toHaveBeenCalled()
+    } finally { await b.ctx.fiber.dispose() }
+  })
+
   it('re-registers after the conversation slots are collapsed and declared again', async () => {
     const b = await fixture()
     try {
@@ -214,7 +323,7 @@ describe('Loom browser plugin', () => {
       let families: ReturnType<typeof registerLoom> | undefined
       const fiber = b.ctx.plugin({
         inject: ['sessions', 'locale', 'slots', 'uiConversation', 'uiWorkspace'],
-        apply: (ctx) => { families = registerLoom(ctx, b.requestAt) },
+        apply: (ctx) => { families = registerLoom(ctx, calls(b)) },
       })
       await fiber
       const source = families!.source(ROOT)

@@ -12,19 +12,22 @@ import {
   IconBranchOutlineRegular, IconChevronRightOutlineRegular, StateDot, type StateDotState,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
-import type { LoomFamily } from '@deepseek-ai/dsh-experimental-loom/types'
+import type { LoomFamily, LoomMark } from '@deepseek-ai/dsh-experimental-loom/types'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
-import { compactTokens, plural, type LoomTranslate } from './format.ts'
+import { compactTokens, failureText, plural, type LoomTranslate } from './format.ts'
+import { KeepGlyph, SetAsideGlyph } from './glyphs.tsx'
 import { projectionValuesOf } from './lineage.ts'
 import { useRefreshOnce } from './refresh.ts'
 import { buildLoomTree, sessionRowId, type LoomRowStatus, type LoomTreeRow } from './tree.ts'
 import type { LoomViewProps } from './LoomView.tsx'
+import { VariantTallies } from './VariantTallies.tsx'
 import type { createLoomViewStore } from './view-store.ts'
 import css from './LoomTree.module.css'
 
 /** Props the view hands its tree. */
-export interface LoomTreeProps extends Pick<LoomViewProps, 'useSessions' | 'useSessionStatus' | 'refreshProjection'>,
+export interface LoomTreeProps extends Pick<LoomViewProps,
+  'useSessions' | 'useSessionStatus' | 'refreshProjection' | 'useLoomBranching' | 'openForm' | 'setMark'>,
   PropsStore<ReturnType<typeof createLoomViewStore>> {
   readonly family: LoomFamily
   /** Session the Loom tab belongs to. */
@@ -77,6 +80,9 @@ function Guides({ row }: { row: LoomTreeRow }) {
   )
 }
 
+/** Copy key naming a row's mark. */
+const MARK_NAMES = { keep: 'tree.mark.keep', 'set-aside': 'tree.mark.setAside' } as const satisfies Record<LoomMark, string>
+
 /** Visible label and accessible name of one row. */
 function rowText(row: LoomTreeRow, t: LoomTranslate): { label: string; summary: string; metric: string | undefined; name: string } {
   const sep = t('list.sep')
@@ -84,7 +90,8 @@ function rowText(row: LoomTreeRow, t: LoomTranslate): { label: string; summary: 
     const label = pointLabel(row, t)
     const summary = t(`tree.branches.${plural(row.branchCount)}`, { count: row.branchCount })
     const metric = row.tokens === undefined ? undefined : t('tree.tokensTotal', { value: compactTokens(row.tokens, t) })
-    return { label, summary, metric, name: [label, summary, metric].filter(part => part !== undefined).join(sep) }
+    const running = row.running === 0 ? undefined : t('tree.running', { count: row.running })
+    return { label, summary, metric, name: [label, summary, metric, running].filter(part => part !== undefined).join(sep) }
   }
   const summary = [
     row.turns === undefined ? undefined : t(`tree.turns.${plural(row.turns)}`, { count: row.turns }),
@@ -95,6 +102,7 @@ function rowText(row: LoomTreeRow, t: LoomTranslate): { label: string; summary: 
     row.title, summary === '' ? undefined : summary,
     metric === undefined ? undefined : t('tree.ownTokens', { value: metric }),
     t(`tree.status.${row.status}`),
+    row.mark === null ? undefined : t(MARK_NAMES[row.mark]),
   ].filter(part => part !== undefined).join(sep)
   return { label: row.title, summary, metric, name }
 }
@@ -105,17 +113,21 @@ function rowText(row: LoomTreeRow, t: LoomTranslate): { label: string; summary: 
  * @returns the tree.
  */
 export function LoomTree({
-  family, currentSessionId, selectedSessionId, useSessions, useSessionStatus, refreshProjection, useStore, actions, t,
+  family, currentSessionId, selectedSessionId, useSessions, useSessionStatus, refreshProjection, useLoomBranching,
+  openForm, setMark, useStore, actions, t,
 }: LoomTreeProps) {
   const list = useSessions(state => state)
   const statuses = useSessionStatus(value => value)
+  const marks = useLoomBranching(state => state.marks)
   const collapsedIds = useStore(state => state.collapsed)
   const activeId = useStore(state => state.active)
   const tree = useMemo(() => buildLoomTree({
     family, list, currentSessionId,
     running: id => statuses.get(id)?.running,
     collapsed: new Set(collapsedIds),
-  }), [family, list, currentSessionId, statuses, collapsedIds])
+    marks,
+  }), [family, list, currentSessionId, statuses, collapsedIds, marks])
+  const markFailure = family.nodes.map(node => marks[node.sessionId]).find(mark => mark?.status === 'failed')
   const missing = useMemo(() => {
     // A parent's outline names the turn a cut inside a turn falls in.
     const parents = new Set(family.nodes.map(node => node.parentId))
@@ -144,6 +156,20 @@ export function LoomTree({
     if (row.kind === 'point') actions.toggled(row.id)
     else actions.selected(row.sessionId)
   }
+  // g branches a Session after its last ended turn, or a branch point at its cut; a cut inside a turn has no turn to keep.
+  const branch = (row: LoomTreeRow): void => {
+    if (row.kind === 'point') {
+      if (row.cutTurn !== undefined && (row.openedTurn ?? 0) <= row.cutTurn) {
+        openForm(currentSessionId, { sourceSessionId: row.parentSessionId, afterTurn: row.cutTurn })
+      }
+      return
+    }
+    const afterTurn = (row.lastTurn ?? 0) - (row.status === 'running' ? 1 : 0)
+    if (afterTurn >= 1) openForm(currentSessionId, { sourceSessionId: row.sessionId, afterTurn })
+  }
+  const mark = (row: LoomTreeRow, value: LoomMark): void => {
+    if (row.kind === 'session') void setMark(row.sessionId, row.mark === value ? null : value)
+  }
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>, row: LoomTreeRow, index: number): void => {
     if (event.altKey || event.ctrlKey || event.metaKey) return
     switch (event.key) {
@@ -164,6 +190,9 @@ export function LoomTree({
       case ' ':
         activate(row)
         break
+      case 'g': branch(row); break
+      case 'k': mark(row, 'keep'); break
+      case 'x': mark(row, 'set-aside'); break
       default: return
     }
     event.preventDefault()
@@ -223,16 +252,29 @@ export function LoomTree({
                 <span className={css.label}>{text.label}</span>
                 {text.summary !== '' && <span className={css.summary}>{text.summary}</span>}
               </span>
+              {row.kind === 'session' && row.mark !== null && (
+                <span className={css.markGlyph} aria-hidden="true">
+                  {row.mark === 'keep' ? <KeepGlyph size={12} /> : <SetAsideGlyph size={12} />}
+                </span>
+              )}
+              {row.kind === 'point' && row.running > 0 && (
+                <span className={css.badge} aria-hidden="true">{t('tree.running', { count: row.running })}</span>
+              )}
               {text.metric !== undefined && <span className={css.metric}>{text.metric}</span>}
             </div>
           )
         })}
       </div>
+      <VariantTallies family={family} useSessions={useSessions} useLoomBranching={useLoomBranching} t={t} />
       <div className={css.hints}>
         <span className={css.hint}><kbd>↑</kbd><kbd>↓</kbd>{t('keys.move')}</span>
         <span className={css.hint}><kbd>←</kbd><kbd>→</kbd>{t('keys.collapseExpand')}</span>
         <span className={css.hint}><kbd>{t('keys.enter')}</kbd>{t('keys.open')}</span>
+        <span className={css.hint}><kbd>{t('keys.capBranch')}</kbd>{t('keys.branch')}</span>
+        <span className={css.hint}><kbd>{t('keys.capKeep')}</kbd>{t('keys.keep')}</span>
+        <span className={css.hint}><kbd>{t('keys.capSetAside')}</kbd>{t('keys.setAside')}</span>
         <p className={css.note}>{t('keys.note')}</p>
+        {markFailure?.status === 'failed' && <p className={css.note} role="status">{failureText(markFailure.failure, t)}</p>}
       </div>
     </div>
   )

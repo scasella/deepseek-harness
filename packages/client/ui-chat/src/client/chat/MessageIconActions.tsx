@@ -29,6 +29,11 @@ export interface MessageIconActionsProps {
    */
   extraActions?: ReactNode
   /**
+   * Slot-rendered actions owned by independent plugins, placed after the
+   * branch control and before the usage and clock items.
+   */
+  afterBranchActions?: ReactNode
+  /**
    * Icon-row Turn-usage trigger (the TurnUsagePanel pill), seated after the
    * branch control at the end of the icon cluster.
    */
@@ -44,7 +49,7 @@ export interface MessageIconActionsProps {
  */
 export function MessageIconActions({
   text, time, clock, onBranch, branchUnavailable = false, className,
-  extraActions, usageAction, t,
+  extraActions, afterBranchActions, usageAction, t,
 }: MessageIconActionsProps) {
   const day = useCalendarDay()
   const reasonId = useId()
@@ -107,6 +112,7 @@ export function MessageIconActions({
       {onBranch !== undefined && branchUnavailable && (
         <span id={reasonId} className={css.visuallyHidden}>{t('message.branchUnavailable')}</span>
       )}
+      {afterBranchActions}
       {clock === 'end'
         ? <span className={css.endInfo}>{usageAction}{clockEl}</span>
         : usageAction}

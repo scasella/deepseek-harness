@@ -35,7 +35,9 @@ import {
   type ApiSessionCreated,
 } from './agent.ts'
 import { latestCompletedPrefixBoundary } from './fork-cut.ts'
+import { firstRequestRoute } from './request-route.ts'
 import type {
+  ModelSelection,
   SessionAttachmentRequest,
   SessionAttachmentValue,
   SessionCancelRequest,
@@ -143,21 +145,7 @@ export class SessionCommandController {
     const agent = await this.resolveAgent(request.sessionId)
     return this.agents.serializeImageAdmission(agent, async () => {
       try {
-        await this.requireModel(request)
-        const resolved = await this.ctx.llm.resolveCallConfig({
-          provider: request.provider,
-          model: request.model,
-          ...(request.reasoningEffort === undefined
-            ? {}
-            : { reasoningEffort: ReasoningEffortId(request.reasoningEffort) }),
-        })
-        const selected: AgentModelSelection = {
-          provider: resolved.provider,
-          model: resolved.model,
-          ...(resolved.reasoningEffort === undefined
-            ? {}
-            : { reasoningEffort: resolved.reasoningEffort }),
-        }
+        const selected = await this.resolveSelection(request)
         this.agents.selectForNextRequest(agent, selected)
         void this.ctx.agentDefaultModel.saveSelection(selected).catch((error: unknown) => {
           this.ctx.logger.warn(
@@ -166,14 +154,57 @@ export class SessionCommandController {
         })
         return { selected: { ...selected } }
       } catch (error) {
-        if (remoteErrorOf(error) !== undefined) throw error
-        throw new RemoteError(
-          'session/model-unavailable',
-          error instanceof Error ? error.message : String(error),
-          { provider: request.provider, model: request.model },
-        )
+        rejectSelection(error, request)
       }
     })
+  }
+
+  /**
+   * Validate one requested selection against the model catalog and resolve
+   * it to the exact route and effort the adapter accepts.
+   * @param selection - requested provider, model, and optional effort.
+   * @returns the resolved selection.
+   */
+  private async resolveSelection(selection: ModelSelection): Promise<AgentModelSelection> {
+    await this.requireModel(selection)
+    const resolved = await this.ctx.llm.resolveCallConfig({
+      provider: selection.provider,
+      model: selection.model,
+      ...(selection.reasoningEffort === undefined
+        ? {}
+        : { reasoningEffort: ReasoningEffortId(selection.reasoningEffort) }),
+    })
+    return {
+      provider: resolved.provider,
+      model: resolved.model,
+      ...(resolved.reasoningEffort === undefined
+        ? {}
+        : { reasoningEffort: resolved.reasoningEffort }),
+    }
+  }
+
+  /**
+   * Resolve the route a fork child's next request runs on, before the child
+   * exists: the caller's validated selection; else, when the inherited prefix
+   * holds neither a request header nor a pick, the route of the source's
+   * first request; else none, which keeps the route the prefix carries.
+   * @param request - fork request carrying the optional selection.
+   * @param events - complete source log.
+   * @param boundary - inclusive fork boundary.
+   * @returns the route to record in the child, or undefined to record none.
+   * @throws RemoteError `session/model-unavailable` for an unavailable selection.
+   */
+  private async resolveForkRoute(
+    request: SessionForkRequest,
+    events: readonly SessionEvent[],
+    boundary: ReturnType<typeof SessionSeq>,
+  ): Promise<AgentModelSelection | undefined> {
+    if (request.selection === undefined) return firstRequestRoute(events, boundary)
+    try {
+      return await this.resolveSelection(request.selection)
+    } catch (error) {
+      rejectSelection(error, request.selection)
+    }
   }
 
   /**
@@ -205,8 +236,11 @@ export class SessionCommandController {
   /**
    * Create a new ordinary Session from an exact event prefix. An explicit
    * `atSeq` is the inclusive cut; an omitted value selects the latest
-   * completed-turn prefix. An open cut receives synthetic fork closers.
-   * @param request - source Session and optional exact event boundary.
+   * completed-turn prefix. An open cut receives synthetic fork closers. The
+   * child's route comes from {@link resolveForkRoute} and is recorded before
+   * the child is published; its requests share the prompt cache of the
+   * source's fork-family root.
+   * @param request - source Session, optional exact event boundary, and optional route.
    * @returns the new Session identity.
    */
   async fork(request: SessionForkRequest): Promise<SessionForkValue> {
@@ -243,6 +277,7 @@ export class SessionCommandController {
         { sessionId: request.sessionId },
       )
     }
+    const route = await this.resolveForkRoute(request, source.events, boundary)
     const seed = buildForkSeed(source.events, boundary)
     let workspace: Workspace | undefined
     try {
@@ -257,7 +292,7 @@ export class SessionCommandController {
     const childId = brandString<SessionId>(`session-${randomUUID()}`)
     const composition = await this.agents.composeAgent(this.agents.presetForObservation(source))
     try {
-      const { provider, model } = this.ctx.agentDefaultModel.currentSelection()
+      const agentOptions = this.agents.agentOptions(await this.agents.forkFamilyRoot(source.header))
       await this.ctx.agents.create({
         sessionId: childId,
         seed,
@@ -270,8 +305,12 @@ export class SessionCommandController {
             ? {}
             : { agentPreset: composition.agentPreset }),
         },
-        agentOptions: { provider, model },
-        setup: composition.setup,
+        agentOptions,
+        setup: route === undefined ? composition.setup : async (agentCtx, agent) => {
+          const commit = await composition.setup(agentCtx, agent)
+          this.agents.selectForNextRequest(agent, route)
+          return commit
+        },
       })
     } catch (error) {
       throw new RemoteError(
@@ -543,6 +582,21 @@ export class SessionCommandController {
     }
     return undefined
   }
+}
+
+/**
+ * Report a selection that failed validation or resolution.
+ * @param error - failure from {@link SessionCommandController.resolveSelection} or its caller.
+ * @param selection - the requested selection.
+ * @throws the failure itself when it is already a RemoteError, else `session/model-unavailable`.
+ */
+function rejectSelection(error: unknown, selection: ModelSelection): never {
+  if (remoteErrorOf(error) !== undefined) throw error
+  throw new RemoteError(
+    'session/model-unavailable',
+    error instanceof Error ? error.message : String(error),
+    { provider: selection.provider, model: selection.model },
+  )
 }
 
 function resolvePromptFileReceipts(

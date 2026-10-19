@@ -5,12 +5,13 @@
  */
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import { loomSessionNode } from '@deepseek-ai/dsh-experimental-loom/family'
-import type { LoomFamily } from '@deepseek-ai/dsh-experimental-loom/types'
+import type { LoomBranchView, LoomFamily, LoomMark, LoomMarkView } from '@deepseek-ai/dsh-experimental-loom/types'
 import type { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type { SessionProjectionMap } from '@deepseek-ai/dsh-session-projection/types'
 import type {} from '@deepseek-ai/dsh-session-stats/client'
 import type {} from '@deepseek-ai/dsh-session-turn-outline/client'
 import type { TokenUsageBuckets } from '@deepseek-ai/dsh-token-meter/client'
+import type { LoomMarkOverride } from './branching.ts'
 
 /** Projection values a list row or an explicit projection read carries for one Session. */
 export type LoomProjectionValues = Readonly<Partial<SessionProjectionMap>>
@@ -100,6 +101,18 @@ export function inheritedSplitOf(values: LoomProjectionValues | undefined): Loom
 }
 
 /**
+ * Read the last turn a Session inherited, including a turn its cut
+ * interrupted. The Session's own outline holds the inherited turns' starts at
+ * their parent seqs; before it arrives, the last ended inherited turn stands in.
+ * @param values - the Session's projection values.
+ * @param split - where the Session's inherited prefix ends.
+ * @returns the last inherited turn, or 0 when the prefix opened none.
+ */
+export function lastInheritedTurnOf(values: LoomProjectionValues | undefined, split: LoomSplit): number {
+  return openedTurnAt(values, split.cutSeq) ?? split.cutTurn ?? 0
+}
+
+/**
  * Read the last turn a Session had opened by a seq. A fork's cut inside a
  * turn names that turn here, while `cutTurn` names only the last ended one.
  * @param values - projection values of a Session holding the seq, such as the fork parent.
@@ -184,4 +197,25 @@ function bucketTotal(buckets: TokenUsageBuckets): number {
 export function ownTokens(values: LoomProjectionValues | undefined): number | undefined {
   const usage = values?.tokenUsage
   return usage === undefined ? undefined : bucketTotal(usage.fork?.own ?? usage)
+}
+
+/**
+ * Read a Session's own Loom branch membership.
+ * @param values - the Session's projection values.
+ * @returns the membership, or undefined for a Session that is not a Loom branch child or before `loomBranch` arrives.
+ */
+export function branchOf(values: LoomProjectionValues | undefined): LoomBranchView | undefined {
+  return values?.loomBranch ?? undefined
+}
+
+/**
+ * Read the private mark a Session shows: a mark this browser is saving or has
+ * just saved, else the `loomMark` projection.
+ * @param projected - the Session's `loomMark` value.
+ * @param override - this browser's mark state for the Session.
+ * @returns the mark, or null for none.
+ */
+export function markOf(projected: LoomMarkView | null | undefined, override: LoomMarkOverride | undefined): LoomMark | null {
+  if (override !== undefined && override.status !== 'failed') return override.mark
+  return projected?.mark ?? null
 }

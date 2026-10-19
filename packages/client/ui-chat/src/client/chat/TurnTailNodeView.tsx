@@ -1,6 +1,8 @@
 import { memo } from 'react'
 import type { InjectFace, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ChatNodeViewProps, PerformanceUsageInjected, TurnTailOwnerProps } from '../contract/slots.ts'
+import type {
+  AssistantActionOwnerProps, ChatNodeViewProps, PerformanceUsageInjected, TurnTailOwnerProps,
+} from '../contract/slots.ts'
 import { MessageIconActions } from './MessageIconActions.tsx'
 import { TurnUsagePanel } from './TurnUsagePanel.tsx'
 import { assistantText } from './turn-assistant.ts'
@@ -10,7 +12,9 @@ import type { ChatSnapshot } from '../contract/snapshot.ts'
 import css from './TurnTailNodeView.module.css'
 
 type TurnTailNodeViewProps = ChatNodeViewProps<'turn-tail'>
-  & PropsRenderSlots<'conversation.chat.turnTail' | 'conversation.chat.assistant-actions'>
+  & PropsRenderSlots<
+    'conversation.chat.turnTail' | 'conversation.chat.assistant-actions' | 'conversation.chat.assistant-actions.after'
+  >
   & InjectFace<PerformanceUsageInjected>
 
 function lastContent(snapshot: ChatSnapshot, turn: number, skipWarning: boolean): ChatNode | undefined {
@@ -51,9 +55,9 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
   // Interruption-frozen partials carry no messageId, so they address no
   // durable message and contribute no per-message actions.
   const messageId = closing.finalNode.messageId
-  const assistantActions = messageId === undefined
-    ? null
-    : renderSlot('conversation.chat.assistant-actions', { messageId })
+  const actionOwner: AssistantActionOwnerProps | undefined = messageId === undefined
+    ? undefined
+    : { messageId, turn, ...turn.end === undefined ? {} : { turnEndSeq: turn.end.seq } }
   return (
     <div
       className={css.root}
@@ -70,7 +74,10 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
         onBranch={forkAllowed ? () => { forkAt(data.seq) } : undefined}
         branchUnavailable={data.branchUnavailable || hasLaterChatNode}
         className={css.actions}
-        extraActions={assistantActions}
+        extraActions={actionOwner === undefined ? null : renderSlot('conversation.chat.assistant-actions', actionOwner)}
+        afterBranchActions={actionOwner === undefined
+          ? null
+          : renderSlot('conversation.chat.assistant-actions.after', actionOwner)}
         usageAction={detailed && data.tokenUsage !== undefined
           ? <TurnUsagePanel usage={data.tokenUsage} t={t} />
           : null}

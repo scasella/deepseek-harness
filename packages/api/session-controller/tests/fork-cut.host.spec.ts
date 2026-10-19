@@ -8,8 +8,7 @@ import type { AgentLoopTestHarness } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, UserMessage } from '@deepseek-ai/dsh-session'
-import { completedPrefixBefore, inheritedNextTurnPrompts } from '../src/index.ts'
-import { latestCompletedPrefixBoundary } from '../src/fork-cut.ts'
+import { completedPrefixBefore, inheritedNextTurnPrompts, latestCompletedPrefixBoundary } from '../src/index.ts'
 import { createSessionTestRemote } from './test-remote.ts'
 
 const contexts: Context[] = []

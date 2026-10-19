@@ -994,3 +994,27 @@ describe('request/context capacity records', () => {
     ])
   })
 })
+
+describe('prompt-cache Session', () => {
+  it('stamps the agent cache Session on each request without logging it', async () => {
+    const adapter = new MockAdapter([textResponse('a'), textResponse('b')])
+    const ctx = await harness(adapter)
+    const keyed = await ctx.agentLoop.create(SessionId('cache-child'), {
+      provider: 'mock', model: 'mock', cacheSessionId: SessionId('cache-root'),
+    })
+    const plain = await ctx.agentLoop.create(SessionId('cache-plain'), { provider: 'mock', model: 'mock' })
+
+    send(keyed, 'first')
+    await waitForIdle(ctx, keyed)
+    send(plain, 'second')
+    await waitForIdle(ctx, plain)
+
+    expect(adapter.requests.map(request => [request.sessionId, request.cacheSessionId])).toEqual([
+      [SessionId('cache-child'), SessionId('cache-root')],
+      [SessionId('cache-plain'), undefined],
+    ])
+    expect(adapter.requests[1]).not.toHaveProperty('cacheSessionId')
+    const header = keyed.session.snapshotEvents().find(event => event.type === 'request/header')
+    expect(JSON.stringify(header?.data)).not.toContain('cache-root')
+  })
+})

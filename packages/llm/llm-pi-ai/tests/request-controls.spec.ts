@@ -1,6 +1,7 @@
 /** Request controls pi-ai has no named option for, observed on the wire of a local provider stand-in. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import { brandString, type Branded } from '@deepseek-ai/dsh-brand'
 import LlmRuntime, { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import type { PiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
@@ -178,5 +179,26 @@ describe('OpenRouter thinking off', () => {
     expect(server.requests[1]).not.toHaveProperty('reasoning')
     expect(server.requests[2]).toMatchObject({ thinking: { type: 'disabled' } })
     expect(server.requests[2]).not.toHaveProperty('reasoning')
+  })
+})
+
+describe('prompt-cache key', () => {
+  it('keys the provider cache by the request cache Session, else by its Session', async () => {
+    const server = await mockServer([{ events: textEvents }, { events: textEvents }, { events: textEvents }])
+    const ctx = await mount({
+      gateway: openRouterRoute(server.url, {
+        cacheRetention: 'long',
+        compat: { thinkingFormat: 'openrouter', supportsDeveloperRole: false, supportsLongCacheRetention: true },
+      }),
+    })
+    const request = { provider: 'gateway', model: 'vendor/plain', messages: [] }
+    const child = brandString<Branded<'SessionId'>>('fork-child')
+
+    await assemble(ctx, { ...request, sessionId: child, cacheSessionId: brandString<Branded<'SessionId'>>('family-root') })
+    await assemble(ctx, { ...request, sessionId: child })
+    await assemble(ctx, request)
+
+    expect(server.requests).toMatchObject([{ prompt_cache_key: 'family-root' }, { prompt_cache_key: 'fork-child' }, {}])
+    expect(server.requests[2]).not.toHaveProperty('prompt_cache_key')
   })
 })

@@ -1,6 +1,9 @@
 - region "Trees and outlines":
   - heading "Trees and outlines" [level=3]
   - list:
+    - listitem: Open the Branch ×N form for the focused node of the fork family tree G
     - listitem: Collapse or expand a fork family node ← →
+    - listitem: Keep or unkeep the focused Session of the fork family tree K
     - listitem: Move in the fork family tree ↑ ↓
     - listitem: Read a Session from the fork family tree Enter
+    - listitem: Set aside or restore the focused Session of the fork family tree X
