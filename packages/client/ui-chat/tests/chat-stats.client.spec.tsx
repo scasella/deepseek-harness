@@ -491,6 +491,110 @@ describe('composer stats pills', () => {
     expect(view.getByRole('dialog').textContent).toContain('Cache write100 tok')
   })
 
+  describe('fork split', () => {
+    // The arrive-in-a-fork figures: one inherited parent turn, one own turn.
+    const OWN_STATS = sessionStats({ turns: 1, steps: 9, decodeMs: 6_000, decodeTokens: 1_440 })
+    const INHERITED_STATS = sessionStats({ turns: 1, steps: 7, decodeMs: 4_000, decodeTokens: 960 })
+    const OWN_USAGE = { uncachedInputTokens: 25_254, outputTokens: 6_161, cacheReadTokens: 209_280, cacheWriteTokens: 0 }
+    const INHERITED_USAGE = { uncachedInputTokens: 10_949, outputTokens: 7_891, cacheReadTokens: 60_672, cacheWriteTokens: 0 }
+
+    function forkValues(
+      own: Record<string, number> = OWN_STATS,
+      inherited: Record<string, number> = INHERITED_STATS,
+      ownUsage: typeof OWN_USAGE = OWN_USAGE,
+      inheritedUsage: typeof INHERITED_USAGE = INHERITED_USAGE,
+    ): Record<string, unknown> {
+      const sum = (left: Record<string, number>, right: Record<string, number>) =>
+        Object.fromEntries(Object.keys(left).map(key => [key, left[key]! + right[key]!]))
+      return {
+        sessionStats: { ...sum(own, inherited), fork: { own, inherited } },
+        tokenUsage: { ...sum(ownUsage, inheritedUsage), fork: { own: ownUsage, inherited: inheritedUsage } },
+      }
+    }
+
+    it('splits the counts and tokens of a fork into own and inherited halves', () => {
+      const { source } = makeSource({ nodes: [assistant(1, 1)] })
+      const view = render(<StatsPills {...props(source, forkValues())} />)
+      const [timePill, usagePill] = [...view.getAllByRole('button')] as [HTMLElement, HTMLElement]
+      // Speed stays the whole-log reading (2400 tokens over 10s), after both halves.
+      expect(timePill.textContent).toBe('own 1 turns 9 steps·inherited 1 turns 7 steps·240 tok/s')
+      expect(timePill.getAttribute('aria-label')).toBe('own 1 turns 9 steps · inherited 1 turns 7 steps · 240 tok/s')
+      // The cache hit is the own requests' share (89%), not the whole log's (88%).
+      expect(usagePill.textContent).toBe('own 241K tok·Cache hit 89%·inherited 79.5K tok')
+      expect(usagePill.getAttribute('aria-label')).toBe('own 241K tok · Cache hit 89% · inherited 79.5K tok')
+      // Each inherited half is its own element so it can recede.
+      expect(view.getByText('inherited 1 turns 7 steps').tagName).toBe('SPAN')
+      expect(view.getByText('inherited 79.5K tok').tagName).toBe('SPAN')
+    })
+
+    it('words each half as an unforked Session words its counts', () => {
+      const { source } = makeSource({ nodes: [assistant(1, 1)] })
+      const view = render(<StatsPills {...props(source, forkValues(
+        sessionStats({ turns: 2, steps: 1 }),
+        sessionStats({ turns: 1, steps: 1 }),
+      ))} />)
+      expect(view.getByText('own 2 turns 1 steps')).toBeTruthy()
+      expect(view.getByText('inherited 1 turns 1 steps')).toBeTruthy()
+    })
+
+    it('shows a brand-new fork with nothing of its own yet', () => {
+      const { source } = makeSource()
+      const values = forkValues(
+        sessionStats({}),
+        INHERITED_STATS,
+        { uncachedInputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+      )
+      const view = render(<StatsPills {...props(source, values)} />)
+      const [timePill, usagePill] = [...view.getAllByRole('button')] as [HTMLElement, HTMLElement]
+      expect(timePill.textContent).toBe('own 0 turns 0 steps·inherited 1 turns 7 steps·240 tok/s')
+      // No own billed input: the cache-hit reading drops out, and Compact drops the usage pill.
+      expect(usagePill.textContent).toBe('own 0 tok·inherited 79.5K tok')
+      view.rerender(<StatsPills {...props(source, values)} usePerformanceUsage={selector => selector('compact')} />)
+      expect(view.container.textContent).toBe('240 tok/s')
+    })
+
+    it('renders a fork without inherited steps or usage exactly as an unforked Session', () => {
+      const { source } = makeSource({ nodes: [timedStep()] })
+      const zeroUsage = { uncachedInputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
+      const view = render(<StatsPills {...props(source, forkValues(
+        sessionStats({ turns: 1, steps: 1, decodeMs: 3_000, decodeTokens: 60 }),
+        sessionStats({}),
+        USAGE,
+        zeroUsage,
+      ))} />)
+      const pills = [...view.container.querySelectorAll('[data-composer-stat]')]
+      expect(pills.map(pill => pill.textContent)).toEqual(['1 turns 1 steps·20 tok/s', '105 tok·Cache hit 90%'])
+    })
+
+    it('reads the own cache hit in Compact mode', () => {
+      const { source } = makeSource({ nodes: [assistant(1, 1)] })
+      const view = render(<StatsPills {...props(source, forkValues())} usePerformanceUsage={selector => selector('compact')} />)
+      expect(view.container.textContent).toBe('240 tok/sCache hit 89%')
+    })
+
+    it('details the own buckets and the inherited total in the usage dialog', () => {
+      const { source } = makeSource({ nodes: [assistant(1, 1)] })
+      const view = render(<StatsPills {...props(source, forkValues())} />)
+      fireEvent.click(view.getAllByRole('button')[1]!)
+      const dialog = view.getByRole('dialog')
+      expect(dialog.firstChild?.textContent).toBe('Token usage240,695 tok')
+      const tokens = dialog.querySelector('[data-session-stats-usage]') as HTMLElement
+      expect(tokens.textContent).toBe(
+        'Cache hit89%Uncached input25,254 tokCached input209,280 tokOutput6,161 tokInherited79,512 tok',
+      )
+    })
+
+    it('takes the fork copy from the active locale', () => {
+      const { source } = makeSource({ nodes: [assistant(1, 1)] })
+      const view = render(<StatsPills {...props(source, forkValues())} t={t} />)
+      const [timePill, usagePill] = [...view.getAllByRole('button')] as [HTMLElement, HTMLElement]
+      expect(timePill.textContent).toBe('本会话 1 轮 9 步·继承 1 轮 7 步·240 tok/s')
+      expect(usagePill.textContent).toBe('本会话 241K tok·缓存命中 89%·继承 79.5K tok')
+      fireEvent.click(usagePill)
+      expect(view.getByRole('dialog').textContent).toContain('继承79,512 tok')
+    })
+  })
+
   it('renders ZERO times during streaming chunk frames (RFC hard acceptance)', () => {
     const { set, source } = makeSource({ nodes: [assistant(1, 1)] })
     let renders = 0

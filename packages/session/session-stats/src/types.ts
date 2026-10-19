@@ -13,13 +13,12 @@
 export {}
 
 /**
- * Whole-log conversation figures, independent of how much history a client
- * has paged in. Counts and wall times all fold from the complete durable log;
+ * Conversation counts and wall times folded from durable session events;
  * every field is 0 until its first contributing event lands. Field names
  * mirror the client window fold so an assembly without this unit can fall
  * back to it wholesale.
  */
-export interface SessionStatsProjection {
+export interface SessionStatsFigures {
   /** Distinct turns carrying at least one closed step (`step/end`); rejected or empty turns are uncounted. */
   turns: number
   /** Closed steps (`step/end` events) — completed, failed, and cancelled steps alike. */
@@ -38,9 +37,36 @@ export interface SessionStatsProjection {
   decodeTokens: number
 }
 
+/**
+ * A fork's figures split at its cut. Per field, `own + inherited` equals the
+ * whole-log figure that carries the split.
+ */
+export interface SessionStatsForkSplit {
+  /** Figures of the turns this Session ran itself. */
+  own: SessionStatsFigures
+  /**
+   * Figures of the turns opened in the fork-inherited prefix
+   * (`seq < inheritedEventCount`), across every ancestor, including the seed's
+   * synthetic closers of a turn the cut interrupted.
+   */
+  inherited: SessionStatsFigures
+}
+
+/**
+ * Whole-log conversation figures, independent of how much history a client
+ * has paged in. The top-level figures fold the complete durable log,
+ * including a fork-inherited prefix. `fork` is present exactly when the
+ * Session has a nonempty fork-inherited prefix (`inheritedEventCount > 0`);
+ * otherwise the key is absent.
+ */
+export interface SessionStatsProjection extends SessionStatsFigures {
+  /** Own and inherited figures of a Session with a fork-inherited prefix. */
+  fork?: SessionStatsForkSplit
+}
+
 declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionMap {
-    /** Whole-log turn/step counts and wall times; see {@link SessionStatsProjection}. */
+    /** Whole-log turn/step counts and wall times, split at a fork cut; see {@link SessionStatsProjection}. */
     sessionStats: SessionStatsProjection
   }
 }

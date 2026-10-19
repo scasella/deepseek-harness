@@ -1,0 +1,13 @@
+# Bilingual-pair consistency record for loom.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/subsystems/loom.md
+/loom:
+  en: 29b6193507fb091d
+  zh: 178836b07b7ead69
+/loom/fork-families:
+  en: e6d9ffc68a802a8c
+  zh: fc622c4906411fa7
+/loom/branch-membership:
+  en: 30fcee7edba8d342
+  zh: 5165c2b91f9acee3

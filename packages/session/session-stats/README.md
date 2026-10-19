@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package gives clients whole-session turn and step counts plus LLM, tool, first-token, and decode wall times through the public `sessionStats` value. The figures come from the complete durable log, so paging and compaction do not change them. Use it when a client must display consistent conversation statistics across reloads and reduced history. When whole-session statistics are unavailable, clients can use window-scoped counting instead.
+This package gives clients whole-session turn and step counts plus LLM, tool, first-token, and decode wall times through the public `sessionStats` value. The figures come from the complete durable log, so paging and compaction do not change them; a fork also reports its own and inherited figures separately. Use it when a client must display consistent conversation statistics across reloads and reduced history. When whole-session statistics are unavailable, clients can use window-scoped counting instead.
 
 ## Table of Contents
 
@@ -45,6 +45,9 @@ Mount the plugin beside the session store and the projection registry when clien
 | `toolMs` | Summed matched `tool/call` → `tool/result` wall time |
 | `ttftMs` / `ttftSteps` | Summed first-token latency and the steps carrying it |
 | `decodeMs` / `decodeTokens` | Summed decode wall time and provider output tokens over usage-reporting steps |
+| `fork` | Present only on a fork (`inheritedEventCount > 0`): `own` and `inherited` copies of the eight figures, each field summing to the top-level figure |
+
+The top-level figures cover the whole log, including a fork's inherited prefix. `inherited` covers the turns opened before the cut, across every ancestor, including the seed's synthetic closers of a turn the cut interrupted; `own` covers the turns the fork ran itself, so a brand-new fork has zero own figures.
 
 Every field is 0 until its first contributing event; the composed registry always serves the key, so clients read the value rather than key presence. Clients render whole-log figures through the projection seam's snapshot and change feed; the reference consumer is the web chat stats strip, whose window fold mirrors these field names as its no-unit fallback.
 
@@ -76,11 +79,12 @@ The unit is a pure fold over committed session events: `step/end` is the counted
 
 ### Data model
 
-The fold state holds the eight totals plus in-flight boundaries: `lastTurn` (turn of the last counted `step/end`), `openStep` (the open step's boundary facts, closed by its `assistant/message`), and `pendingCalls` (tool dispatch times by callId). The wire view is a strict subset — the eight totals — so the persisted-cache state schema extends the view schema with the boundary fields.
+The fold state holds `inheritedEventCount`, `inheritedTurn` (the highest turn number read before the cut), and two side folds, `own` and `inherited`. Each side fold holds its eight figures plus in-flight boundaries: `lastTurn` (turn of the last counted `step/end`), `openStep` (the open step's boundary facts, closed by its `assistant/message`), and `pendingCalls` (tool dispatch times by callId). The wire view sums the two sides and adds `fork` when `inheritedEventCount > 0`.
 
 ### Fold rules
 
 - Uninteresting events return the same state reference; the registry's `Object.is` gate keeps the change feed quiet.
+- An event goes to the inherited side when `seq < inheritedEventCount` or its turn is at most `inheritedTurn`; every other event goes to the own side. A fork's first own turn numbers past every inherited turn, so the sides never share a turn, step, or tool call.
 - First-token latency records the first non-empty delta chunk and survives an in-step `llm/retry`.
 - Decode time and tokens accrue only over steps carrying both a first token and a valid provider usage report; malformed usage is ignored like the window fold guards node usage.
 - Tool time pairs `tool/call` → `tool/result` by callId; unresolved calls are dropped at `turn/end` because results land within their turn, and a callId colliding with an `Object` prototype name reads as unmatched.

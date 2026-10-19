@@ -1,17 +1,18 @@
 // Composer statistics pills, each its own 'conversation.composer.dock' list
 // entry (activity, usage) so a plugin can replace or add one pill by id.
 // Compact keeps speed and cache hit as plain readings; Detailed adds counts,
-// token totals, and click-open dialogs. Settled-node identity prevents
-// stream-delta updates from rerendering the pills.
+// token totals, and click-open dialogs. A fork with inherited work splits its
+// counts and tokens into own and inherited halves. Settled-node identity
+// prevents stream-delta updates from rerendering the pills.
 
-import { memo, useMemo, type ReactNode } from 'react'
+import { Fragment, memo, useMemo, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { IconDatabaseOutlineRegular, IconGaugeOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { UseProjection } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { InjectFace, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
-// Type-only: merges the sessionStats key into SessionProjectionMap for useProjection.
-import type {} from '@deepseek-ai/dsh-session-stats/client'
-import type { TokenUsageProjection } from '@deepseek-ai/dsh-token-meter/client'
+// Type-only: also merges the sessionStats key into SessionProjectionMap for useProjection.
+import type { SessionStatsFigures, SessionStatsProjection } from '@deepseek-ai/dsh-session-stats/client'
+import type { TokenUsageBuckets, TokenUsageProjection } from '@deepseek-ai/dsh-token-meter/client'
 import type { ChatViewSlotProps, PerformanceUsageInjected } from '../contract/slots.ts'
 import type { ChatSnapshot } from '../contract/snapshot.ts'
 import { formatTokensPerSecond } from './message-chrome.ts'
@@ -99,24 +100,47 @@ export function formatDuration(ms: number, t: ChatViewSlotProps['t']): string {
 }
 
 /**
- * Display-ready cache-hit share of prompt-side input over the whole durable log.
- * @param usage - the session's token-usage projection value.
+ * Display-ready cache-hit share of prompt-side input over a set of usage buckets.
+ * @param usage - the whole-log usage, or one side of a fork's split.
  * @returns integer text when integer rounding stays below 100, otherwise the
  * minimum decimal precision that still rounds below 100; a full hit returns
  * 100, and no billed input returns null.
  */
-export function cacheHitPercent(usage: TokenUsageProjection): string | null {
+export function cacheHitPercent(usage: TokenUsageBuckets): string | null {
   const denominator = billedInputTokens(usage)
   return formatCacheHitPercent(usage.cacheReadTokens, denominator)
 }
 
 /**
  * Sum the three disjoint prompt-side billing buckets.
- * @param usage - the session's token-usage projection value.
+ * @param usage - the whole-log usage, or one side of a fork's split.
  * @returns billed input tokens.
  */
-export function billedInputTokens(usage: TokenUsageProjection): number {
+export function billedInputTokens(usage: TokenUsageBuckets): number {
   return usage.uncachedInputTokens + usage.cacheReadTokens + usage.cacheWriteTokens
+}
+
+/** Every prompt-side billing bucket plus output, the aggregate the Turn pill's totalTokens also uses. */
+function totalTokens(usage: TokenUsageBuckets): number {
+  return billedInputTokens(usage) + usage.outputTokens
+}
+
+/**
+ * The own/inherited split a fork's usage pill shows.
+ * @param usage - the session's token-usage projection value.
+ * @returns the split when the Session is a fork with inherited usage, otherwise undefined.
+ */
+function usageSplit(usage: TokenUsageProjection): TokenUsageProjection['fork'] {
+  return usage.fork !== undefined && totalTokens(usage.fork.inherited) > 0 ? usage.fork : undefined
+}
+
+/**
+ * The own/inherited split a fork's activity pill shows.
+ * @param stats - whole-log figures, from the projection or the window fallback.
+ * @returns the split when the Session is a fork with inherited closed steps, otherwise undefined.
+ */
+function statsSplit(stats: SessionStatsProjection): SessionStatsProjection['fork'] {
+  return stats.fork !== undefined && stats.fork.inherited.steps > 0 ? stats.fork : undefined
 }
 
 type Translate = ChatViewSlotProps['t']
@@ -138,32 +162,55 @@ interface PillContent {
   label: ReactNode
 }
 
+/** One reading in a pill label; an inherited reading renders in the caption color. */
+interface Segment {
+  text: string
+  inherited?: true
+}
+
 function exactCount(value: number, t: Translate): string {
   return t('message.turnUsage.count', { count: formatExactTokens(value, t) })
 }
 
-function joined(first: string, second: string | null): ReactNode {
-  if (second === null) return first
-  return (
-    <>
-      {first}
-      <span className={css.sep} aria-hidden>·</span>
-      {second}
-    </>
-  )
+/**
+ * Join pill readings with the visual separator glyph.
+ * @param segments - non-empty readings in display order.
+ * @returns the label content.
+ */
+function joined(segments: readonly Segment[]): ReactNode {
+  return segments.map((segment, index) => (
+    <Fragment key={index}>
+      {index > 0 && <span className={css.sep} aria-hidden>·</span>}
+      {segment.inherited === true ? <span className={css.inherited}>{segment.text}</span> : segment.text}
+    </Fragment>
+  ))
+}
+
+/**
+ * The accessible name of a joined label.
+ * @param segments - the label's readings in display order.
+ * @returns the readings separated by a spaced middle dot.
+ */
+function spokenJoined(segments: readonly Segment[]): string {
+  return segments.map(segment => segment.text).join(' · ')
+}
+
+/** Turn and step counts in the reading an unforked Session's activity pill also uses. */
+function counts(figures: SessionStatsFigures, t: Translate): string {
+  return t('stats.counts', { turns: figures.turns, steps: figures.steps })
 }
 
 // Every figure rides the durable sessionStats projection, so paging and
 // compaction cannot change any of them; an assembly without the unit falls
 // back to the window-scoped fold wholesale (same field names), paid only
 // while no projection value is served.
-function useSessionStats(useChat: StatPillProps['useChat'], useProjection: UseProjection): WindowStats {
+function useSessionStats(useChat: StatPillProps['useChat'], useProjection: UseProjection): SessionStatsProjection {
   const settledNodes = useChat(s => s.legacy.nodes)
   const projected = useProjection('sessionStats')
   return useMemo(() => projected ?? deriveStats(settledNodes), [projected, settledNodes])
 }
 
-function decodeSpeed(stats: WindowStats, t: Translate): string {
+function decodeSpeed(stats: SessionStatsFigures, t: Translate): string {
   return t('message.tokensPerSecond', {
     tps: formatTokensPerSecond(stats.decodeTokens / (stats.decodeMs / 1_000)),
   })
@@ -232,7 +279,8 @@ function DialogPill({ stat, icon, label, ariaLabel, title, titleValue, children 
 
 /**
  * Turn and step counts with whole-session speed, opening the time and speed
- * dialog; Compact keeps only the speed reading.
+ * dialog; a fork with inherited steps splits the counts into own and
+ * inherited halves. Compact keeps only the speed reading.
  */
 export const ActivityPill = memo(function ActivityPill({ useChat, useProjection, usePerformanceUsage, t }: StatPillProps) {
   const mode = usePerformanceUsage(value => value)
@@ -241,13 +289,21 @@ export const ActivityPill = memo(function ActivityPill({ useChat, useProjection,
   const icon = <IconGaugeOutlineRegular />
   if (mode === 'compact') return speed === null ? null : <PlainPill stat="activity" icon={icon} label={speed} />
   if (stats.steps === 0) return null
-  const counts = t('stats.counts', { turns: stats.turns, steps: stats.steps })
-  const content: PillContent = { stat: 'activity', icon, label: joined(counts, speed) }
+  const split = statsSplit(stats)
+  // Speed stays a whole-log reading after both halves of a fork's counts.
+  const segments: Segment[] = split === undefined
+    ? [{ text: counts(stats, t) }]
+    : [
+      { text: t('stats.fork.own', { value: counts(split.own, t) }) },
+      { text: t('stats.fork.inherited', { value: counts(split.inherited, t) }), inherited: true },
+    ]
+  if (speed !== null) segments.push({ text: speed })
+  const content: PillContent = { stat: 'activity', icon, label: joined(segments) }
   // A window without one timed figure has no dialog rows to show, so the pill
   // stays a plain reading instead of a button opening an empty dialog.
   if (stats.llmMs <= 0 && stats.toolMs <= 0 && stats.ttftSteps <= 0 && speed === null) return <PlainPill {...content} />
   return (
-    <DialogPill {...content} ariaLabel={speed === null ? counts : `${counts} · ${speed}`} title={t('stats.dialog.title')}>
+    <DialogPill {...content} ariaLabel={spokenJoined(segments)} title={t('stats.dialog.title')}>
       <dl className={dialogCss.details} data-session-stats-details>
         {stats.llmMs > 0 && (
           <>
@@ -278,36 +334,47 @@ export const ActivityPill = memo(function ActivityPill({ useChat, useProjection,
   )
 })
 
-/** Whole-log token total and cache hit; Compact keeps only the cache hit. */
+/**
+ * Whole-log token total and cache hit; a fork with inherited usage shows its
+ * own total and own cache hit, then the inherited total. Compact keeps only
+ * the cache hit.
+ */
 export const UsagePill = memo(function UsagePill({ useProjection, usePerformanceUsage, t }: StatPillProps) {
   const mode = usePerformanceUsage(value => value)
   const usage = useProjection('tokenUsage')
   // Gated on actual token activity: a session whose steps all settled without
   // billing (e.g. every request failed) shows no usage pill.
-  if (usage === undefined || (billedInputTokens(usage) === 0 && usage.outputTokens === 0)) return null
-  const cacheHit = cacheHitPercent(usage)
+  if (usage === undefined || totalTokens(usage) === 0) return null
+  const split = usageSplit(usage)
+  const shown: TokenUsageBuckets = split?.own ?? usage
+  const cacheHit = cacheHitPercent(shown)
   const cacheHitText = cacheHit !== null ? t('stats.cacheHit', { percent: cacheHit }) : null
   const icon = <IconDatabaseOutlineRegular />
   if (mode === 'compact') {
     return cacheHitText === null ? null : <PlainPill stat="usage" icon={icon} label={cacheHitText} />
   }
-  // Same aggregate as the Turn pill's totalTokens: every prompt-side billing bucket plus output.
-  const total = billedInputTokens(usage) + usage.outputTokens
+  const total = totalTokens(shown)
   const totalText = t('message.turnUsage.count', { count: formatTokens(total, t) })
+  const segments: Segment[] = [{ text: split === undefined ? totalText : t('stats.fork.own', { value: totalText }) }]
+  if (cacheHitText !== null) segments.push({ text: cacheHitText })
+  if (split !== undefined) {
+    const inheritedText = t('message.turnUsage.count', { count: formatTokens(totalTokens(split.inherited), t) })
+    segments.push({ text: t('stats.fork.inherited', { value: inheritedText }), inherited: true })
+  }
   return (
     <DialogPill
       stat="usage"
       icon={icon}
-      label={joined(totalText, cacheHitText)}
-      ariaLabel={cacheHitText === null ? totalText : `${totalText} · ${cacheHitText}`}
+      label={joined(segments)}
+      ariaLabel={spokenJoined(segments)}
       title={t('stats.dialog.usageTitle')}
       titleValue={exactCount(total, t)}
     >
-      {/* jscpd:ignore-start -- the session-total bucket rows deliberately mirror
-          TurnUsagePanel's per-turn dl: same skin, different data contract (the
-          buckets are always present here; per-turn fields are optional). A
-          session that never wrote cache drops the row, as the per-turn panel
-          drops its absent fields. */}
+      {/* jscpd:ignore-start -- the session bucket rows (whole-log, or a fork's
+          own side) deliberately mirror TurnUsagePanel's per-turn dl: same skin,
+          different data contract (the buckets are always present here; per-turn
+          fields are optional). A session that never wrote cache drops the row,
+          as the per-turn panel drops its absent fields. */}
       <dl className={dialogCss.details} data-session-stats-usage>
         {cacheHit !== null && (
           <>
@@ -316,17 +383,23 @@ export const UsagePill = memo(function UsagePill({ useProjection, usePerformance
           </>
         )}
         <dt>{t('message.turnUsage.input')}</dt>
-        <dd>{exactCount(usage.uncachedInputTokens, t)}</dd>
+        <dd>{exactCount(shown.uncachedInputTokens, t)}</dd>
         <dt>{t('message.turnUsage.cacheRead')}</dt>
-        <dd>{exactCount(usage.cacheReadTokens, t)}</dd>
-        {usage.cacheWriteTokens !== 0 && (
+        <dd>{exactCount(shown.cacheReadTokens, t)}</dd>
+        {shown.cacheWriteTokens !== 0 && (
           <>
             <dt>{t('message.turnUsage.cacheWrite')}</dt>
-            <dd>{exactCount(usage.cacheWriteTokens, t)}</dd>
+            <dd>{exactCount(shown.cacheWriteTokens, t)}</dd>
           </>
         )}
         <dt>{t('message.turnUsage.output')}</dt>
-        <dd>{exactCount(usage.outputTokens, t)}</dd>
+        <dd>{exactCount(shown.outputTokens, t)}</dd>
+        {split !== undefined && (
+          <>
+            <dt>{t('stats.dialog.inherited')}</dt>
+            <dd>{exactCount(totalTokens(split.inherited), t)}</dd>
+          </>
+        )}
       </dl>
       {/* jscpd:ignore-end */}
     </DialogPill>

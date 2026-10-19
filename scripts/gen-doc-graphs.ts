@@ -287,6 +287,13 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Validates bounded browser audio before provider dispatch.',
   },
   {
+    key: 'loom',
+    pkg: 'experimental-loom',
+    title: 'Experimental Loom fork-family Remote',
+    mode: 'core',
+    note: 'Reads fork families from the Session list, folds own branch records into the loomBranch projection, and removes Loom record payloads from exported telemetry.',
+  },
+  {
     key: 'sessionController',
     pkg: 'api-session-controller',
     title: 'Host Session Remote controller',

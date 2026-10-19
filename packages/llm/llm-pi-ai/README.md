@@ -70,6 +70,20 @@ Each profile may set a `retryPolicy`; omission uses normal mode with five retrie
             reasoningEfforts:
               off:
               high: high
+      openrouter-deepseek:
+        apiKeyEnv: OPENROUTER_API_KEY
+        api: openai-completions
+        baseURL: https://openrouter.ai/api/v1
+        compat:
+          thinkingFormat: openrouter
+        openRouterProvider:
+          order: [deepseek]
+          allowFallbacks: false
+        models:
+          - id: deepseek/deepseek-v4.1-flash
+            reasoningEfforts:
+              off:
+              high: high
 ```
 
 | Field | Default | Meaning |
@@ -81,6 +95,7 @@ Each profile may set a `retryPolicy`; omission uses normal mode with five retrie
 | `models` | installed catalog | Replaces the route's catalog wholesale; each entry defaults from the installed model |
 | `modelOverrides` | none | Reshapes individual installed-catalog models without replacing the rest |
 | `compat` | catalog detection | Wire-compatibility switches for unrecognized endpoints |
+| `openRouterProvider` | none | OpenRouter provider `order` and `allowFallbacks`, sent as the `provider` field of `openai-completions` requests |
 | `defaultContextWindow` | `262,144` | Capacity fallback for undescribed models |
 | `defaultMaxTokens` | `32,768` | Output-cap fallback for undescribed models |
 | `requestImagePixelBudget` | `4,194,304` | Total-pixel budget for each deterministic request image |
@@ -102,7 +117,7 @@ A profile's `models` list replaces the route's installed catalog rather than ext
 
 `reasoningEfforts` declares a model's selectable thinking levels: each key is a level selectors offer, its value the spelling dispatch sends on the wire, so `max: ultra` renames a level for a gateway with its own vocabulary. Omitting the field keeps the installed catalog entry's capability; `false` declares a non-reasoning model. `compat` switches reshape the request for endpoints pi-ai cannot recognize — which role carries the system prompt, which field caps output, how a thinking level travels — configurable per route and per model. A model neither the entry nor the installed catalog sizes takes the route's `defaultContextWindow` and `defaultMaxTokens` fallbacks.
 
-Exact-model metadata lists `reasoning.efforts` from least to greatest selectable effort. A configuration function can select from that list before `prepareCall()` validates the concrete effort. The adapter receives only the resolved controls. Selecting `off` does not guarantee disabled reasoning: a protocol that expresses it by omitting the reasoning field leaves the gateway's default in effect. Reasoning tokens at any selected level count toward the request's output cap.
+Exact-model metadata lists `reasoning.efforts` from least to greatest selectable effort. A configuration function can select from that list before `prepareCall()` validates the concrete effort. The adapter receives only the resolved controls. Selecting `off` does not guarantee disabled reasoning: a protocol that expresses it by omitting the reasoning field leaves the gateway's default in effect. On a model whose `compat.thinkingFormat` is `openrouter`, an `off` declared without a wire value sends `reasoning: { enabled: false }`, while a declared value is sent as `reasoning.effort`. Reasoning tokens at any selected level count toward the request's output cap.
 
 For self-hosted Chat Completions endpoints, `thinkingTokenBudgetField` selects the reasoning-budget parameter, and `vllmPriority` sets an integer scheduler priority when the server enables priority scheduling. Template arguments accept `$var: thinking.budget`. `openai-responses` gateways can set `supportsMaxOutputTokens: false` to omit `max_output_tokens`; Azure and Codex transports ignore this shared compatibility field. These controls are opt-in; catalog-owned Anthropic effort and fallback capabilities are not configurable switches.
 
@@ -116,7 +131,7 @@ The plugin answers "which models can this provider serve?" for a route a configu
 
 ### Failures and recovery
 
-A route pi-ai does not ship needs `api`, `baseURL`, and a non-empty `models` list; an unserviceable profile is refused where it is written, naming the route and model. Failures carry stable codes: a credential that cannot be used fails with `INVALID_CREDENTIAL` naming the route and reference, a route whose `apiKeyEnv` reference resolves to nothing fails with `MISSING_CREDENTIAL`, an unconfigured model fails with `UNKNOWN_MODEL`, and terminal provider failures distinguish `QUOTA` from transient `RATE_LIMIT`. `GenerateOptions.stop` is rejected with `UNSUPPORTED_OPTION` because pi-ai's common streaming UI cannot guarantee it across providers.
+A route pi-ai does not ship needs `api`, `baseURL`, and a non-empty `models` list; an unserviceable profile is refused where it is written, naming the route and model. Failures carry stable codes: a credential that cannot be used fails with `INVALID_CREDENTIAL` naming the route and reference, a route whose `apiKeyEnv` reference resolves to nothing fails with `MISSING_CREDENTIAL`, an unconfigured model fails with `UNKNOWN_MODEL`, and terminal provider failures distinguish `QUOTA` from transient `RATE_LIMIT`. `GenerateOptions.stop` travels as the Chat Completions `stop` field on `openai-completions` models; a request to any other protocol fails with `UNSUPPORTED_OPTION` before network I/O. `openRouterProvider` on a route with no `openai-completions` model is refused where it is written.
 
 Config updates strictly validate changed providers. Initial loading retains stored catalog failures as editable provider diagnostics; unchanged failed providers do not block edits elsewhere. Serviceable models remain selectable, and unresolved models fail before network I/O. Repairing or deleting the offending configuration clears its diagnostic.
 
@@ -227,7 +242,7 @@ pi-ai events become harness reasoning, text, tool-call, usage, and finish chunks
 
 #### Token effect
 
-Generated content affects later inputs only after the loop records it. pi-ai folds reasoning tokens into output usage when the provider does not report them separately, and preserves its exact `totalTokens` value unchanged.
+Generated content affects later inputs only after the loop records it. Output usage includes reasoning tokens; a non-zero reasoning breakdown from the provider is also reported as `reasoningTokens`, which stays absent both when the provider reports none and when it spent none. pi-ai's exact `totalTokens` value is preserved unchanged.
 
 #### KV Cache effect
 
@@ -252,7 +267,7 @@ These limits define where the adapter stops and future work begins. They are cur
 - **Uncataloged models need an unambiguous protocol** — catalog routes preserve each model's protocol, including both Azure APIs under `azure`. A model absent from a mixed-protocol catalog needs an explicit route-level `api`, which overrides every model on the route and must be one of the supported custom protocols. For Azure deployment names, keep the catalog model ID and set `AZURE_OPENAI_DEPLOYMENT_NAME_MAP`.
 - **A modality declaration is not verified** — a model declaring `image` its gateway does not serve is refused by the provider after prompt admission. The durable image remains in history and the same misdeclared model can fail again; switching to a text-only model remains possible because the shared LLM runtime projects image references into stable text for that request.
 - **An unauthenticated route depends on its protocol** — a route naming no credential resolves as configured-but-keyless, but pi-ai's OpenAI-compatible implementation still requires an API key or an `Authorization` header, so a keyless local server needs a placeholder credential referenced by `apiKeyEnv` or an `Authorization` entry in `headers`.
-- **`GenerateOptions.stop` is unsupported** — pi-ai's common stream options cannot guarantee stop-sequence behavior across providers.
+- **`GenerateOptions.stop` reaches only `openai-completions` models** — pi-ai has no stop option and forwards extra body fields only on OpenAI-compatible protocols, of which only Chat Completions defines `stop`.
 - **Conversation update support comes only from the installed pi-ai catalog** — a route receives in-history prompt and tool updates only when its catalog model declares the mid-conversation compat flags, and profiles cannot set them; hand-declared routes and unflagged models receive the concatenated system messages and the complete current tool list at the start of each request.
 - **Images are accepted only in user and tool-result messages** — images in system, developer, or assistant history fail with `UNSUPPORTED_CONTENT` on both conversion paths.
 - **Provider HTTP status is unavailable** — pi-ai error events do not expose a stable HTTP status across providers.

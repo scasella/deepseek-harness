@@ -60,6 +60,9 @@ Promotion requires a named product role, documented public behavior and limitati
 | [`client-ui-voice-input`](client-ui-voice-input/README.md) | Microphone capture and guarded draft insertion | — |
 | [`plugin-market-bundle`](plugin-market-bundle/README.md) | Default-disabled optional custom plugin markets: the market service and the Discover tab | — |
 | [`voice-input-bundle`](voice-input-bundle/README.md) | Default-disabled optional voice input composition | — |
+| [`loom`](loom/README.md) | Loom fork families, branch records, and the `loom` Remote | `ctx.loom` |
+| [`client-ui-loom`](client-ui-loom/README.md) | Loom browser plugin: Remote mount, locale, fork-family sources | — |
+| [`loom-bundle`](loom-bundle/README.md) | Default-disabled optional Loom composition | — |
 | [`agent-team-profile`](agent-team-profile/README.md) | Agent Teams collaboration, tools, and Web UI bundle | — |
 | [`agent-team`](agent-team/README.md) | Named teammates with direct messages and a durable shared task board | `ctx.agentTeams` |
 | [`client-ui-agent-team`](client-ui-agent-team/README.md) | Team roster, task board, and teammate navigation for Web | — |

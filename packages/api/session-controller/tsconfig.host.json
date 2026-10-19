@@ -19,6 +19,8 @@
     "src/list.ts",
     "src/media-references.ts",
     "src/model-selection-projection.ts",
+    "src/fork-cut.ts",
+    "src/fork-lineage-projection.ts",
     "src/archived-session-gate.ts",
     "src/skill-catalog.ts"
   ],

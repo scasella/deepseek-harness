@@ -5,16 +5,40 @@
  */
 
 /**
- * Durable cumulative provider usage for a complete session log.
+ * Cumulative provider usage in four disjoint buckets.
  *
- * The four buckets are disjoint. In particular, reasoning tokens are already
- * included in `outputTokens` and are not accumulated again.
+ * In particular, reasoning tokens are already included in `outputTokens` and
+ * are not accumulated again.
  */
-export interface TokenUsageProjection {
+export interface TokenUsageBuckets {
   uncachedInputTokens: number
   outputTokens: number
   cacheReadTokens: number
   cacheWriteTokens: number
+}
+
+/**
+ * A fork's usage split at its cut. Per bucket, `own + inherited` equals the
+ * whole-log total that carries the split.
+ */
+export interface TokenUsageForkSplit {
+  /** Usage reported by events at or after the cut: this Session's own requests. */
+  own: TokenUsageBuckets
+  /** Usage reported by events of the fork-inherited prefix (`seq < inheritedEventCount`), across every ancestor. */
+  inherited: TokenUsageBuckets
+}
+
+/**
+ * Durable cumulative provider usage for a complete session log.
+ *
+ * The top-level buckets total the whole log, including a fork-inherited
+ * prefix. `fork` is present exactly when the Session has a nonempty
+ * fork-inherited prefix (`inheritedEventCount > 0`); otherwise the key is
+ * absent and the value equals the four totals alone.
+ */
+export interface TokenUsageProjection extends TokenUsageBuckets {
+  /** Own and inherited subtotals of a Session with a fork-inherited prefix. */
+  fork?: TokenUsageForkSplit
 }
 
 /**
@@ -67,7 +91,7 @@ export interface ContextBreakdownProjection {
 
 declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionMap {
-    /** Provider-reported usage accumulated across the complete durable log. */
+    /** Provider-reported usage accumulated across the complete durable log, split at a fork cut. */
     tokenUsage: TokenUsageProjection
     /** Newest request pressure paired with the newest known route capacity. */
     contextPressure: ContextPressureProjection

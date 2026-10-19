@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-本包通过公开的 `sessionStats` 值，为客户端提供全会话轮次与步骤计数，以及 LLM、工具、首 token 和解码墙钟时间。这些数字来自完整的持久日志，因此分页与压缩不会改变它们。当客户端必须在重新加载或缩减历史记录后显示一致的会话统计时，请使用本包。全会话统计不可用时，客户端可改用窗口口径计数。
+本包通过公开的 `sessionStats` 值，为客户端提供全会话轮次与步骤计数，以及 LLM、工具、首 token 和解码墙钟时间。这些数字来自完整的持久日志，因此分页与压缩不会改变它们；fork 还会分别报告自身与继承的数字。当客户端必须在重新加载或缩减历史记录后显示一致的会话统计时，请使用本包。全会话统计不可用时，客户端可改用窗口口径计数。
 
 ## 目录
 
@@ -45,6 +45,9 @@ kind: "package-reference"
 | `toolMs` | 匹配的 `tool/call` → `tool/result` 墙钟时间之和 |
 | `ttftMs` / `ttftSteps` | 首 token 延迟之和及其承载步数 |
 | `decodeMs` / `decodeTokens` | 上报用量的步的解码墙钟时间与提供方输出 token 之和 |
+| `fork` | 仅在 fork（`inheritedEventCount > 0`）上出现：八个数字的 `own` 与 `inherited` 两份，每个字段两份之和等于顶层数字 |
+
+顶层数字覆盖整条日志，包括 fork 继承的前缀。`inherited` 覆盖切点之前开启的轮次，涵盖所有祖先，也包括种子为切点打断的轮次补写的合成收尾事件；`own` 覆盖 fork 自己运行的轮次，因此新建的 fork 自身数字为零。
 
 每个字段在首个贡献事件之前均为 0；已装配的注册表恒提供该键，因此客户端读取值本身，而非键的存在性。客户端通过投影 seam 的快照与变更流渲染全日志数字；参考消费者是 Web 聊天统计条，其窗口折叠以相同字段名充当无单元时的回退。
 
@@ -76,11 +79,12 @@ kind: "package-reference"
 
 ### 数据模型
 
-折叠状态保存八个总计外加进行中的边界：`lastTurn`（最近一次被计数 `step/end` 的轮次）、`openStep`（打开步的边界事实，由其 `assistant/message` 关闭）与 `pendingCalls`（按 callId 记录的工具分发时间）。wire 视图是严格子集——八个总计——因此持久缓存的状态 schema 以边界字段扩展视图 schema。
+折叠状态保存 `inheritedEventCount`、`inheritedTurn`（切点之前读到的最大轮次号）以及 `own` 与 `inherited` 两个分侧折叠。每个分侧折叠保存八个数字外加进行中的边界：`lastTurn`（最近一次被计数 `step/end` 的轮次）、`openStep`（打开步的边界事实，由其 `assistant/message` 关闭）与 `pendingCalls`（按 callId 记录的工具分发时间）。wire 视图对两侧求和，并在 `inheritedEventCount > 0` 时加上 `fork`。
 
 ### 折叠规则
 
 - 不相关事件返回同一状态引用；注册表的 `Object.is` 门禁保持变更流安静。
+- 当 `seq < inheritedEventCount` 或事件轮次不超过 `inheritedTurn` 时，事件归入继承侧；其他事件归入自身侧。fork 的首个自身轮次编号大于所有继承轮次，因此两侧从不共享轮次、步或工具调用。
 - 首 token 延迟记录首个非空 delta chunk，并在步内 `llm/retry` 后保留。
 - 解码时间与 token 只在同时携带首 token 与有效提供方用量报告的步上累加；与窗口折叠守卫节点用量一样忽略畸形用量。
 - 工具时间按 callId 配对 `tool/call` → `tool/result`；未解决的调用在 `turn/end` 时丢弃，因为结果总在其轮内落地，而撞上 `Object` 原型名的 callId 读作未匹配。

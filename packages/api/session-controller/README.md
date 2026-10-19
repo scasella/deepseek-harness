@@ -62,6 +62,8 @@ The user-invocable `skills/list` metadata includes the winning provider’s opti
 
 Fork copies the exact inclusive event prefix selected by `atSeq`, including a cut inside an open turn. The child records its inherited marker before synthetic fork results and closing events. Omitting `atSeq` selects the latest completed turn and its standalone tail, stopping before the next turn or queued input; a nonexistent event is rejected. The chat action selects a completed turn.
 
+A branch that replaces turn k's prompt forks at `completedPrefixBefore(events, k)`: the same completed-turn rule applied before that turn's `turn/start`, or, before the first completed turn, the last standalone event ahead of the first input. A prompt queued while turn k − 1 ran is spliced inside that turn, so the child still inherits it as pending next-turn input and would run it before its own `followup`; the branch removes each prompt that `inheritedNextTurnPrompts(events, cut)` lists with `agent.inbox.remove`. The `forkLineage` projection carries the header parent, the cut seq (equal in parent and child), the turn of the last inherited `turn/end`, and `createdAt` through follow baselines, list hints including cached cold rows, and `faceOf('forkLineage')`; it stays constant after the inherited prefix. Siblings forked at one cut share `parentSession` and `cutSeq`.
+
 A resume blocked by an existing write handle returns `session/writer-held` with the Session id; other resume failures retain `gateway/internal`.
 
 `loadThrough(seq)` retains older pages privately until its shared target is covered or loading ends, then publishes the successful pages as one ordered prepend. Live events remain visible while history loads. A later page failure retains the successful prefix; replacing the history window discards buffered pages from the replaced window. Ordinary `loadOlder()` publishes one Host-selected page directly.
@@ -124,6 +126,7 @@ No direct effect; model requests remain owned by the Agent and LLM packages.
 - File-reference completion uses the shared Agent lookup and can resume a cold Session; the `skills/list` catalog is the non-activating alternative for skill metadata.
 - Accepted/running display memory lives only in Client memory and is lost on page reload.
 - That memory is not shared between tabs: one tab can show a converted row while another still shows `New Session` for the same Session.
+- A cold Session-list row carries `forkLineage` only after a projection-cache checkpoint written while the unit was mounted; until then the row has `parentSessionId` without the cut, and `session.projections` folds the value from the log.
 
 
 <a id="dev-note"></a>

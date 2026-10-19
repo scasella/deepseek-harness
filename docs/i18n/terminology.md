@@ -51,6 +51,7 @@
 | lint | lint | | | |
 | mock | mock | | | 保留英文；指测试替身 |
 | loader | loader | | | |
+| Loom | Loom | | | 实验性 Session 分支功能的产品名；文档正文保留英文；中文 UI 中译作「织机」 |
 | manifest | manifest | manifest（元数据清单） | | |
 | monorepo | monorepo | | | |
 | Round | Round | | 回合、目标回合、Ralph 回合 | 外层策略使用 Round 时，领域层级为 Session > Round > Turn（轮次） > Step（步骤）；Round 是可选的外层策略迭代，并非每个会话轮次都具有的通用层级。Goal Round 与 Ralph Round 均保留英文。一个 Round 承载一个轮次，步骤隶属于该轮次；明确的零步骤轮次仍保持原义。 |

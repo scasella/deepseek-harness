@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { SESSION_FORMAT_VERSION, SessionSeq } from '@deepseek-ai/dsh-session'
+import SessionStore, { SESSION_FORMAT_VERSION, SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { CompactionId } from '@deepseek-ai/dsh-compaction'
 import DeepSeekLlmApiExtensionRegistry from '@deepseek-ai/dsh-deepseek-llm-api-extensions'
@@ -1993,7 +1993,7 @@ describe('installLlmReplay (per-session keying)', () => {
   const live = (id: string): GenerateOptions =>
     ({ provider: 'm', model: 'm', messages: [], sessionId: id as NonNullable<GenerateOptions['sessionId']> })
 
-  it('routes each live session to its own script by FIRST-CALL order', async () => {
+  it('routes each untracked live session to its own script by FIRST-CALL order', async () => {
     const parentFile = writeSession('session.jsonl', { id: 'rec-parent', createdAt: 100 }, [TEXT_CHUNKS])
     const childFile = writeSession('session.1.jsonl', { id: 'rec-child', createdAt: 200 }, [second])
     const ctx = new Context()
@@ -2129,6 +2129,162 @@ describe('installLlmReplay (per-session keying)', () => {
     expect(await drain(ctx.llm.stream(live('first')))).toEqual(TEXT_CHUNKS)
     // A SECOND distinct live session has no script to bind to.
     await expect(drain(ctx.llm.stream(live('second')))).rejects.toThrow(/unrecorded session/)
+  })
+})
+
+describe('installLlmReplay (child creation order)', () => {
+  const textCall = (text: string): StreamChunk[] => [
+    { type: 'block-start', index: 0, blockType: 'text' },
+    { type: 'text-delta', index: 0, text },
+    { type: 'finish', reason: { kind: 'stop' } },
+  ]
+
+  const call = (sessionId: SessionId): GenerateOptions => ({ provider: 'm', model: 'm', messages: [], sessionId })
+
+  const createdListeners = (ctx: Context): number => ctx.events._hooks['session/created']?.length ?? 0
+
+  async function mount(): Promise<Context> {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(SessionStore)
+    return ctx
+  }
+
+  /** Announce one child of `parent` through the real store; returns its live id. */
+  function createChild(ctx: Context, id: string, parent: SessionId): SessionId {
+    return ctx.sessions.create(SessionId(id), { meta: { parentSession: parent } }).id
+  }
+
+  /** Announce one child in its own fiber, so disposing the fiber retires that live entry. */
+  async function announceChild(ctx: Context, id: SessionId, parent: SessionId): Promise<{ dispose(): Promise<unknown> }> {
+    return await ctx.plugin(Object.assign((inner: Context) => {
+      inner.sessions.create(id, { meta: { parentSession: parent } })
+    }, { inject: ['sessions'] }))
+  }
+
+  it('binds children whose first calls arrive in reverse by creation order', async () => {
+    const reference: StreamChunk[] = [
+      { type: 'text-delta', index: 0, text: '{{session:2}} {{session:3}}' },
+      { type: 'finish', reason: { kind: 'stop' } },
+    ]
+    const parentFile = writeSession('session.jsonl', { id: '{{session:1}}', createdAt: 1 }, [TEXT_CHUNKS, reference])
+    const firstFile = writeSession('session.1.jsonl', { id: '{{session:2}}', createdAt: 2 }, [textCall('first')])
+    const secondFile = writeSession('session.2.jsonl', { id: '{{session:3}}', createdAt: 3 }, [textCall('second')])
+    const ctx = await mount()
+    const handle = installLlmReplay(ctx, { file: parentFile, childFiles: [secondFile, firstFile] })
+    const parent = ctx.sessions.create(SessionId('live-parent')).id
+    expect(await drain(ctx.llm.stream(call(parent)))).toEqual(TEXT_CHUNKS)
+    const a = createChild(ctx, 'live-a', parent)
+    const b = createChild(ctx, 'live-b', parent)
+
+    // The later-created child calls first, yet each child replays its own creation-ordinal script.
+    expect(await drain(ctx.llm.stream(call(b)))).toEqual(textCall('second'))
+    expect(await drain(ctx.llm.stream(call(a)))).toEqual(textCall('first'))
+    expect(await drain(ctx.llm.stream(call(parent)))).toEqual([
+      { type: 'text-delta', index: 0, text: 'live-a live-b' },
+      { type: 'finish', reason: { kind: 'stop' } },
+    ])
+    handle.assertConsumed()
+  })
+
+  it('gives the primary script to the first caller even when a child calls before its parent', async () => {
+    const parentFile = writeSession('session.jsonl', { id: 'rec-parent', createdAt: 1 }, [TEXT_CHUNKS])
+    const childFile = writeSession('session.1.jsonl', { id: 'rec-child', createdAt: 2 }, [textCall('child')])
+    const ctx = await mount()
+    installLlmReplay(ctx, { file: parentFile, childFiles: [childFile] })
+    const parent = ctx.sessions.create(SessionId('live-parent')).id
+    const child = createChild(ctx, 'live-child', parent)
+
+    expect(await drain(ctx.llm.stream(call(child)))).toEqual(TEXT_CHUNKS)
+    expect(await drain(ctx.llm.stream(call(parent)))).toEqual(textCall('child'))
+  })
+
+  it('keeps a re-announced child on its first claim and cursor', async () => {
+    const parentFile = writeSession('session.jsonl', { id: 'rec-parent', createdAt: 1 }, [TEXT_CHUNKS])
+    const firstFile = writeSession('session.1.jsonl', { id: 'rec-first', createdAt: 2 }, [textCall('a1'), textCall('a2')])
+    const secondFile = writeSession('session.2.jsonl', { id: 'rec-second', createdAt: 3 }, [textCall('b')])
+    const ctx = await mount()
+    const handle = installLlmReplay(ctx, { file: parentFile, childFiles: [firstFile, secondFile] })
+    const parent = ctx.sessions.create(SessionId('live-parent')).id
+    expect(await drain(ctx.llm.stream(call(parent)))).toEqual(TEXT_CHUNKS)
+    const a = SessionId('live-a')
+
+    // A resumed Session announces its id again: once before its first call, once after it binds.
+    await (await announceChild(ctx, a, parent)).dispose()
+    const unbound = await announceChild(ctx, a, parent)
+    expect(await drain(ctx.llm.stream(call(a)))).toEqual(textCall('a1'))
+    await unbound.dispose()
+    await announceChild(ctx, a, parent)
+    const b = createChild(ctx, 'live-b', parent)
+
+    expect(await drain(ctx.llm.stream(call(b)))).toEqual(textCall('b'))
+    expect(await drain(ctx.llm.stream(call(a)))).toEqual(textCall('a2'))
+    handle.assertConsumed()
+  })
+
+  it('keeps a session that bound before its announcement out of creation order', async () => {
+    const parentFile = writeSession('session.jsonl', { id: 'rec-parent', createdAt: 1 }, [TEXT_CHUNKS])
+    const firstFile = writeSession('session.1.jsonl', { id: 'rec-first', createdAt: 2 }, [textCall('early')])
+    const secondFile = writeSession('session.2.jsonl', { id: 'rec-second', createdAt: 3 }, [textCall('late')])
+    const ctx = await mount()
+    installLlmReplay(ctx, { file: parentFile, childFiles: [firstFile, secondFile] })
+    const parent = ctx.sessions.create(SessionId('live-parent')).id
+    expect(await drain(ctx.llm.stream(call(parent)))).toEqual(TEXT_CHUNKS)
+    const early = SessionId('live-early')
+    expect(await drain(ctx.llm.stream(call(early)))).toEqual(textCall('early'))
+    createChild(ctx, early, parent)
+    const late = createChild(ctx, 'live-late', parent)
+
+    expect(await drain(ctx.llm.stream(call(late)))).toEqual(textCall('late'))
+  })
+
+  it('keeps a child created before installation out of creation order', async () => {
+    const parentFile = writeSession('session.jsonl', { id: 'rec-parent', createdAt: 1 }, [TEXT_CHUNKS])
+    const firstFile = writeSession('session.1.jsonl', { id: 'rec-first', createdAt: 2 }, [textCall('fresh')])
+    const secondFile = writeSession('session.2.jsonl', { id: 'rec-second', createdAt: 3 }, [textCall('stored')])
+    const ctx = await mount()
+    const handle = installLlmReplay(ctx, { file: parentFile, childFiles: [firstFile, secondFile] })
+    const parent = ctx.sessions.create(SessionId('live-parent')).id
+    expect(await drain(ctx.llm.stream(call(parent)))).toEqual(TEXT_CHUNKS)
+    // A stored child that a resume announces carries its original creation time.
+    const stored = ctx.sessions.create(SessionId('stored-child'), { meta: { parentSession: parent, createdAt: 1 } }).id
+    const fresh = createChild(ctx, 'live-fresh', parent)
+
+    expect(await drain(ctx.llm.stream(call(fresh)))).toEqual(textCall('fresh'))
+    expect(await drain(ctx.llm.stream(call(stored)))).toEqual(textCall('stored'))
+    handle.assertConsumed()
+  })
+
+  it('fails loud when announced children outnumber the recorded child scripts', async () => {
+    const parentFile = writeSession('session.jsonl', { id: 'rec-parent', createdAt: 1 }, [TEXT_CHUNKS])
+    const childFile = writeSession('session.1.jsonl', { id: 'rec-child', createdAt: 2 }, [textCall('only')])
+    const ctx = await mount()
+    installLlmReplay(ctx, { file: parentFile, childFiles: [childFile] })
+    const parent = ctx.sessions.create(SessionId('live-parent')).id
+    expect(await drain(ctx.llm.stream(call(parent)))).toEqual(TEXT_CHUNKS)
+    const a = createChild(ctx, 'live-a', parent)
+    const b = createChild(ctx, 'live-b', parent)
+
+    // B's first call binds the earlier-announced A to the only child script.
+    await expect(drain(ctx.llm.stream(call(b)))).rejects.toThrow(/unrecorded session \(#3\)/)
+    expect(await drain(ctx.llm.stream(call(a)))).toEqual(textCall('only'))
+  })
+
+  it('removes its session/created listener with the handle and with the owning fiber (HMR safety)', async () => {
+    writeFileSync(file, replaySessionJsonl([TEXT_CHUNKS]), 'utf8')
+    const ctx = await mount()
+    const before = createdListeners(ctx)
+    const handle = installLlmReplay(ctx, { file })
+    expect(createdListeners(ctx)).toBe(before + 1)
+    handle.dispose()
+    expect(createdListeners(ctx)).toBe(before)
+
+    const fiber = await ctx.plugin(Object.assign((inner: Context) => {
+      installLlmReplay(inner, { file })
+    }, { inject: ['llm'] }))
+    expect(createdListeners(ctx)).toBe(before + 1)
+    await fiber.dispose()
+    expect(createdListeners(ctx)).toBe(before)
   })
 })
 

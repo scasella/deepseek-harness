@@ -555,6 +555,17 @@ describe('SubagentHeaderLineage', () => {
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
       },
+      // A forked child counts only its own requests, not the inherited prefix.
+      days: {
+        uncachedInputTokens: 40_500,
+        outputTokens: 2_000,
+        cacheReadTokens: 8_000,
+        cacheWriteTokens: 0,
+        fork: {
+          own: { uncachedInputTokens: 500, outputTokens: 1_000, cacheReadTokens: 1_000, cacheWriteTokens: 0 },
+          inherited: { uncachedInputTokens: 40_000, outputTokens: 1_000, cacheReadTokens: 7_000, cacheWriteTokens: 0 },
+        },
+      },
     } as const
     const entries = rows.map(([id, activity]) => ({
       id: id as SessionId,
@@ -608,7 +619,7 @@ describe('SubagentHeaderLineage', () => {
     for (const row of [runningRow, finishedRow, interruptedRow]) {
       expect(row.querySelector('[data-state]')?.parentElement?.className).toContain('rowActivitySlot')
     }
-    expect(screen.getByRole('treeitem', { name: /days.*12天05小时06分07秒/ })).toBeTruthy()
+    expect(screen.getByRole('treeitem', { name: /days.*2\.5K tok · 12天05小时06分07秒/ })).toBeTruthy()
     expect(screen.getByText('12天5小时').getAttribute('title'))
       .toBe('总活跃耗时：12天05小时06分07秒')
     expect(screen.getByText('1天')).toBeTruthy()

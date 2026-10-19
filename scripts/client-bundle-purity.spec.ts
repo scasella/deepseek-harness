@@ -234,6 +234,12 @@ describe('client bundle purity gate', () => {
     expect(() => resolveId('@deepseek-ai/dsh-spill-policy/notice/internal')).toThrow(/purity/)
   })
 
+  it('admits only the pure Loom fork-family derivation, not the Loom Host service', () => {
+    expect(resolveId('@deepseek-ai/dsh-experimental-loom/family')).toBeNull()
+    expect(() => resolveId('@deepseek-ai/dsh-experimental-loom')).toThrow(/purity/)
+    expect(() => resolveId('@deepseek-ai/dsh-experimental-loom/family/internal')).toThrow(/purity/)
+  })
+
   it('lets exact generated Remote contributions inline without admitting their package implementation', () => {
     expect(resolveId('@deepseek-ai/dsh-goal/remote')).toBeNull()
     expect(() => resolveId('@deepseek-ai/dsh-goal')).toThrow(/purity/)

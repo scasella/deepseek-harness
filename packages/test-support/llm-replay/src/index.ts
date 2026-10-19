@@ -1,9 +1,10 @@
 /**
  * Keyless snapshot-test LLM replay. It derives one model-call script per
  * recorded session from v3 embedded Assistant streams and explicitly marked local
- * compaction calls, then binds fresh live sessions to parent/child scripts by
- * first-call order. Throw and hang cases require an explicit override because
- * a session log cannot reconstruct them alone.
+ * compaction calls, then binds fresh live sessions to parent/child scripts:
+ * the primary script by first-call order and announced child sessions by
+ * creation-announcement order. Throw and hang cases require an explicit
+ * override because a session log cannot reconstruct them alone.
  * @module @deepseek-ai/dsh-llm-replay
  */
 
@@ -139,10 +140,10 @@ export interface ReplayConfig {
    */
   overrideFile?: string
   /**
-   * Additional recorded child-session logs (a nested-agent scenario's subagent
-   * sessions). Each is derived independently; the full set is ordered by
-   * `createdAt` so the parent (earliest) binds to the first live session. Empty
-   * for a single-session scenario.
+   * Additional recorded child-session logs (a nested-agent or fork scenario's
+   * child sessions). Each is derived independently and the set is ordered by
+   * `createdAt`, so the k-th announced live child binds to the k-th recorded
+   * child. Empty for a single-session scenario.
    */
   childFiles?: string[]
   /**
@@ -169,7 +170,10 @@ export interface ReplayConfig {
  * into a crisp diagnostic at teardown.
  */
 export interface ReplayHandle {
-  /** Remove the registered adapter or waterfall listener (HMR safety). Freestanding closure — safe to destructure. */
+  /**
+   * Remove the registered adapter or waterfall listener and the
+   * `session/created` listener (HMR safety). Freestanding closure — safe to destructure.
+   */
   dispose(this: void): void
   /**
    * Throw unless every recorded script was bound to a live session and every
@@ -181,7 +185,8 @@ export interface ReplayHandle {
 
 /**
  * Recorded calls plus header facts used to order parent and child scripts.
- * Recorded ids are diagnostic; fresh live ids bind by ordered first use.
+ * Recorded ids are diagnostic; fresh live ids bind by position in that order
+ * (see {@link installLlmReplay}).
  */
 export interface SessionScript {
   /** The recorded session id (diagnostics only — the live id differs). */
@@ -844,8 +849,8 @@ export function loadSessionScripts(config: ReplayConfig): SessionScript[] {
       primary: false,
     })
   }
-  // Synchronous children start in creation order; the id only stabilizes timestamp ties.
-  // XXX(concurrent-subagents): concurrent children need an explicit first-call ordinal.
+  // Live children bind in creation-announcement order; the id only stabilizes timestamp ties.
+  // XXX(concurrent-subagents): children created concurrently need an explicit creation ordinal.
   children.sort((a, b) => a.createdAt - b.createdAt || a.recordedId.localeCompare(b.recordedId))
   return [primary, ...children]
 }
@@ -1017,14 +1022,27 @@ function providerAccepted(entry: ReplayEntry): boolean {
   }
 }
 
+/** One live session's claimed script and its next call index. */
+interface BoundScript {
+  readonly entries: ReplayEntry[]
+  cursor: number
+}
+
 /**
- * Install per-session positional replay. A newly seen live session takes the
- * next ordered recorded script, then advances its own cursor synchronously at
- * invocation time; calls without `sessionId` share one anonymous session. A
- * non-empty provider catalog registers a routed replay adapter; otherwise a
- * catch-all waterfall intercepts requests.
+ * Install per-session positional replay. A live session binds to the next
+ * unclaimed ordered script at its first model call, then advances its own
+ * cursor synchronously at invocation time; calls without `sessionId` share one
+ * anonymous session. Child sessions (a header `parentSession`) created no
+ * earlier than installation keep `session/created` announcement order
+ * instead: a child's first call binds every earlier-announced unbound child
+ * first. A child whose header `createdAt` precedes installation, such as a
+ * stored or seeded Session that a resume announces, binds at its first call.
+ * Children created one at a time therefore bind deterministically even when
+ * their first calls race, and the primary script still goes to the first
+ * caller. A non-empty provider catalog registers a routed replay adapter;
+ * otherwise a catch-all waterfall intercepts requests.
  *
- * @param ctx - the context whose LLM service receives the replay route or waterfall.
+ * @param ctx - the context whose LLM service receives the replay route or waterfall and whose `session/created` events order children.
  * @param config - the resolved fixture paths (env-var defaulting is `apply`'s job).
  * @returns the {@link ReplayHandle} carrying the disposer and the teardown consumption check.
  */
@@ -1034,33 +1052,54 @@ export function installLlmReplay(ctx: Context, config: ReplayConfig): ReplayHand
     throw new Error(`llm-replay: paceMs must be a non-negative integer, got ${String(config.paceMs)}`)
   }
   const scripts = loadSessionScripts(config)
-  // Live-session → its bound script + cursor. A new live session id claims the
-  // next not-yet-bound script (scripts are in bind order); `nextScript` is the
+  // Live-session → its bound script + cursor. Each claim takes the next
+  // not-yet-bound script (scripts are in bind order); `nextScript` is the
   // index of the next unclaimed one.
-  const bound = new Map<string, { entries: ReplayEntry[]; cursor: number }>()
+  const bound = new Map<string, BoundScript>()
   const liveSessionIds: (string | undefined)[] = Array.from({ length: scripts.length })
   let nextScript = 0
+  // Child ids announced while unbound, in announcement order; the first
+  // `boundChildren` of them have bound.
+  const announcedChildren: string[] = []
+  let boundChildren = 0
   const ANON = '\0anon\0' // the key for a call that carries no sessionId
-  const replay = (options: GenerateOptions): AsyncIterable<StreamChunk> => {
-    const key = options.sessionId ?? ANON
-    let state = bound.get(key)
-    let unrecorded = false
-    if (state === undefined) {
-      const script = scripts[nextScript]
-      if (script === undefined) {
-        // More distinct live sessions made calls than the scenario recorded —
-        // an unrecorded subagent appeared. Defer the throw into the returned
-        // generator (the listener must return an AsyncIterable, not throw).
-        unrecorded = true
-        state = { entries: [], cursor: 0 }
-      } else {
-        const scriptIndex = nextScript
-        nextScript++
-        state = { entries: script.entries, cursor: 0 }
-        bound.set(key, state)
-        if (key !== ANON) liveSessionIds[scriptIndex] = key
+  const claim = (key: string): boolean => {
+    const script = scripts[nextScript]
+    if (script === undefined) return false
+    bound.set(key, { entries: script.entries, cursor: 0 })
+    if (key !== ANON) liveSessionIds[nextScript] = key
+    nextScript++
+    return true
+  }
+  const bind = (key: string): BoundScript | undefined => {
+    const position = announcedChildren.indexOf(key)
+    if (position < 0) {
+      claim(key)
+    } else {
+      for (const child of announcedChildren.slice(boundChildren, position + 1)) {
+        if (!claim(child)) break
+        boundChildren++
       }
     }
+    return bound.get(key)
+  }
+  // A child created before installation (a stored or seeded Session that a
+  // resume announces) never joins creation order, so it binds at first call.
+  const installedAt = Date.now()
+  const disposeCreated = ctx.on('session/created', (session) => {
+    const id = session.id
+    const { parentSession, createdAt } = session.header
+    if (parentSession === undefined || createdAt < installedAt || bound.has(id) || announcedChildren.includes(id)) return
+    announcedChildren.push(id)
+  })
+  const replay = (options: GenerateOptions): AsyncIterable<StreamChunk> => {
+    const key = options.sessionId ?? ANON
+    let state = bound.get(key) ?? bind(key)
+    // More distinct live sessions made calls than the scenario recorded — an
+    // unrecorded subagent appeared. Defer the throw into the returned
+    // generator (the listener must return an AsyncIterable, not throw).
+    const unrecorded = state === undefined
+    state ??= { entries: [], cursor: 0 }
     const boundState = state
     const seenSessions = nextScript
     const totalScripts = scripts.length
@@ -1099,11 +1138,14 @@ export function installLlmReplay(ctx: Context, config: ReplayConfig): ReplayHand
     })()
   }
   const providers = config.providers ?? []
-  const dispose = providers.length > 0
+  const disposeRoute = providers.length > 0
     ? ctx.llm.registerAdapter(providers.map(provider => provider.id), new ReplayAdapter(providers, replay))
     : ctx.on('llm/stream', (options: GenerateOptions, _next) => replay(options))
   return {
-    dispose,
+    dispose(): void {
+      disposeRoute()
+      disposeCreated()
+    },
     assertConsumed(): void {
       const problems: string[] = []
       if (nextScript < scripts.length) {

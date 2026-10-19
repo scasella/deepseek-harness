@@ -34,6 +34,7 @@ import {
   inspectApiSession,
   type ApiSessionCreated,
 } from './agent.ts'
+import { latestCompletedPrefixBoundary } from './fork-cut.ts'
 import type {
   SessionAttachmentRequest,
   SessionAttachmentValue,
@@ -71,22 +72,6 @@ type PromptContentCandidate =
  */
 export function hasPromptContent(content: readonly PromptContentCandidate[]): boolean {
   return content.some(part => part.type !== 'text' || part.text.trim().length > 0)
-}
-
-/**
- * Resolve the omitted-`atSeq` default to the latest completed-turn prefix,
- * including standalone events before the next turn begins.
- */
-function latestCompletedPrefixBoundary(events: readonly SessionEvent[]): SessionSeq | undefined {
-  const lastTurnEnd = events.findLast(event => event.type === 'turn/end')
-  if (lastTurnEnd === undefined) return undefined
-  let boundary = lastTurnEnd.seq
-  for (const next of events.slice(boundary + 1)) {
-    if (next.type === 'turn/start' || (next.type === 'user/message' && next.surfaceOp === 'append')
-      || next.type === 'agent/inbox/spliced') break
-    boundary = next.seq
-  }
-  return boundary
 }
 
 /** Implements Session business commands delegated by the Session Controller Remote service. */

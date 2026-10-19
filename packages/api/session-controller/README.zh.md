@@ -62,6 +62,8 @@ Session 对象还承载本地提交回显：`session.beginSubmission` 在调用�
 
 Fork 复制 `atSeq` 所选的精确事件前缀，包含切点事件，允许在开放轮次内截取。子会话在合成的 fork 结果和结束事件之前记录继承标记。省略 `atSeq` 时选择最近已结束轮次及其独立尾部，在下一轮次或排队输入之前停止；不存在的事件会被拒绝。聊天操作选择已结束轮次。
 
+替换第 k 轮提示词的分支在 `completedPrefixBefore(events, k)` 处 fork：在该轮 `turn/start` 之前应用同一条已结束轮次规则；若尚无已结束轮次，则取首个输入之前的最后一个独立事件。第 k − 1 轮运行期间排队的提示词在该轮内拼接，因此子会话仍会把它继承为待处理的 next-turn 输入，并在自己的 `followup` 之前运行它；分支需用 `agent.inbox.remove` 移除 `inheritedNextTurnPrompts(events, cut)` 列出的每条提示词。`forkLineage` 投影通过 follow 基线、列表提示（包括缓存的冷会话行）与 `faceOf('forkLineage')` 提供 header 中的父会话、切点 seq（父子会话相同）、最后一个继承 `turn/end` 的轮次以及 `createdAt`；继承前缀折叠完成后它保持不变。在同一切点 fork 的兄弟会话共享 `parentSession` 与 `cutSeq`。
+
 恢复会话时若已有写句柄占用，返回 `session/writer-held`，并携带会话 id；其他恢复失败仍返回 `gateway/internal`。
 
 `loadThrough(seq)` 在共享目标被覆盖或加载结束前私下保留较早页面，随后把成功取得的页面按顺序作为一次前插发布。历史加载期间实时事件仍然可见。后续页面失败时保留已成功取得的部分；历史窗口被替换时丢弃被替换窗口的暂存页面。普通 `loadOlder()` 直接发布 Host 选取的一页结果。
@@ -124,6 +126,7 @@ GUI 模型选择要求确切提供方／模型对出现在可用目录中；不�
 - 文件引用补全使用共享 Agent lookup，因此可能恢复冷 Session；`skills/list` 目录是不激活 Agent 的 skill 元数据读取路径。
 - 受理/运行的展示记忆只存在于客户端内存，页面重载后即丢失。
 - 该记忆不在 tab 之间共享：同一会话可能在一个 tab 中已转正，在另一个 tab 中仍显示为 `New Session`。
+- 冷会话列表行只有在该投影单元挂载期间写入过投影缓存检查点后才携带 `forkLineage`；在此之前该行只有 `parentSessionId` 而没有切点，`session.projections` 会从日志折叠出该值。
 
 
 <a id="dev-note"></a>

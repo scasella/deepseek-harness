@@ -7,19 +7,22 @@
  * fold counts step boundaries instead of assistant messages: a cancelled step
  * never assembles a message but still counts, and a max-tokens usage-host
  * message (empty content) adds no extra step. Wall-time math runs against the
- * exported definition directly, where event times are controlled.
+ * exported definition directly, where event times are controlled. Forks and
+ * forks of forks keep inherited and own figures apart at each cut, including a
+ * cut inside an open turn whose synthetic closers follow the cut.
  */
 
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { createMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
+import { createMessage, createToolResultMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
-import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
-import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
+import SessionStore, { SESSION_FORMAT_VERSION, SessionId, SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
+import type { Session, SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import type { ProjectionCheckpoint } from '@deepseek-ai/dsh-session-projection'
 import * as SessionStatsPlugin from '@deepseek-ai/dsh-session-stats'
 import { sessionStatsProjectionDefinition } from '@deepseek-ai/dsh-session-stats/src/projection.ts'
-import type { SessionStatsProjection } from '@deepseek-ai/dsh-session-stats/types'
+import type { SessionStatsFigures, SessionStatsProjection } from '@deepseek-ai/dsh-session-stats/types'
 
 async function harness(withStatsPlugin: boolean): Promise<{ ctx: Context; session: Session }> {
   const ctx = new Context()
@@ -50,7 +53,7 @@ function appendEmptyAssistantMessage(session: Session, turn: number, step: numbe
 }
 
 /** The all-zero projection value plus overrides, for exact fold expectations. */
-function totals(overrides: Partial<SessionStatsProjection> = {}): SessionStatsProjection {
+function totals(overrides: Partial<SessionStatsFigures> = {}): SessionStatsFigures {
   return {
     turns: 0, steps: 0, llmMs: 0, toolMs: 0, ttftMs: 0, ttftSteps: 0, decodeMs: 0, decodeTokens: 0,
     ...overrides,
@@ -167,11 +170,23 @@ function attemptAt(
   })
 }
 
+/** Header for direct definition drives; the unit reads only the inherited count. */
+const HEADER: SessionHeader = {
+  version: SESSION_FORMAT_VERSION,
+  id: SessionId('direct'),
+  createdAt: 0,
+  isSeeded: false,
+}
+
+/** The unit's initial state for a Session that is not a fork. */
+const unforkedInit = (): Parameters<typeof sessionStatsProjectionDefinition.apply>[0] =>
+  sessionStatsProjectionDefinition.init(HEADER, SessionLogOffset(0))
+
 /** Fold a synthetic event list through the definition and view the result. */
 function fold(events: readonly SessionEvent[]): SessionStatsProjection {
   const state = events.reduce<Parameters<typeof sessionStatsProjectionDefinition.apply>[0]>(
     (folded, event) => sessionStatsProjectionDefinition.apply(folded, event),
-    sessionStatsProjectionDefinition.init(),
+    unforkedInit(),
   )
   return sessionStatsProjectionDefinition.wire.view(state)
 }
@@ -341,7 +356,7 @@ describe('sessionStats wall-time fold (controlled timestamps)', () => {
     // no open step and folds to the same reference.
     const state = events.reduce<Parameters<typeof sessionStatsProjectionDefinition.apply>[0]>(
       (folded, event) => sessionStatsProjectionDefinition.apply(folded, event),
-      sessionStatsProjectionDefinition.init(),
+      unforkedInit(),
     )
     expect(sessionStatsProjectionDefinition.apply(
       state,
@@ -350,7 +365,7 @@ describe('sessionStats wall-time fold (controlled timestamps)', () => {
   })
 
   it('accrues nothing for unrelated events and clamps negative clock skew to zero', () => {
-    const state = sessionStatsProjectionDefinition.init()
+    const state = unforkedInit()
     const untouched = sessionStatsProjectionDefinition.apply(state, at(1, 'user/message', { content: [] }))
     expect(untouched).toBe(state)
     expect(fold([
@@ -358,5 +373,174 @@ describe('sessionStats wall-time fold (controlled timestamps)', () => {
       messageAt(1_000),
       at(2_100, 'step/end', { turn: 1, step: 1 }),
     ])).toEqual(totals({ turns: 1, steps: 1 }))
+  })
+})
+
+/** Append one completed turn of `steps` closed steps and return its `turn/end` seq. */
+function completedTurn(session: Session, turn: number, steps: number): SessionSeq {
+  session.append('turn/start', { turn })
+  for (let step = 1; step <= steps; step++) closeStep(session, turn, step)
+  return session.append('turn/end', { turn, reason: { kind: 'completed' } }).seq
+}
+
+function stats(ctx: Context, session: Session): SessionStatsProjection | undefined {
+  return ctx.sessionProjections.snapshot(session).values.sessionStats
+}
+
+describe('sessionStats fork split', () => {
+  it('serves no fork split on a Session that is not a fork', async () => {
+    const { ctx, session } = await harness(true)
+    completedTurn(session, 1, 2)
+    expect(stats(ctx, session)).toEqual(totals({ turns: 1, steps: 2 }))
+    expect(stats(ctx, session)).not.toHaveProperty('fork')
+  })
+
+  it('splits a fork and a fork of that fork at their cuts while the totals cover the whole log', async () => {
+    const { ctx, session: root } = await harness(true)
+    const rootCut = completedTurn(root, 1, 3)
+    // Root work after the cut never reaches the child.
+    completedTurn(root, 2, 4)
+
+    const child = ctx.sessions.fork(root, rootCut, SessionId('child'))
+    expect(stats(ctx, child)).toEqual({
+      ...totals({ turns: 1, steps: 3 }),
+      fork: { own: totals(), inherited: totals({ turns: 1, steps: 3 }) },
+    })
+    const childCut = completedTurn(child, 2, 2)
+    expect(stats(ctx, child)).toEqual({
+      ...totals({ turns: 2, steps: 5 }),
+      fork: { own: totals({ turns: 1, steps: 2 }), inherited: totals({ turns: 1, steps: 3 }) },
+    })
+    completedTurn(child, 3, 1)
+
+    // The grandchild inherits everything before its own cut: the root's turn
+    // and the child's own turn, but not the child's later turn.
+    const grandchild = ctx.sessions.fork(child, childCut, SessionId('grandchild'))
+    expect(stats(ctx, grandchild)).toEqual({
+      ...totals({ turns: 2, steps: 5 }),
+      fork: { own: totals(), inherited: totals({ turns: 2, steps: 5 }) },
+    })
+    completedTurn(grandchild, 3, 6)
+    expect(stats(ctx, grandchild)).toEqual({
+      ...totals({ turns: 3, steps: 11 }),
+      fork: { own: totals({ turns: 1, steps: 6 }), inherited: totals({ turns: 2, steps: 5 }) },
+    })
+    expect(stats(ctx, root)).toEqual(totals({ turns: 2, steps: 7 }))
+  })
+
+  it('counts the synthetic closers of a turn the cut interrupted as inherited', async () => {
+    const { ctx, session: root } = await harness(true)
+    root.append('turn/start', { turn: 1 })
+    closeStep(root, 1, 1)
+    root.append('step/start', { turn: 1, step: 2 })
+    const callId = ToolCallId('open-call')
+    root.append('assistant/message', {
+      stream: [],
+      turn: 1,
+      step: 2,
+      message: createMessage({
+        role: 'assistant',
+        content: [{ type: 'tool-call', id: callId, name: 'read', arguments: '{}' }],
+        source: { kind: 'model', provider: 'mock', model: 'mock' },
+      }),
+    }, { surfaceOp: 'append' })
+    const cut = root.append('tool/call', { turn: 1, step: 2, callId, name: 'read', arguments: '{}' }).seq
+
+    // The seed closes the open call, step, and turn after the cut; a brand-new
+    // fork has run nothing of its own.
+    const child = ctx.sessions.fork(root, cut, SessionId('mid-turn'))
+    const inherited = stats(ctx, child)?.fork?.inherited
+    expect(inherited).toMatchObject({ turns: 1, steps: 2 })
+    expect(stats(ctx, child)?.fork?.own).toEqual(totals())
+    // The synthetic result paired with the inherited call on the inherited side.
+    const state = sessionStatsProjectionDefinition.stateSchema.parse(
+      ctx.sessionProjections.checkpoint(child).sessionStats?.val,
+    )
+    expect(state.inherited.pendingCalls).toEqual({})
+    expect(state.inheritedTurn).toBe(1)
+
+    child.append('turn/start', { turn: 2 })
+    child.append('step/start', { turn: 2, step: 1 })
+    const ownCall = ToolCallId('own-call')
+    child.append('tool/call', { turn: 2, step: 1, callId: ownCall, name: 'read', arguments: '{}' })
+    child.append('tool/result', {
+      turn: 2,
+      step: 1,
+      message: createToolResultMessage({ callId: ownCall, content: [], isError: false }),
+    }, { surfaceOp: 'append' })
+    child.append('step/end', { turn: 2, step: 1 })
+    child.append('turn/end', { turn: 2, reason: { kind: 'completed' } })
+    // The child's own turn lands on the own side; the inherited side is unchanged.
+    expect(stats(ctx, child)?.fork?.own).toMatchObject({ turns: 1, steps: 1 })
+    expect(stats(ctx, child)?.fork?.inherited).toEqual(inherited)
+    expect(stats(ctx, child)).toMatchObject({ turns: 2, steps: 3 })
+  })
+
+  it('folds every event as own when the inherited prefix opened no turn', async () => {
+    const { ctx, session: root } = await harness(true)
+    const cut = root.append('session/end-seed', {}).seq
+    const child = ctx.sessions.fork(root, cut, SessionId('turnless'))
+    completedTurn(child, 1, 2)
+    expect(stats(ctx, child)).toEqual({
+      ...totals({ turns: 1, steps: 2 }),
+      fork: { own: totals({ turns: 1, steps: 2 }), inherited: totals() },
+    })
+  })
+
+  it('restores a current fork checkpoint and refolds a stateVersion 1 row from init', async () => {
+    const { ctx, session: root } = await harness(true)
+    const events: SessionEvent[] = [root.append('turn/start', { turn: 1 })]
+    for (const step of [1, 2]) {
+      events.push(root.append('step/start', { turn: 1, step }), root.append('step/end', { turn: 1, step }))
+    }
+    events.push(root.append('turn/end', { turn: 1, reason: { kind: 'completed' } }))
+    const cut = events.at(-1)!.seq
+    events.push(root.append('turn/start', { turn: 2 }))
+    events.push(root.append('step/start', { turn: 2, step: 1 }), root.append('step/end', { turn: 2, step: 1 }))
+    events.push(root.append('turn/end', { turn: 2, reason: { kind: 'completed' } }))
+
+    const child = ctx.sessions.fork(root, cut, SessionId('cached-child'))
+    const live = stats(ctx, child)
+    const checkpoint = JSON.parse(JSON.stringify(
+      ctx.sessionProjections.checkpoint(child),
+    )) as ProjectionCheckpoint
+    expect(checkpoint.sessionStats?.ver).toBe(2)
+    expect(ctx.sessionProjections.viewCheckpoint(checkpoint).sessionStats).toEqual(live)
+
+    // A row folded by the whole-log unit has no own/inherited sides: the
+    // version gate discards it and the key refolds from init over the log.
+    const stale: ProjectionCheckpoint = {
+      sessionStats: {
+        ver: 1,
+        seq: events.at(-1)!.seq,
+        val: { ...totals({ turns: 2, steps: 3 }), lastTurn: 2, openStep: null, pendingCalls: {} },
+      },
+    }
+    expect(ctx.sessionProjections.viewCheckpoint(stale)).not.toHaveProperty('sessionStats')
+    const restored = ctx.sessionProjections.restore(
+      stale, events, SessionLogOffset(0), root.header, SessionLogOffset(cut + 1),
+    )
+    expect(restored.snapshot.values.sessionStats).toEqual({
+      ...totals({ turns: 2, steps: 3 }),
+      fork: { own: totals({ turns: 1, steps: 1 }), inherited: totals({ turns: 1, steps: 2 }) },
+    })
+    expect(restored.checkpoint.sessionStats?.ver).toBe(2)
+  })
+
+  it('keeps the same state reference for events that change neither side', () => {
+    const forked = sessionStatsProjectionDefinition.init(HEADER, SessionLogOffset(3))
+    const turnStart: SessionEvent<'turn/start'> = { type: 'turn/start', seq: SessionSeq(0), time: 0, data: { turn: 1 } }
+    const opened = sessionStatsProjectionDefinition.apply(forked, turnStart)
+    expect(opened).not.toBe(forked)
+    // A repeated inherited turn/start moves neither the fold nor the ceiling.
+    expect(sessionStatsProjectionDefinition.apply(opened, { ...turnStart, seq: SessionSeq(1) })).toBe(opened)
+    // An after-cut turn/end of an inherited turn with no pending call is a no-op closer.
+    const closer: SessionEvent<'turn/end'> = {
+      type: 'turn/end', seq: SessionSeq(4), time: 0, data: { turn: 1, reason: { kind: 'forked' } },
+    }
+    expect(sessionStatsProjectionDefinition.apply(opened, closer)).toBe(opened)
+    // An own turn/start likewise folds to the same reference.
+    expect(sessionStatsProjectionDefinition.apply(opened, { ...turnStart, seq: SessionSeq(5), data: { turn: 2 } }))
+      .toBe(opened)
   })
 })

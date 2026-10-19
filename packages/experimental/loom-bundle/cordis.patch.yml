@@ -1,0 +1,5 @@
+- insert:
+    - id: loom
+      name: '@deepseek-ai/dsh-experimental-loom'
+    - id: ui-loom
+      name: '@deepseek-ai/dsh-experimental-client-ui-loom'

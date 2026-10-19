@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for 2026-10-18-loom-interface.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/proposed/feature/2026-10-18-loom-interface.md
+/agent-note-loom-interface-for-branching-sessions-and-prose:
+  en: 60b680a02e8d89fb
+  zh: 1db6cc6ea42df2e3
+/agent-note-loom-interface-for-branching-sessions-and-prose/problem:
+  en: 42e9bf3883d56e14
+  zh: 4a7296e407f24e08
+/agent-note-loom-interface-for-branching-sessions-and-prose/proposal:
+  en: 986dd8097aac4d3d
+  zh: 2c89af85628555c5
+/agent-note-loom-interface-for-branching-sessions-and-prose/proposal/shape-of-the-work:
+  en: 05392be16cb39cf5
+  zh: 996f77e7cb305b57
+/agent-note-loom-interface-for-branching-sessions-and-prose/proposal/decisions-on-open-questions:
+  en: 451e83e4fc878986
+  zh: 762a02475f16130f
+/agent-note-loom-interface-for-branching-sessions-and-prose/proposal/stages:
+  en: bf3b7ca9da13fc02
+  zh: 5385292d80b969c6
+/agent-note-loom-interface-for-branching-sessions-and-prose/proposal/live-tests:
+  en: cfe3856d092f341a
+  zh: 31a5852d8562275a
+/agent-note-loom-interface-for-branching-sessions-and-prose/alternatives-considered:
+  en: 5d53dff0bb71d95b
+  zh: 3985a6b5f0e0fe7b
+/agent-note-loom-interface-for-branching-sessions-and-prose/acceptance-criteria:
+  en: e9d528e56387d507
+  zh: f947fbc2b897fa70
+/agent-note-loom-interface-for-branching-sessions-and-prose/risks:
+  en: b3b196b692b6f132
+  zh: b1b9d184acb4959d

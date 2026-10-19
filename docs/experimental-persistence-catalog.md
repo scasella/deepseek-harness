@@ -13,5 +13,6 @@ Shared Session event declarations and resolved schemas appear in the [Session pe
 
 | Record | Owner | Purpose | Payload and source |
 |---|---|---|---|
+| `plugin:loom/branch` | `@deepseek-ai/dsh-experimental-loom` | Branch-set membership of the Session that holds it, written before its first prompt and never model-visible. | <code>LoomBranchRecord</code> · [`packages/experimental/loom/src/types.ts`](../packages/experimental/loom/src/types.ts) |
 | `plugin:translator/request` | `@deepseek-ai/dsh-experimental-translator` | Provider-independent translation input, retained before dispatch. | <code>TranslationRequestRecord</code> · [`packages/experimental/translator/src/types.ts`](../packages/experimental/translator/src/types.ts) |
 | `plugin:translator/result` | `@deepseek-ai/dsh-experimental-translator` | Successful translation, retained before it is returned to the consumer. | <code>TranslationResultRecord</code> · [`packages/experimental/translator/src/types.ts`](../packages/experimental/translator/src/types.ts) |

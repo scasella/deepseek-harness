@@ -21,6 +21,7 @@ const SNAPSHOT_DIR = fileURLToPath(new URL('./expected/fork-mid-turn', import.me
 // Borrowed read-only from its recorded-session owner.
 const SEED = fileURLToPath(new URL('../../../snapshots/web/seeded-history/session.v3.jsonl', import.meta.url))
 const UI_EXPECTED = join(SNAPSHOT_DIR, 'ui.expected.md')
+const DOCK_EXPECTED = join(SNAPSHOT_DIR, 'dock.expected.md')
 const MODE = webSnapshotMode()
 const SEED_ID = 'fork-mid-turn-web-e2e'
 const PROMPT = 'FORK_BRANCH_USER Summarize what this branch knows about the reads.'
@@ -145,6 +146,10 @@ describe('web e2e: exact-boundary fork seeds branch closers and continues', () =
     // The child renders the inherited prefix up to the cut.
     await expect.poll(() => page.getByText('Use the read tool twice', { exact: false }).count(), { timeout: 15_000 })
       .toBeGreaterThanOrEqual(1)
+    // Before its own turn, the child's footer counts the cut turn and its forked closers as inherited.
+    const dock = page.locator('[data-composer-dock]')
+    await expect.poll(() => dock.textContent(), { timeout: 15_000 }).toContain('inherited')
+    await compareOrRefreshGolden(DOCK_EXPECTED, await captureStableAria(page, '[data-composer-dock]', scaffold.workspaceCwd), MODE)
 
     const composer = page.locator('[data-composer-input]').last()
     await composer.waitFor({ timeout: 15_000 })
@@ -186,6 +191,6 @@ describe('web e2e: exact-boundary fork seeds branch closers and continues', () =
   it.skipIf(MODE === 'record')('kept the console clean and the fixture inventory closed', async () => {
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-    await assertFixtureInventory(SNAPSHOT_DIR, ['ui.expected.md'])
+    await assertFixtureInventory(SNAPSHOT_DIR, ['dock.expected.md', 'ui.expected.md'])
   })
 })

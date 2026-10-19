@@ -63,14 +63,17 @@ function formatTokens(value: number, t: TranslateNS<typeof NS>): string {
   return t('tokens.million', { value: scaled(value / 1_000_000) })
 }
 
-/** Sum the four disjoint durable provider-usage buckets. */
+/**
+ * Sum the four disjoint durable provider-usage buckets of the child's own
+ * requests. A forked child's inherited prefix is excluded, as `subagentTiming`
+ * also covers only the child's own turns.
+ */
 function tokenTotal(
   usage: SessionProjectionMap['tokenUsage'] | undefined,
 ): number | undefined {
-  return usage === undefined
-    ? undefined
-    : usage.uncachedInputTokens + usage.outputTokens
-      + usage.cacheReadTokens + usage.cacheWriteTokens
+  if (usage === undefined) return undefined
+  const own = usage.fork?.own ?? usage
+  return own.uncachedInputTokens + own.outputTokens + own.cacheReadTokens + own.cacheWriteTokens
 }
 
 /** Exact whole-second active-turn duration for one catalog row. */

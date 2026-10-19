@@ -29,6 +29,7 @@ import { SessionFileReferences } from './file-references.ts'
 import { ApiSessionList } from './list.ts'
 import { buildModelCatalog, hasProviderApiKey } from './catalog.ts'
 import { installModelSelectionProjection } from './model-selection-projection.ts'
+import { installForkLineageProjection } from './fork-lineage-projection.ts'
 import { SessionSkillCatalog } from './skill-catalog.ts'
 import { SessionMediaReferences } from './media-references.ts'
 import { ArchivedSessionGate } from './archived-session-gate.ts'
@@ -70,6 +71,7 @@ import type {
 
 export type * from './types.ts'
 export { ApiSessionNotFound } from './agent.ts'
+export { completedPrefixBefore, inheritedNextTurnPrompts } from './fork-cut.ts'
 export { SessionFileReferences } from './file-references.ts'
 export { SessionSkillCatalog } from './skill-catalog.ts'
 
@@ -159,6 +161,7 @@ export class SessionController extends TypertRemoteService {
     ctx.typert.resources.register('session', { field: 'sessionId' })
     const resolved = SessionController.Config(config)
     installModelSelectionProjection(ctx)
+    installForkLineageProjection(ctx)
     this.agents = new ApiSessionAgentController(ctx)
     this.commands = new SessionCommandController(ctx, this.agents, process.cwd())
     ctx.effect(() => ctx.fileUploads.registerAgentResolver(async (sessionId) => {

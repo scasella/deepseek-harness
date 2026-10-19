@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-llm-replay` lets snapshot tests run the real agent without an API key by replaying model streams from recorded Session JSONL fixtures. Each parent and subagent session receives its recorded script in first-call order, while calls within a session advance independently. A `replay.override.json` sidecar represents pre-chunk failures, cancellation, hangs, and injected retries that durable settlements cannot reconstruct. Use it for deterministic ACP, headless, and Web browser scenarios that need real loop behavior with fixed model output.
+`dsh-llm-replay` lets snapshot tests run the real agent without an API key by replaying model streams from recorded Session JSONL fixtures. The parent script goes to the first live session that calls the model and child scripts go to child sessions in creation order, so concurrently prompted forks and subagents replay deterministically; calls within a session advance independently. A `replay.override.json` sidecar represents pre-chunk failures, cancellation, hangs, and injected retries that durable settlements cannot reconstruct. Use it for deterministic ACP, headless, and Web browser scenarios that need real loop behavior with fixed model output.
 
 ## Table of Contents
 
@@ -71,7 +71,7 @@ The fixture is a projection of one selected persisted Session generation produce
 
 ### Nested agents
 
-A scenario where a parent agent delegates to in-process subagents records one role per Session: parent `session[.vN].jsonl`, then contiguous children `session.<ordinal>[.vN].jsonl`. The snapshot harness supplies only the highest generation of each role. Live Session ids are freshly random each run, so replay binds each live Session to a recorded script by first-call order: the first live Session to make a model call claims the parent script, the next new Session the next child script, and so on, with each Session advancing its own cursor. More distinct live Sessions than recorded scripts fails loud.
+A scenario where a parent agent delegates to in-process subagents or forks child Sessions records one role per Session: parent `session[.vN].jsonl`, then contiguous children `session.<ordinal>[.vN].jsonl`. The snapshot harness supplies only the highest generation of each role, and replay orders the recorded children by `createdAt`. Live Session ids are freshly random each run, so replay binds each live Session to a recorded script by position. The first live Session to make a model call claims the parent script. A child Session, one whose header names a `parentSession` and whose header `createdAt` is not earlier than replay's installation, keeps its `session/created` announcement order: when a child makes its first call, every child announced before it that has not bound yet claims its script first. A child that is announced and then disposed without calling keeps its position, matching the recording, which harvested it with an empty script. Once the parent has bound, the k-th announced child therefore replays the k-th recorded child even when sibling first calls arrive in a different order. Any other new Session, including one replay never saw announced and a stored or seeded child that a resume announces, claims the next unclaimed script at its first call. Each Session advances its own cursor, and a resumed Session that is announced again keeps its script and cursor. More distinct live Sessions than recorded scripts fails loud.
 
 ### Failure modes and overrides
 
@@ -112,7 +112,7 @@ The [committed-corpus test](tests/session-format-corpus.spec.ts) restores each v
 
 ### Binding and stream flow
 
-`installLlmReplay` loads the ordered scripts, then installs either a routed replay adapter (when `providers` is non-empty) or a catch-all `llm/stream` waterfall listener. Each live `stream()` call is keyed by its calling session id: a new session claims the next unclaimed script (parent first, because it streams before it can delegate), and calls without a `sessionId` share one anonymous session bound to the primary script. The returned `ReplayHandle` carries a disposer for HMR safety and `assertConsumed()`, which throws unless every recorded script bound to a live session and every bound cursor drained.
+`installLlmReplay` loads the ordered scripts, then installs either a routed replay adapter (when `providers` is non-empty) or a catch-all `llm/stream` waterfall listener. A `session/created` listener records, in order, the ids of announced children whose header `createdAt` is not earlier than installation; a stored or seeded child that a resume announces is not recorded and binds at its first call. Each live `stream()` call is keyed by its calling session id: a new announced child binds the unbound announced children up to and including itself, each to the next unclaimed script, and any other new session claims the next unclaimed script directly (the parent first, because it streams before it can delegate or fork). Calls without a `sessionId` share one anonymous session. The returned `ReplayHandle` carries a disposer that removes the route and the `session/created` listener for HMR safety, and `assertConsumed()`, which throws unless every recorded script bound to a live session and every bound cursor drained.
 
 </details>
 
@@ -146,7 +146,7 @@ None; this package neither assembles nor sends a provider request.
 
 These limits define when replay cannot stand in for a live model. They are current package constraints, not a task backlog.
 
-- **First-call-order script binding assumes sequential delegation** — a cut that runs sibling subagents concurrently would bind live sessions to recorded scripts non-deterministically; a stronger keying is deferred until such a scenario exists.
+- **Child binding assumes children are created one at a time** — children whose creation overlaps can announce in a different order than their recorded `createdAt` order and then replay each other's scripts, so a scenario creates siblings sequentially and may prompt them concurrently. Sessions without a `parentSession` other than the parent still bind in first-call order.
 - **Only ordinary loop chunks and marked local compaction outputs are derivable** — a pure pre-chunk throw, a cancel/hang, or an unmarked external summarizer call needs the `replay.override.json` sidecar; replacement and patch forms affect only the primary session, and child scripts still derive from their logs.
 
 <a id="dev-note"></a>

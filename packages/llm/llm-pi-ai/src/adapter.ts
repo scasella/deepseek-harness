@@ -34,6 +34,7 @@ import type {
   Models,
   ModelThinkingLevel,
   MutableModels,
+  SamplingParams,
   SimpleStreamOptions,
   ThinkingLevel,
 } from '@earendil-works/pi-ai'
@@ -141,6 +142,52 @@ function profileOptions(
     // The agent recovery layer owns visible attempts; one adapter call is one SDK attempt.
     maxRetries: 0,
   }
+}
+
+/**
+ * Whether a selected Off must be sent to OpenRouter as `reasoning.enabled:
+ * false`. pi-ai's `openrouter` thinking format otherwise sends
+ * `reasoning.effort` with the declared off spelling, or `none` when the model
+ * declares Off without one; a declared spelling stays the profile's choice.
+ */
+function disablesOpenRouterReasoning(model: Model<Api>, reasoning: ModelThinkingLevel | undefined): boolean {
+  const compat = model.compat
+  const format = compat !== undefined && 'thinkingFormat' in compat ? compat.thinkingFormat : undefined
+  return reasoning === 'off' && model.reasoning && format === 'openrouter' && model.thinkingLevelMap?.off === undefined
+}
+
+/**
+ * Resolve the request-body fields pi-ai has no named option for. pi-ai
+ * merges them last into an OpenAI-compatible body, so they replace any field
+ * of the same name it built; only `openai-completions` models receive them.
+ * @param model - the resolved model descriptor.
+ * @param profile - the route profile captured with the request.
+ * @param stop - the request's stop sequences, if any.
+ * @param reasoning - the validated reasoning level, if any.
+ * @returns the fields to merge, or `undefined` when there are none.
+ * @throws LlmError `UNSUPPORTED_OPTION` when `stop` targets another protocol.
+ */
+function resolveSamplingParams(
+  model: Model<Api>,
+  profile: ResolvedPiAiProviderProfile,
+  stop: readonly string[] | undefined,
+  reasoning: ModelThinkingLevel | undefined,
+): SamplingParams | undefined {
+  if (model.api !== 'openai-completions') {
+    if (stop !== undefined) {
+      throw new LlmError(
+        `llm-pi-ai sends stop sequences only to openai-completions models; model "${model.id}" speaks ${model.api}`,
+        'UNSUPPORTED_OPTION',
+      )
+    }
+    return undefined
+  }
+  const params: SamplingParams = {
+    ...stop === undefined ? {} : { stop: [...stop] },
+    ...profile.openRouterRouting === undefined ? {} : { provider: profile.openRouterRouting },
+    ...disablesOpenRouterReasoning(model, reasoning) ? { reasoning: { enabled: false } } : {},
+  }
+  return Object.keys(params).length === 0 ? undefined : params
 }
 
 /**
@@ -357,9 +404,6 @@ export class PiAiAdapter extends LlmAdapter {
     options: GenerateOptions,
     snapshot: PiAiSnapshot,
   ): AsyncIterable<StreamChunk> {
-    if (options.stop !== undefined) {
-      throw new LlmError('llm-pi-ai does not support GenerateOptions.stop', 'UNSUPPORTED_OPTION')
-    }
     // One capture per stream call, taken before any await: the profile, the
     // model descriptor, and the collection all come from the same immutable
     // snapshot, and the credential freezes with them. A configuration change
@@ -381,6 +425,7 @@ export class PiAiAdapter extends LlmAdapter {
       model,
       options.reasoningEffort ?? profile.reasoning,
     )
+    const samplingParams = resolveSamplingParams(model, profile, options.stop, reasoning)
     const apiKey = await this.config.resolveApiKey(options.provider, profile)
 
     const consumer = new AbortController()
@@ -418,6 +463,7 @@ export class PiAiAdapter extends LlmAdapter {
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
+        ...samplingParams === undefined ? {} : { samplingParams },
         signal: watchdog.signal,
         // Profile headers are deployment-owned; attribution names are
         // Harness-owned and therefore win collisions.

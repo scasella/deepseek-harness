@@ -5,60 +5,68 @@
 import { z } from 'zod'
 import { lastAssistantStreamChunk, type TokenUsage } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-llm-retry/types'
-import { SessionSeq } from '@deepseek-ai/dsh-session'
+import { SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
-import type { ContextPressureProjection, TokenUsageProjection } from './projection.ts'
+import type { ContextPressureProjection, TokenUsageBuckets, TokenUsageProjection } from './projection.ts'
 import { foldSurfaceProjection } from './surface-projection.ts'
 
-const zeroBuckets = (): TokenUsageProjection => ({
+const zeroBuckets = (): TokenUsageBuckets => ({
   uncachedInputTokens: 0,
   outputTokens: 0,
   cacheReadTokens: 0,
   cacheWriteTokens: 0,
 })
 
-const bucketsFrom = (usage: TokenUsage): TokenUsageProjection => ({
+const bucketsFrom = (usage: TokenUsage): TokenUsageBuckets => ({
   uncachedInputTokens: usage.inputTokens,
   outputTokens: usage.outputTokens,
   cacheReadTokens: usage.cacheReadTokens ?? 0,
   cacheWriteTokens: usage.cacheWriteTokens ?? 0,
 })
 
-const bucketsEqual = (left: TokenUsageProjection, right: TokenUsageProjection): boolean =>
+const bucketsEqual = (left: TokenUsageBuckets, right: TokenUsageBuckets): boolean =>
   left.uncachedInputTokens === right.uncachedInputTokens
   && left.outputTokens === right.outputTokens
   && left.cacheReadTokens === right.cacheReadTokens
   && left.cacheWriteTokens === right.cacheWriteTokens
 
 const addReplacing = (
-  totals: TokenUsageProjection,
-  previous: TokenUsageProjection | undefined,
-  next: TokenUsageProjection,
-): TokenUsageProjection => ({
+  totals: TokenUsageBuckets,
+  previous: TokenUsageBuckets | undefined,
+  next: TokenUsageBuckets,
+): TokenUsageBuckets => ({
   uncachedInputTokens: totals.uncachedInputTokens - (previous?.uncachedInputTokens ?? 0) + next.uncachedInputTokens,
   outputTokens: totals.outputTokens - (previous?.outputTokens ?? 0) + next.outputTokens,
   cacheReadTokens: totals.cacheReadTokens - (previous?.cacheReadTokens ?? 0) + next.cacheReadTokens,
   cacheWriteTokens: totals.cacheWriteTokens - (previous?.cacheWriteTokens ?? 0) + next.cacheWriteTokens,
 })
 
-const projectionSchema = z.object({
+const bucketsSchema = z.object({
   uncachedInputTokens: z.number().int().nonnegative(),
   outputTokens: z.number().int().nonnegative(),
   cacheReadTokens: z.number().int().nonnegative(),
   cacheWriteTokens: z.number().int().nonnegative(),
 }).strict()
 
+const projectionSchema: z.ZodType<TokenUsageProjection> = bucketsSchema.extend({
+  fork: z.object({ own: bucketsSchema, inherited: bucketsSchema }).strict().optional(),
+}).strict().transform(({ fork, ...total }) => ({ ...total, ...fork === undefined ? {} : { fork } }))
+
 /**
  * The token-usage unit's state schema — the one definition of the state
- * shape; the state type is inferred from it.
+ * fields; the state type is inferred from it. `usage` is the published view,
+ * kept in state so a change to `last` alone republishes nothing.
  */
 const tokenUsageStateSchema = z.object({
-  totals: projectionSchema,
+  inheritedEventCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).transform(SessionLogOffset),
+  usage: projectionSchema,
   last: z.object({
     turn: z.number().int().nonnegative(),
     step: z.number().int().nonnegative(),
-    buckets: projectionSchema,
+    /** Whether the sample came from the fork-inherited prefix. */
+    inherited: z.boolean(),
+    buckets: bucketsSchema,
   }).nullable(),
 }).strict()
 
@@ -73,6 +81,31 @@ const pressureSchema: z.ZodType<ContextPressureProjection> = z.object({
   ...projectedTokens === undefined ? {} : { projectedTokens },
   ...contextWindow === undefined ? {} : { contextWindow },
 }))
+
+/**
+ * Add one sample to the whole-log total and, on a fork, to the side it was reported on.
+ * @param usage - the published value before the sample.
+ * @param inherited - whether the sample precedes the fork cut.
+ * @param previous - the same attempt's earlier sample on the same side, which `next` replaces.
+ * @param next - the sample's buckets.
+ * @returns the next published value.
+ */
+function addSample(
+  usage: TokenUsageProjection,
+  inherited: boolean,
+  previous: TokenUsageBuckets | undefined,
+  next: TokenUsageBuckets,
+): TokenUsageProjection {
+  const { fork, ...total } = usage
+  const nextTotal = addReplacing(total, previous, next)
+  if (fork === undefined) return nextTotal
+  return {
+    ...nextTotal,
+    fork: inherited
+      ? { own: fork.own, inherited: addReplacing(fork.inherited, previous, next) }
+      : { own: addReplacing(fork.own, previous, next), inherited: fork.inherited },
+  }
+}
 
 /** Prompt-side pressure of one request: input plus cache traffic, no output. */
 const pressureFrom = (usage: TokenUsage): number =>
@@ -113,12 +146,23 @@ type ContextPressureState = z.infer<typeof contextPressureStateSchema>
  * Each v2 Assistant settlement contributes the last usage sample embedded in
  * its stream. `llm/retry-started` closes the replacement slot so the retried
  * attempt adds to the total.
+ *
+ * On a fork, a sample is inherited exactly when its event precedes the cut
+ * (`seq < inheritedEventCount`). The seed's synthetic closers after the cut
+ * carry no usage, so the seq alone decides the side. A sample replaces only
+ * an earlier sample from the same side.
  */
 export const tokenUsageProjectionDefinition = {
   key: 'tokenUsage',
-  stateVersion: 2,
+  stateVersion: 3,
   stateSchema: tokenUsageStateSchema,
-  init: () => ({ totals: zeroBuckets(), last: null }),
+  init: (_header, inheritedEventCount) => ({
+    inheritedEventCount,
+    usage: inheritedEventCount > 0
+      ? { ...zeroBuckets(), fork: { own: zeroBuckets(), inherited: zeroBuckets() } }
+      : zeroBuckets(),
+    last: null,
+  }),
   apply: (state, event) => {
     if (event.type === 'llm/retry-started') {
       return state.last?.turn === event.data.turn && state.last.step === event.data.step
@@ -131,22 +175,24 @@ export const tokenUsageProjectionDefinition = {
     const sample = usageOf(event)
     if (sample === undefined) return state
     const { turn, step } = event.data
-    const usage: TokenUsage = sample
+    const inherited = event.seq < state.inheritedEventCount
 
-    const buckets = bucketsFrom(usage)
+    const buckets = bucketsFrom(sample)
     const previous = state.last !== null
       && state.last.turn === turn
       && state.last.step === step
+      && state.last.inherited === inherited
       ? state.last.buckets
       : undefined
     if (previous !== undefined && bucketsEqual(previous, buckets)) return state
 
     return {
-      totals: addReplacing(state.totals, previous, buckets),
-      last: { turn, step, buckets },
+      inheritedEventCount: state.inheritedEventCount,
+      usage: addSample(state.usage, inherited, previous, buckets),
+      last: { turn, step, inherited, buckets },
     }
   },
-  wire: { viewSchema: projectionSchema, view: state => state.totals },
+  wire: { viewSchema: projectionSchema, view: state => state.usage },
 } satisfies ProjectionDefinition<'tokenUsage', TokenUsageState>
 
 /**

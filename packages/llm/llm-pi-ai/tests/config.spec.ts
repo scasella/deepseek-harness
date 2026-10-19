@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assertServiceable, Config, resolveProfiles, type Options } from '../src/config.ts'
+import { assertServiceable, Config, resolveProfiles, type Options, type PiAiOpenRouterProvider, type ResolvedPiAiProviderProfile } from '../src/config.ts'
 
 /** Validate one hand-declared route, with the caller's fields layered onto it. */
 const routeWith = (profile: Record<string, unknown>): (() => unknown) =>
@@ -105,5 +105,49 @@ describe('request image policy bounds', () => {
     expect(() => {
       assertServiceable(programmatic)
     }).toThrow(message)
+  })
+})
+
+describe('OpenRouter provider routing', () => {
+  type Materialized = { providers: Record<string, { openRouterProvider?: unknown }> }
+
+  it('keeps an omitted preference absent and validates a present one at the write', () => {
+    expect((routeWith({})() as Materialized).providers['acme-gateway']?.openRouterProvider).toBeUndefined()
+    expect(routeWith({ openRouterProvider: { order: ['deepseek'], allowFallbacks: false } })).not.toThrow()
+    expect(routeWith({ openRouterProvider: {} })).toThrow(/order/)
+    expect(routeWith({ openRouterProvider: { order: [] } })).toThrow(/order/)
+    expect(routeWith({ openRouterProvider: { order: [''] } })).toThrow(/order/)
+    expect(routeWith({ openRouterProvider: { order: ['deepseek'], allowFallbacks: 'no' } })).toThrow(/allowFallbacks/)
+  })
+
+  it('resolves the preference into the provider request field', () => {
+    const resolve = (openRouterProvider: PiAiOpenRouterProvider): ResolvedPiAiProviderProfile | undefined => resolveProfiles({
+      'acme-gateway': { api: 'openai-completions', baseURL: 'https://acme.test', models: [{ id: 'm' }], openRouterProvider },
+    }).get('acme-gateway')
+    expect(resolve({ order: ['deepseek'], allowFallbacks: false })).toMatchObject({
+      openRouterRouting: { order: ['deepseek'], allow_fallbacks: false },
+    })
+    const ordered = resolve({ order: ['deepseek', 'novita'] })
+    expect(ordered?.openRouterRouting).toEqual({ order: ['deepseek', 'novita'] })
+    expect(ordered).not.toHaveProperty('openRouterProvider')
+    // Programmatic profiles skip the schema, so resolution repeats its bounds.
+    expect(() => resolve({ order: [] })).toThrow(/openRouterProvider\.order must name at least one provider slug/)
+    expect(() => resolve({ order: ['deepseek', ''] })).toThrow(/no empty one/)
+  })
+
+  it('refuses a preference no model on the route could send, and retains it as a stored diagnostic', () => {
+    const providers = {
+      'acme-messages': {
+        api: 'anthropic-messages',
+        baseURL: 'https://acme.test',
+        models: [{ id: 'm' }],
+        openRouterProvider: { order: ['deepseek'] },
+      },
+    }
+    const message = /sets openRouterProvider, but no model on the route speaks openai-completions/
+    expect(() => resolveProfiles(providers)).toThrow(message)
+    const stored = resolveProfiles(providers, 'deferred').get('acme-messages')
+    expect(stored?.catalogError).toMatch(message)
+    expect(stored?.piProvider).toBeUndefined()
   })
 })

@@ -55,3 +55,8 @@ button.pill[aria-expanded='true'] {
   color: var(--dsw-alias-separator-primary);
   margin: 0 6px;
 }
+
+/* A fork's inherited reading recedes behind its own reading. */
+.inherited {
+  color: var(--dsw-alias-label-caption);
+}

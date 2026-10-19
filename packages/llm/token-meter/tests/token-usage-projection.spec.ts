@@ -2,11 +2,17 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { createMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
-import SessionStore from '@deepseek-ai/dsh-session'
-import type { Session, SessionSeq } from '@deepseek-ai/dsh-session'
+import SessionStore, { SESSION_FORMAT_VERSION, SessionId, SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
+import type { Session, SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import type { ProjectionCheckpoint } from '@deepseek-ai/dsh-session-projection'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
-import type { ContextPressureProjection, TokenUsageProjection } from '@deepseek-ai/dsh-token-meter/client'
+import { tokenUsageProjectionDefinition } from '@deepseek-ai/dsh-token-meter/src/usage-projection.ts'
+import type {
+  ContextPressureProjection,
+  TokenUsageBuckets,
+  TokenUsageProjection,
+} from '@deepseek-ai/dsh-token-meter/client'
 import { RetryId } from '@deepseek-ai/dsh-llm-retry'
 import type { ContextFormed } from '@deepseek-ai/dsh-llm'
 import { CompactionId } from '@deepseek-ai/dsh-compaction'
@@ -17,7 +23,7 @@ declare module '@deepseek-ai/dsh-llm' {
   }
 }
 
-const ZERO: TokenUsageProjection = {
+const ZERO: TokenUsageBuckets = {
   uncachedInputTokens: 0,
   outputTokens: 0,
   cacheReadTokens: 0,
@@ -58,8 +64,8 @@ function finalUsage(
   usage: TokenUsage,
   turn: number,
   step: number,
-): void {
-  session.append('assistant/message', {
+): SessionEvent[] {
+  const message = session.append('assistant/message', {
     stream: [{ type: 'chunk', time: 0, chunk: { type: 'usage', usage } }],
     turn,
     step,
@@ -70,7 +76,7 @@ function finalUsage(
     }),
     usage,
   }, { surfaceOp: 'append' })
-  session.append('step/end', { turn, step })
+  return [message, session.append('step/end', { turn, step })]
 }
 
 const projected = (ctx: Context, session: Session): TokenUsageProjection => {
@@ -312,6 +318,142 @@ describe('tokenUsage session projection', () => {
       cacheReadTokens: 5,
       cacheWriteTokens: 0,
     })
+  })
+})
+
+/** Sum bucket sets field by field. */
+function sum(...parts: readonly TokenUsageBuckets[]): TokenUsageBuckets {
+  return parts.reduce((total, part) => ({
+    uncachedInputTokens: total.uncachedInputTokens + part.uncachedInputTokens,
+    outputTokens: total.outputTokens + part.outputTokens,
+    cacheReadTokens: total.cacheReadTokens + part.cacheReadTokens,
+    cacheWriteTokens: total.cacheWriteTokens + part.cacheWriteTokens,
+  }), ZERO)
+}
+
+/** Buckets of one sample without reasoning or optional cache fields. */
+const buckets = (inputTokens: number, outputTokens: number, cacheReadTokens = 0): TokenUsageBuckets => ({
+  uncachedInputTokens: inputTokens,
+  outputTokens,
+  cacheReadTokens,
+  cacheWriteTokens: 0,
+})
+
+/** Append one completed single-step turn reporting `usage`; returns its events in order. */
+function usageTurn(session: Session, turn: number, usage: TokenUsage): SessionEvent[] {
+  return [
+    session.append('turn/start', { turn }),
+    session.append('step/start', { turn, step: 1 }),
+    ...finalUsage(session, usage, turn, 1),
+    session.append('turn/end', { turn, reason: { kind: 'completed' } }),
+  ]
+}
+
+describe('tokenUsage fork split', () => {
+  it('splits a fork and a fork of that fork at their cuts while the totals cover the whole log', async () => {
+    const { ctx, session: root } = await harness()
+    const rootCut = usageTurn(root, 1, { inputTokens: 100, outputTokens: 10, cacheReadTokens: 900 }).at(-1)!.seq
+    // Root usage after the cut never reaches the child.
+    usageTurn(root, 2, { inputTokens: 5_000, outputTokens: 500 })
+    const first = buckets(100, 10, 900)
+
+    const child = ctx.sessions.fork(root, rootCut, SessionId('usage-child'))
+    expect(projected(ctx, child)).toEqual({ ...first, fork: { own: ZERO, inherited: first } })
+    const childCut = usageTurn(child, 2, { inputTokens: 20, outputTokens: 4, cacheReadTokens: 980 }).at(-1)!.seq
+    const second = buckets(20, 4, 980)
+    expect(projected(ctx, child)).toEqual({ ...sum(first, second), fork: { own: second, inherited: first } })
+    usageTurn(child, 3, { inputTokens: 7_000, outputTokens: 700 })
+
+    // The grandchild inherits the root's turn and the child's own turn before its cut.
+    const grandchild = ctx.sessions.fork(child, childCut, SessionId('usage-grandchild'))
+    expect(projected(ctx, grandchild)).toEqual({
+      ...sum(first, second),
+      fork: { own: ZERO, inherited: sum(first, second) },
+    })
+    usageTurn(grandchild, 3, { inputTokens: 30, outputTokens: 6, cacheReadTokens: 1_970 })
+    const third = buckets(30, 6, 1_970)
+    expect(projected(ctx, grandchild)).toEqual({
+      ...sum(first, second, third),
+      fork: { own: third, inherited: sum(first, second) },
+    })
+    // A Session that is not a fork carries no split.
+    expect(projected(ctx, root)).toEqual(sum(first, buckets(5_000, 500)))
+  })
+
+  it('keeps an inherited streaming sample when the cut precedes its final message', async () => {
+    const { ctx, session: root } = await harness()
+    root.append('turn/start', { turn: 1 })
+    startStep(root, 1, 1)
+    const cut = usageChunk(root, { inputTokens: 40, outputTokens: 2 }, 1, 1)
+    finalUsage(root, { inputTokens: 40, outputTokens: 9 }, 1, 1)
+
+    // The seed's synthetic step/end and turn/end follow the cut and carry no usage.
+    const child = ctx.sessions.fork(root, cut, SessionId('usage-mid-step'))
+    expect(projected(ctx, child)).toEqual({
+      ...buckets(40, 2),
+      fork: { own: ZERO, inherited: buckets(40, 2) },
+    })
+    usageTurn(child, 2, { inputTokens: 8, outputTokens: 1 })
+    expect(projected(ctx, child)).toEqual({
+      ...buckets(48, 3),
+      fork: { own: buckets(8, 1), inherited: buckets(40, 2) },
+    })
+  })
+
+  it('never lets an own sample replace an inherited sample of the same attempt', () => {
+    const header: SessionHeader = { version: SESSION_FORMAT_VERSION, id: SessionId('direct'), createdAt: 0, isSeeded: true }
+    const sample = (seq: number, usage: TokenUsage): SessionEvent<'assistant/attempt'> => ({
+      type: 'assistant/attempt',
+      seq: SessionSeq(seq),
+      time: 0,
+      data: { turn: 1, step: 1, stream: [{ type: 'chunk', time: 0, chunk: { type: 'usage', usage } }] },
+    })
+    const definition = tokenUsageProjectionDefinition
+    const inherited = definition.apply(definition.init(header, SessionLogOffset(1)), sample(0, { inputTokens: 10, outputTokens: 1 }))
+    const both = definition.apply(inherited, sample(1, { inputTokens: 12, outputTokens: 3 }))
+    expect(definition.wire.view(both)).toEqual({
+      ...buckets(22, 4),
+      fork: { own: buckets(12, 3), inherited: buckets(10, 1) },
+    })
+    // A later own sample of the same attempt replaces only the own sample.
+    const replaced = definition.apply(both, sample(2, { inputTokens: 13, outputTokens: 5 }))
+    expect(definition.wire.view(replaced)).toEqual({
+      ...buckets(23, 6),
+      fork: { own: buckets(13, 5), inherited: buckets(10, 1) },
+    })
+  })
+
+  it('restores a current fork checkpoint and refolds a stateVersion 2 row from init', async () => {
+    const { ctx, session: root } = await harness()
+    const events = usageTurn(root, 1, { inputTokens: 100, outputTokens: 10 })
+    const cut = events.at(-1)!.seq
+    events.push(...usageTurn(root, 2, { inputTokens: 30, outputTokens: 3 }))
+
+    const child = ctx.sessions.fork(root, cut, SessionId('usage-cached-child'))
+    const checkpoint = JSON.parse(JSON.stringify(
+      ctx.sessionProjections.checkpoint(child),
+    )) as ProjectionCheckpoint
+    expect(checkpoint.tokenUsage?.ver).toBe(3)
+    expect(ctx.sessionProjections.viewCheckpoint(checkpoint).tokenUsage).toEqual(projected(ctx, child))
+
+    // A whole-log row has no own/inherited sides: the version gate discards it
+    // and the key refolds from init over the log.
+    const stale: ProjectionCheckpoint = {
+      tokenUsage: {
+        ver: 2,
+        seq: events.at(-1)!.seq,
+        val: { totals: buckets(130, 13), last: { turn: 2, step: 1, buckets: buckets(30, 3) } },
+      },
+    }
+    expect(ctx.sessionProjections.viewCheckpoint(stale)).not.toHaveProperty('tokenUsage')
+    const restored = ctx.sessionProjections.restore(
+      stale, events, SessionLogOffset(0), root.header, SessionLogOffset(cut + 1),
+    )
+    expect(restored.snapshot.values.tokenUsage).toEqual({
+      ...buckets(130, 13),
+      fork: { own: buckets(30, 3), inherited: buckets(100, 10) },
+    })
+    expect(restored.checkpoint.tokenUsage?.ver).toBe(3)
   })
 })
 

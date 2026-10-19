@@ -1,0 +1,17 @@
+<svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M13 18H17M17 18C20 18 20 10 23.5 10M17 18H23.5M17 18C20 18 20 26 23.5 26" stroke="url(#loom-threads)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+  <rect x="7" y="14.5" width="7" height="7" rx="2" fill="#5269E1" />
+  <rect x="23" y="7" width="6" height="6" rx="2" fill="#86B8F5" />
+  <rect x="23" y="15" width="6" height="6" rx="2" fill="url(#loom-kept)" />
+  <rect x="23" y="23" width="6" height="6" rx="2" fill="#86B8F5" />
+  <defs>
+    <linearGradient id="loom-threads" x1="13" y1="18" x2="23.5" y2="18" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5269E1" />
+      <stop offset="1" stop-color="#86B8F5" />
+    </linearGradient>
+    <linearGradient id="loom-kept" x1="23" y1="15" x2="29" y2="21" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#51CFDB" />
+      <stop offset="1" stop-color="#108792" />
+    </linearGradient>
+  </defs>
+</svg>

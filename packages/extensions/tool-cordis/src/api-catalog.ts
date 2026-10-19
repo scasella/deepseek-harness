@@ -1528,6 +1528,20 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'loom',
+    summary: 'Loom Host service.',
+    description: 'Loom Host service. It registers the `loomBranch` projection unit and the telemetry redaction rule for `plugin:loom/*` records for its own lifetime, and exposes the `loom` Remote namespace.',
+    methods: [
+      {
+        signature: '@Remote async family(request: LoomFamilyRequest, signal: AbortSignal): Promise<LoomFamily>',
+        description: 'Read the fork family of one visible Session from the current Session list without activating any Agent. The Gateway authorizes the addressed Session through the `sessionId` field the Session Controller registers as the `session` resource, and the result keeps only Sessions the caller may list. It serves callers without a Session list of their own; the Loom browser plugin derives families from its client Session list instead.',
+        parameters: [{ name: 'request', description: 'any member of the family.' }, { name: 'signal', description: 'cancellation for the list read.' }],
+        returns: 'the visible family rooted at the highest visible fork ancestor.',
+        throws: ['RemoteError `session/not-found` when the caller cannot list the Session.'],
+      },
+    ],
+  },
+  {
     key: 'lsp',
     summary: 'The LSP capability seam (`ctx.lsp`).',
     description: 'The LSP capability seam (`ctx.lsp`). Owns provider registration/selection and normalized query execution; exposes exactly the four operations and no protocol escape hatch.',
@@ -5984,6 +5998,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'LogExporterOptions',
     declaration: 'export type LogExporterOptions = Omit<OTLPExporterNodeConfigBase, \'selfObsMeterProvider\'> & {\n    url: string;\n};',
+  },
+  {
+    name: 'LoomFamily',
+    declaration: 'export interface LoomFamily {\n    readonly rootId: LoomNodeId;\n    readonly focusId: LoomNodeId;\n    readonly nodes: readonly LoomFamilyNode[];\n}',
+  },
+  {
+    name: 'LoomFamilyNode',
+    declaration: 'export interface LoomFamilyNode {\n    readonly id: LoomNodeId;\n    readonly sessionId: SessionId;\n    readonly parentId?: LoomNodeId;\n    readonly depth: number;\n    readonly createdAt?: number;\n    readonly updatedAt: number;\n    readonly running: boolean;\n    readonly blank: boolean;\n}',
+  },
+  {
+    name: 'LoomFamilyRequest',
+    declaration: 'export interface LoomFamilyRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
+    name: 'LoomNodeId',
+    declaration: 'export type LoomNodeId = Branded<\'LoomNodeId\'>;',
   },
   {
     name: 'LspHover',

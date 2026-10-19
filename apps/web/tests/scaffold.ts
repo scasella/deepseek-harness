@@ -71,10 +71,14 @@ import {
 } from '@deepseek-ai/dsh-llm-replay'
 import type { SessionFormatEvent } from '@deepseek-ai/dsh-session-format'
 import { sessionFormatCatalog } from '@deepseek-ai/dsh-session-format-catalog'
+import { currentSessionMessageProjections } from '@deepseek-ai/dsh-session-format-catalog/message-projections'
 import {
   SESSION_FORMAT_VERSION,
+  Session,
   SessionId,
-  type Session,
+  SessionLogOffset,
+  SessionSeq,
+  buildForkSeed,
   type SessionEvent,
   type SessionHeader,
 } from '@deepseek-ai/dsh-session'
@@ -1312,18 +1316,21 @@ export function fixtureIdentity(
   return `${hex.slice(0, 8).join('')}-${hex.slice(8, 12).join('')}-${hex.slice(12, 16).join('')}-${hex.slice(16, 20).join('')}-${hex.slice(20).join('')}`
 }
 
+/** Scaffold fields the seed helpers read; a booted {@link WebScaffold} satisfies it. */
+export type SeedTarget = Pick<WebScaffold, 'workspaceCwd' | 'harnessHome' | 'persistenceRoot'>
+
 /**
  * Realize a recorded seed fixture against one scaffold: substitute the
  * `{{sessionId}}`/`{{cwd}}`/`{{harnessHome}}` placeholders and rewrite the
  * recorded cwd to the scaffold's workspace. Idempotent, so a caller may realize early (e.g. to
  * price content exactly as the host will fold it) and still pass the result
  * through {@link seedSession}.
- * @param scaffold - the booted scaffold whose workspace the seed targets.
+ * @param scaffold - the scaffold whose workspace the seed targets.
  * @param fixtureText - the committed seed fixture text.
  * @param id - the session id the seed is realized for.
  * @returns the realized fixture text.
  */
-export function realizeSeedFixture(scaffold: WebScaffold, fixtureText: string, id: string): string {
+export function realizeSeedFixture(scaffold: SeedTarget, fixtureText: string, id: string): string {
   const firstLine = fixtureText.split(/\r?\n/).find(line => line.trim().length > 0)
   const fixtureCwd = firstLine === undefined
     ? undefined
@@ -1453,7 +1460,7 @@ function seedStreamEnd(
  * @returns the seeded id.
  */
 export async function seedSession(
-  scaffold: WebScaffold,
+  scaffold: SeedTarget,
   fixtureText: string,
   id: string,
   agentPreset?: string,
@@ -1481,8 +1488,19 @@ export async function seedSession(
     throw new Error('seed fixture requires a numeric createdAt header')
   }
   const timeAnchor = fixtureCreatedAt === 0 ? createdAt : fixtureCreatedAt
-  let nextTime = timeAnchor
-  const materializedEvents: SessionEvent[] = events.map((event) => {
+  await withSeedPersistence(scaffold, persistence =>
+    persistSeedSession(persistence, meta, materializeSeedTimes(events, timeAnchor), SessionLogOffset(0)))
+  return meta.id
+}
+
+/**
+ * Re-time seed events from one anchor. Each event follows its predecessor by
+ * one millisecond; an embedded Assistant stream keeps its intra-stream gaps
+ * and its event takes the stream's end time.
+ */
+function materializeSeedTimes(events: readonly SessionEvent[], anchor: number): SessionEvent[] {
+  let nextTime = anchor
+  return events.map((event) => {
     const time = nextTime
     if (event.type === 'assistant/message') {
       const stream = rebaseSeedStream(event.data.stream, time)
@@ -1507,27 +1525,175 @@ export async function seedSession(
     nextTime = time + 1
     return { ...event, time }
   })
-  await persistSeedSession(scaffold, meta, materializedEvents)
-  return meta.id
 }
 
-/** Materialize one detached Session fixture through the shipped JSONL provider. */
-async function persistSeedSession(
-  scaffold: WebScaffold,
-  meta: SessionHeader,
-  events: readonly SessionEvent[],
-): Promise<void> {
+/** Options for {@link seedFork}. */
+export interface SeedForkOptions {
+  /** Inclusive parent event seq the child inherits through, as the `session.fork` RPC takes it. */
+  readonly atSeq: number
+  /**
+   * Child header creation time and the anchor for re-timing its own events.
+   * Defaults to one millisecond after the cut event, and may not precede it.
+   */
+  readonly createdAt?: number
+  /**
+   * Agent preset recorded in the child header; defaults to the parent's.
+   * Required when the parent header records none, because the RPC records
+   * the parent's resolved preset, which a stored header cannot supply.
+   */
+  readonly agentPreset?: string
+  /**
+   * Appends the child's own events after its inherited seed through the
+   * Session API. When it appends any, the last must be a `turn/end`.
+   */
+  readonly continueWith?: (child: Session) => void
+}
+
+/**
+ * Seed a fork child of a stored Session with the log the `session.fork` RPC
+ * stores through its cut marker: the parent's events through `atSeq`
+ * unchanged, the child's `session/end-seed { inherited: true }` marker,
+ * forked closers when the cut is inside a turn, then the optional own events.
+ * The header copies the parent's cwd and records `parentSession` with
+ * `isSeeded: true`. Events the product appends after a fork, such as the
+ * Branch action's numbered title, belong in `continueWith`. An RPC child
+ * receives the Host's permission activation events (`permission/preset`,
+ * `sandbox/mode`, `approval/policy`) right after its marker when it is
+ * created; a seeded child receives them when it is first opened, after its
+ * own events and the resume's `session/end-seed` marker, so each own event's
+ * seq is lower than in an RPC fork. Replay
+ * orders by creation only children whose `createdAt` is not earlier than its
+ * installation; a seeded child with an earlier `createdAt` binds a replay
+ * script at its first model call. The parent must be stored and
+ * quiescent: seeded, or settled and closed by the host. A cut after a
+ * next-turn `agent/inbox/spliced` insert hands the child a queued prompt
+ * that runs on first open and needs a model reply; a cut at a `turn/end`
+ * never does.
+ * @param scaffold - the scaffold whose persistence holds the parent.
+ * @param parentId - the stored parent Session.
+ * @param id - the child Session id.
+ * @param options - cut, header overrides, and own events.
+ * @returns the child id.
+ */
+export async function seedFork(
+  scaffold: SeedTarget,
+  parentId: SessionId,
+  id: string,
+  options: SeedForkOptions,
+): Promise<SessionId> {
+  await withSeedPersistence(scaffold, async (persistence) => {
+    const handle = await persistence.open(parentId, 'read')
+    const parentHeader = handle.header
+    let parentEvents: readonly SessionEvent[]
+    try {
+      parentEvents = (await handle.read()).events
+    } finally {
+      await handle.close()
+    }
+    const atSeq = SessionSeq(options.atSeq)
+    const cut = parentEvents[atSeq]
+    if (cut?.seq !== atSeq) {
+      throw new Error(`event ${String(atSeq)} does not exist in session "${parentId}" (last seq: ${String(parentEvents.at(-1)?.seq ?? 'none')})`)
+    }
+    const createdAt = options.createdAt ?? cut.time + 1
+    if (createdAt < cut.time) {
+      throw new Error(`fork createdAt ${String(createdAt)} precedes its cut event time ${String(cut.time)}`)
+    }
+    const agentPreset = options.agentPreset ?? parentHeader.agentPreset
+    if (agentPreset === undefined) {
+      throw new Error(`session "${parentId}" records no agent preset; pass the preset session.fork would resolve as agentPreset`)
+    }
+    const meta: SessionHeader = {
+      version: SESSION_FORMAT_VERSION,
+      id: SessionId(id),
+      createdAt,
+      ...parentHeader.cwd === undefined ? {} : { cwd: parentHeader.cwd },
+      parentSession: parentHeader.id,
+      isSeeded: true,
+      delegationDepth: 0,
+      agentPreset,
+    }
+    const inheritedEventCount = SessionLogOffset(atSeq + 1)
+    // The Session constructor enforces the seeded-header invariants: the
+    // inherited marker sits at inheritedEventCount and is the last tagged one.
+    const child = Session.create(
+      meta.id, buildForkSeed(parentEvents, atSeq), meta, inheritedEventCount, currentSessionMessageProjections,
+    )
+    options.continueWith?.(child)
+    const events = child.snapshotEvents()
+    const own = events.slice(child.firstLiveSeq)
+    const last = own.at(-1)
+    if (last !== undefined && last.type !== 'turn/end') {
+      throw new Error(`fork continuation must end in turn/end, got ${last.type}`)
+    }
+    await persistSeedSession(persistence, meta, [
+      ...events.slice(0, child.firstLiveSeq),
+      ...materializeSeedTimes(own, createdAt),
+    ], inheritedEventCount)
+  })
+  return SessionId(id)
+}
+
+/** One child in {@link seedForkFamily}. */
+export interface SeedForkFamilyMember extends SeedForkOptions {
+  /** Child Session id. */
+  readonly id: string
+  /** Parent Session id: the family root when omitted, otherwise an earlier member. */
+  readonly parent?: string
+}
+
+/**
+ * Seed a family root from a fixture through {@link seedSession}, then each
+ * member through {@link seedFork} in order, so a member may fork an earlier one.
+ * @param scaffold - the scaffold whose persistence receives the family.
+ * @param root - root fixture text, id, and the {@link seedSession} metadata.
+ * @param members - forks in creation order.
+ * @returns the root id and the member ids in order.
+ */
+export async function seedForkFamily(
+  scaffold: SeedTarget,
+  root: { readonly fixtureText: string; readonly id: string; readonly agentPreset?: string; readonly createdAt?: number },
+  members: readonly SeedForkFamilyMember[],
+): Promise<{ readonly root: SessionId; readonly forks: readonly SessionId[] }> {
+  const rootId = await seedSession(
+    scaffold, root.fixtureText, root.id, root.agentPreset,
+    root.createdAt === undefined ? {} : { createdAt: root.createdAt },
+  )
+  const forks: SessionId[] = []
+  for (const member of members) {
+    forks.push(await seedFork(scaffold, member.parent === undefined ? rootId : SessionId(member.parent), member.id, member))
+  }
+  return { root: rootId, forks }
+}
+
+/**
+ * Run one seeding operation against a detached JSONL provider on the
+ * scaffold's root, with the plugin's default compression so the host's
+ * directory-scan list() sees one consistent encoding.
+ */
+async function withSeedPersistence<T>(
+  scaffold: SeedTarget,
+  use: (persistence: Context['sessionPersistence']) => Promise<T>,
+): Promise<T> {
   const seeder = new Context()
   try {
-    // Same root as the booted tree with the plugin's own default compression,
-    // so the host's directory-scan list() sees one consistent encoding.
     await seeder.plugin(JsonlSessionPersistence, { root: scaffold.persistenceRoot })
-    const handle = await seeder.sessionPersistence.create(meta)
-    await handle.append(events)
-    await handle.close()
+    return await use(seeder.sessionPersistence)
   } finally {
     await seeder.fiber.dispose()
   }
+}
+
+/** Materialize one detached Session log with its exact inherited prefix length. */
+async function persistSeedSession(
+  persistence: Context['sessionPersistence'],
+  meta: SessionHeader,
+  events: readonly SessionEvent[],
+  inheritedEventCount: SessionLogOffset,
+): Promise<void> {
+  const handle = await persistence.create(meta, { inheritedEventCount })
+  await handle.append(events)
+  await handle.close()
 }
 
 /**

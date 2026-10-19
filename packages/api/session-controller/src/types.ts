@@ -7,7 +7,7 @@ import type {
 import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { LlmAttemptId, MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { TextBlock } from '@deepseek-ai/dsh-llm'
-import type { SessionId, SessionSeqCursor } from '@deepseek-ai/dsh-session/types'
+import type { SessionId, SessionSeq, SessionSeqCursor } from '@deepseek-ai/dsh-session/types'
 import type { SessionProjectionMap } from '@deepseek-ai/dsh-session-projection/types'
 import type { Principal } from '@deepseek-ai/dsh-typert-protocol'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
@@ -642,3 +642,30 @@ export type SessionProjectionValue = JsonValue
 
 /** Application metadata returned by the serving desktop for one file. */
 export type SessionWorkspacePathApplication = NativeFileApplication
+
+/**
+ * Lineage of one Session, constant once its inherited prefix is folded. A fork
+ * child keeps its parent's event seqs, so siblings forked at one parent event
+ * share `parentSession` and `cutSeq`.
+ */
+export interface ForkLineageProjection {
+  /** Parent recorded in the Session header. */
+  readonly parentSession?: SessionId
+  /** Seq of the last inherited event, equal in parent and child; absent when nothing was inherited. */
+  readonly cutSeq?: SessionSeq
+  /** Turn of the last inherited `turn/end`, in the parent's numbering; absent when the prefix ends no turn. */
+  readonly cutTurn?: number
+  /** Header creation time in Unix epoch milliseconds. */
+  readonly createdAt: number
+}
+
+declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    /** Header lineage and the fork cut folded from the inherited prefix. */
+    forkLineage: ForkLineageProjection
+  }
+  interface SessionProjectionMap {
+    /** Header parent and, for a fork child, its cut in the parent's event numbering. */
+    forkLineage: ForkLineageProjection
+  }
+}

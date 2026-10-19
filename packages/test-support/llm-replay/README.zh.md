@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-llm-replay` 从已记录的 Session JSONL fixture（测试前置数据）回放模型流，让快照测试无需 API 密钥即可运行真实 agent。每个 parent 与 subagent 会话按首次调用顺序取得各自的已记录脚本，而同一会话内的调用会独立推进。`replay.override.json` 伴随文件表示持久 settlement 无法重建的分片前失败、取消、挂起与注入重试。需要以固定模型输出确定性测试真实 loop 行为时，可在 ACP（Agent Client Protocol）、headless 与 Web 浏览器场景中使用本包。
+`dsh-llm-replay` 从已记录的 Session JSONL fixture（测试前置数据）回放模型流，让快照测试无需 API 密钥即可运行真实 agent。parent 脚本归第一个调用模型的 live 会话，child 脚本按创建顺序归各 child 会话，因此并发发起提示的 fork 与 subagent 也能确定性回放；同一会话内的调用会独立推进。`replay.override.json` 伴随文件表示持久 settlement 无法重建的分片前失败、取消、挂起与注入重试。需要以固定模型输出确定性测试真实 loop 行为时，可在 ACP（Agent Client Protocol）、headless 与 Web 浏览器场景中使用本包。
 
 ## 目录
 
@@ -71,7 +71,7 @@ fixture 是运行一次真实 agent 所产生的一份选定持久化 Session ge
 
 ### 嵌套 agent
 
-parent agent 委托给进程内 subagent 的场景会为每个 Session 记录一个角色：parent 为 `session[.vN].jsonl`，随后是连续 child `session.<ordinal>[.vN].jsonl`。snapshot harness 只提供每个角色的最高 generation。live Session id 每次运行都会重新随机生成，因此 replay 按首次调用顺序把每个 live Session 绑定到已记录脚本：第一个发起模型调用的 live Session 取得 parent 脚本，下一个新 Session 取得下一条 child 脚本，依此类推，每个 Session 分别推进自己的 cursor。不同 live Session 数量超过已记录脚本数时会明确报错。
+parent agent 委托给进程内 subagent 或 fork 出 child Session 的场景会为每个 Session 记录一个角色：parent 为 `session[.vN].jsonl`，随后是连续 child `session.<ordinal>[.vN].jsonl`。snapshot harness 只提供每个角色的最高 generation，replay 按 `createdAt` 排列已记录的 child。live Session id 每次运行都会重新随机生成，因此 replay 按位置把每个 live Session 绑定到已记录脚本。第一个发起模型调用的 live Session 取得 parent 脚本。header 中带 `parentSession` 且 header `createdAt` 不早于 replay 安装时刻的 child Session 保持其 `session/created` 宣告顺序：某个 child 首次调用时，在它之前宣告且尚未绑定的每个 child 先取得各自的脚本。已宣告但未发起调用即被释放的 child 仍保留其位置，与录制一致：录制会以空脚本收集该 child。因此 parent 绑定后，即使同级 child 的首次调用以不同顺序到达，第 k 个宣告的 child 也会回放第 k 条已记录 child。其他新 Session（包括 replay 从未见到宣告的 Session，以及恢复时宣告的已存储或预置 child）在首次调用时取得下一条未认领脚本。每个 Session 分别推进自己的 cursor，再次宣告的已恢复 Session 保留其脚本与 cursor。不同 live Session 数量超过已记录脚本数时会明确报错。
 
 ### 失败模式与覆盖
 
@@ -112,7 +112,7 @@ parent agent 委托给进程内 subagent 的场景会为每个 Session 记录一
 
 ### 绑定与流式流程
 
-`installLlmReplay` 加载有序脚本，然后安装路由回放适配器（`providers` 非空时）或 catch-all `llm/stream` waterfall 监听器。每次实时 `stream()` 调用以其调用会话 id 为键：新会话认领下一个未认领脚本（父会话在前，因为它必须先开始流式输出才能委托），没有 `sessionId` 的调用共享一个绑定主脚本的匿名会话。返回的 `ReplayHandle` 携带用于 HMR（热模块替换）安全的 disposer，以及 `assertConsumed()`——除非每个已记录脚本都绑定到实时会话且每个已绑定游标都已耗尽，否则它会抛出异常。
+`installLlmReplay` 加载有序脚本，然后安装路由回放适配器（`providers` 非空时）或 catch-all `llm/stream` waterfall 监听器。一个 `session/created` 监听器按顺序记录头部 `createdAt` 不早于安装时刻的已宣告 child id；恢复时宣告的已存储或预置 child 不会被记录，而是在首次调用时绑定。每次实时 `stream()` 调用以其调用会话 id 为键：新的已宣告 child 会把截至并包括自身的未绑定已宣告 child 依次绑定到下一个未认领脚本，其他新会话则直接认领下一个未认领脚本（父会话在前，因为它必须先开始流式输出才能委托或 fork）。没有 `sessionId` 的调用共享一个匿名会话。返回的 `ReplayHandle` 携带用于 HMR（热模块替换）安全、会移除路由与 `session/created` 监听器的 disposer，以及 `assertConsumed()`——除非每个已记录脚本都绑定到实时会话且每个已绑定游标都已耗尽，否则它会抛出异常。
 
 </details>
 
@@ -146,7 +146,7 @@ parent agent 委托给进程内 subagent 的场景会为每个 Session 记录一
 
 这些限制说明何时回放无法代替在线模型。它们是当前包约束，不是任务积压。
 
-- **首次调用顺序脚本绑定假设串行委托**——并发运行同级 subagent 的实现会非确定性地将实时会话绑定到已记录脚本；在这种场景出现前暂不实现更强的键控。
+- **child 绑定假设逐个创建 child**——创建过程重叠的 child 可能以不同于其已记录 `createdAt` 的顺序宣告，进而回放彼此的脚本，因此场景应串行创建同级 child，之后可以并发发起提示。parent 以外不带 `parentSession` 的会话仍按首次调用顺序绑定。
 - **只有普通 loop 分片与带标记的本地压缩输出才能派生**——在产生分片前直接抛出、取消/挂起，或未标记的外部摘要器调用场景需要 `replay.override.json` 伴随文件；替换与补丁两种形式都只影响主会话，子会话脚本仍从各自日志派生。
 
 <a id="dev-note"></a>

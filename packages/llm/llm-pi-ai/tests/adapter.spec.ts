@@ -213,12 +213,12 @@ describe('PiAiAdapter provider routing', () => {
     expect(adapter.providerInfo('departed')).toEqual({ id: 'departed', name: 'departed' })
   })
 
-  it('reports unsupported stop sequences rather than silently ignoring them', async () => {
-    const server = await mockServer([])
+  it('sends stop sequences on a Chat Completions catalog route', async () => {
+    const server = await mockServer([{ events: textEvents }])
     const ctx = await harness(server.url)
     const result = await assemble(ctx, { model: 'deepseek-flash', messages: [], stop: ['END'] })
-    expect(result.finish).toMatchObject({ kind: 'error', failure: { code: 'UNSUPPORTED_OPTION' } })
-    expect(server.requests).toEqual([])
+    expect(result.finish).toEqual({ kind: 'stop' })
+    expect(server.requests[0]).toMatchObject({ stop: ['END'] })
   })
 
   it('reports unknown catalog models before network I/O', async () => {

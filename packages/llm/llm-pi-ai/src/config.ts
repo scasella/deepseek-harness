@@ -14,7 +14,15 @@
  */
 import type { Volatile } from '@deepseek-ai/cordis'
 
-import type { CacheRetention, ChatTemplateKwargValue, ModelThinkingLevel, Provider, ThinkingBudgets, Transport } from '@earendil-works/pi-ai'
+import type {
+  CacheRetention,
+  ChatTemplateKwargValue,
+  ModelThinkingLevel,
+  OpenRouterRouting,
+  Provider,
+  ThinkingBudgets,
+  Transport,
+} from '@earendil-works/pi-ai'
 import z from '@deepseek-ai/schemastery'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
@@ -88,6 +96,17 @@ export type {
   PiAiThinkingFormat,
 } from './catalog.ts'
 
+/**
+ * OpenRouter upstream-provider preferences for one route, sent as the
+ * request's `provider` field.
+ */
+export interface PiAiOpenRouterProvider {
+  /** OpenRouter provider slugs tried in this order, such as `deepseek`; at least one, none empty. */
+  order: string[]
+  /** Whether OpenRouter may serve the request from a provider outside `order`; omission leaves OpenRouter's default. */
+  allowFallbacks?: boolean
+}
+
 /** Configuration for one pi-ai provider route; the `providers` dict key IS the route. */
 export interface PiAiProviderProfile {
   /** Credential reference (environment-variable name) resolved per request through `ctx.credentials`. */
@@ -125,6 +144,12 @@ export interface PiAiProviderProfile {
    * refused rather than left looking applied.
    */
   compat?: PiAiCompatProfile
+  /**
+   * OpenRouter upstream-provider preferences sent with every request to an
+   * `openai-completions` model on this route; requests to other protocols
+   * carry none. Refused on a route with no `openai-completions` model.
+   */
+  openRouterProvider?: PiAiOpenRouterProvider
   /**
    * Context capacity for a model this route lists that neither the entry nor
    * the installed catalog sizes (default 262,144). A guess by construction, so
@@ -184,13 +209,15 @@ export interface PiAiProviderProfile {
 
 /** Validated profile with its route stamped and every adapter-owned default resolved. */
 export interface ResolvedPiAiProviderProfile
-  extends Omit<PiAiProviderProfile, 'apiKeyEnv' | 'retryPolicy' | 'models' | 'displayName'> {
+  extends Omit<PiAiProviderProfile, 'apiKeyEnv' | 'retryPolicy' | 'models' | 'displayName' | 'openRouterProvider'> {
   /** Harness route key and the `Models` collection key (the configuration dict key). */
   provider: string
   /** Resolved display name for selectors and configuration surfaces. */
   displayName: string
   /** Validated credential reference, when one is configured. */
   apiKeyEnv?: CredentialRef
+  /** The `provider` request field for this route's `openai-completions` models, when `openRouterProvider` is configured. */
+  openRouterRouting?: OpenRouterRouting
   /** Positive finite provider-idle interval after defaulting. */
   streamIdleTimeoutMs: number
   /** Positive request-level base64 image payload bound after defaulting. */
@@ -323,6 +350,12 @@ const modelProfile: z<PiAiModelProfile> = z.object({
 /** A {@link modelProfile} whose id lives in the `modelOverrides` dict key. */
 const modelOverride: z<PiAiModelOverride> = z.object(modelFields)
 
+// An omitted object must stay absent rather than become `{}` and fail its required `order`.
+const openRouterProvider: z<PiAiOpenRouterProvider> = z.object({
+  order: z.array(z.string().min(1)).min(1).required(),
+  allowFallbacks: z.boolean(),
+}).default(undefined as never)
+
 const profile = z.object({
   apiKeyEnv: z.string().role('credential-ref'),
   displayName: z.string(),
@@ -331,6 +364,7 @@ const profile = z.object({
   models: z.array(modelProfile),
   modelOverrides: z.dict(modelOverride),
   compat: compatProfile,
+  openRouterProvider,
   defaultContextWindow: z.number().step(1).min(1).default(DEFAULT_CONTEXT_WINDOW),
   defaultMaxTokens: z.number().step(1).min(1).default(DEFAULT_MAX_TOKENS),
   defaultInput: z.array(z.union(MODALITIES)).default([...DEFAULT_INPUT]),
@@ -385,6 +419,23 @@ function rejectRemovedFields(provider: string, source: PiAiProviderProfile): voi
   }
 }
 
+/**
+ * Translate configured OpenRouter preferences into the `provider` request field.
+ * @param provider - route key, for diagnostics.
+ * @param source - the configured preferences.
+ * @returns the wire field.
+ * @throws Error when `order` names no provider or an empty slug.
+ */
+function resolveOpenRouterRouting(provider: string, source: PiAiOpenRouterProvider): OpenRouterRouting {
+  if (source.order.length === 0 || source.order.some(slug => slug.length === 0)) {
+    throw new Error(`llm-pi-ai: provider "${provider}" openRouterProvider.order must name at least one provider slug and no empty one`)
+  }
+  return {
+    order: [...source.order],
+    ...source.allowFallbacks === undefined ? {} : { allow_fallbacks: source.allowFallbacks },
+  }
+}
+
 /** Reject a profile header that Fetch cannot put on a provider request. */
 function assertValidHeaders(provider: string, headers: Readonly<Record<string, string>> | undefined): void {
   for (const [name, value] of Object.entries(headers ?? {})) {
@@ -426,6 +477,9 @@ export function resolveProfiles(
       throw new Error(`llm-pi-ai: provider "${provider}" has an empty displayName`)
     }
     assertValidHeaders(provider, source.headers)
+    const openRouterRouting = source.openRouterProvider === undefined
+      ? undefined
+      : resolveOpenRouterRouting(provider, source.openRouterProvider)
     const streamIdleTimeoutMs = source.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS
     if (!Number.isFinite(streamIdleTimeoutMs)
       || streamIdleTimeoutMs <= 0
@@ -475,6 +529,10 @@ export function resolveProfiles(
         defaultMaxTokens: source.defaultMaxTokens ?? DEFAULT_MAX_TOKENS,
       }, validation)
       catalogError = catalog.modelErrors.values().next().value
+      if (openRouterRouting !== undefined && !catalog.models.some(model => model.api === 'openai-completions')) {
+        throw new PiAiCatalogError(`llm-pi-ai: provider "${provider}" sets openRouterProvider, but no model on the`
+          + ' route speaks openai-completions, the only protocol that sends it')
+      }
       piProvider = buildProvider({
         provider,
         displayName,
@@ -487,12 +545,20 @@ export function resolveProfiles(
       if (validation === 'strict' || !(error instanceof PiAiCatalogError)) throw error
       catalogError ??= error.message
     }
-    const { apiKeyEnv, retryPolicy, models: _models, displayName: _displayName, ...rest } = source
+    const {
+      apiKeyEnv,
+      retryPolicy,
+      models: _models,
+      displayName: _displayName,
+      openRouterProvider: _openRouterProvider,
+      ...rest
+    } = source
     resolved.set(provider, {
       ...rest,
       provider,
       displayName,
       ...apiKeyEnv === undefined ? {} : { apiKeyEnv: credentialRef(apiKeyEnv) },
+      ...openRouterRouting === undefined ? {} : { openRouterRouting },
       streamIdleTimeoutMs,
       maxRequestImageBytes,
       requestImagePixelBudget,

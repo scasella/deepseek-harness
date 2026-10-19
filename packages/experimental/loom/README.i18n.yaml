@@ -1,0 +1,43 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/experimental/loom/README.md
+/:
+  en: 4948309552d39199
+  zh: 685ac146a0adeaa5
+/deepseek-ai-dsh-experimental-loom:
+  en: eff88cb59bc3004c
+  zh: 002e0ea3e1525ce1
+/deepseek-ai-dsh-experimental-loom/summary:
+  en: 265fa8f01da425d6
+  zh: 7d6b02326492e200
+/deepseek-ai-dsh-experimental-loom/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 364c80ee00a374ff
+/deepseek-ai-dsh-experimental-loom/use-this-package:
+  en: 2c756784efa25c45
+  zh: 79b29ef31335f854
+/deepseek-ai-dsh-experimental-loom/use-this-package/read-a-fork-family:
+  en: a96ca46c8db4562d
+  zh: 4d3edaf4c86125e8
+/deepseek-ai-dsh-experimental-loom/use-this-package/branch-membership:
+  en: 4348389fa3765c67
+  zh: a55d0f5e77811e85
+/deepseek-ai-dsh-experimental-loom/understand-the-implementation:
+  en: 9781e58cbd46066e
+  zh: 603c476282bb2525
+/deepseek-ai-dsh-experimental-loom/further-exploration:
+  en: f01db495a7af9007
+  zh: fbe8bdbeb7b54cb4
+/deepseek-ai-dsh-experimental-loom/model-experience:
+  en: 6ac9617884611b6c
+  zh: 34b2dd8bf2c3e9b4
+/deepseek-ai-dsh-experimental-loom/model-experience/kv-cache-effect:
+  en: 79e284d0164fc95c
+  zh: f3e654301360a742
+/deepseek-ai-dsh-experimental-loom/known-limitations-and-deferred-work:
+  en: 1a053f2fe93877f9
+  zh: 3b7a84ffcbcfa120
+/deepseek-ai-dsh-experimental-loom/known-limitations-and-deferred-work/dev-note:
+  en: 0225ba087c5266f3
+  zh: 4e706f1b2b984e63
