@@ -135,24 +135,25 @@ Factory: conversation.content [ConversationContent]
 │  └─ conversation.view
 │     ├─ id=chat [ChatView]
 │     │  └─ conversation.chat.flow [ChatFlow]
-│     │     └─ conversation.chat.node [ChatNodeSeat dispatch]
-│     │        ├─ key=user,steering [UserMessageNodeView]
-│     │        │  └─ calls Factory: conversation.chat.user.content
-│     │        ├─ key=assistant-step [AssistantNodeView / AssistantMarkdown]
-│     │        │  ├─ conversation.chat.message.images [MessageImages]
-│     │        │  └─ conversation.chat.reasoning.body [DefaultReasoningBody]
-│     │        │     └─ calls Factory: conversation.chat.reasoning.content
-│     │        ├─ key=tool-call [ToolCallTree]
-│     │        │  └─ tool.call.toolview
-│     │        │     └─ key=read_image [ReadImageRow / ToolRow]
-│     │        │        └─ tool.call.images [MessageImages]
-│     │        ├─ key=command-input [GoalCommandInputView]
-│     │        │  └─ calls Factory: conversation.user.text
-│     │        ├─ key=command [CommandNodeView]
-│     │        │  └─ conversation.chat.commandview
-│     │        └─ key=turn-tail [TurnTailNodeView]
-│     │           ├─ conversation.chat.turnTail
-│     │           └─ conversation.chat.assistant-actions
+│     │     ├─ conversation.chat.node [ChatNodeSeat dispatch]
+│     │     │  ├─ key=user,steering [UserMessageNodeView]
+│     │     │  │  └─ calls Factory: conversation.chat.user.content
+│     │     │  ├─ key=assistant-step [AssistantNodeView / AssistantMarkdown]
+│     │     │  │  ├─ conversation.chat.message.images [MessageImages]
+│     │     │  │  └─ conversation.chat.reasoning.body [DefaultReasoningBody]
+│     │     │  │     └─ calls Factory: conversation.chat.reasoning.content
+│     │     │  ├─ key=tool-call [ToolCallTree]
+│     │     │  │  └─ tool.call.toolview
+│     │     │  │     └─ key=read_image [ReadImageRow / ToolRow]
+│     │     │  │        └─ tool.call.images [MessageImages]
+│     │     │  ├─ key=command-input [GoalCommandInputView]
+│     │     │  │  └─ calls Factory: conversation.user.text
+│     │     │  ├─ key=command [CommandNodeView]
+│     │     │  │  └─ conversation.chat.commandview
+│     │     │  └─ key=turn-tail [TurnTailNodeView]
+│     │     │     ├─ conversation.chat.turnTail
+│     │     │     └─ conversation.chat.assistant-actions
+│     │     └─ conversation.chat.fork-cut
 │     └─ id=trajectory [TrajectoryView / TrajectoryTable]
 │        └─ conversation.trajectory.images [MessageImages]
 ├─ conversation.composer

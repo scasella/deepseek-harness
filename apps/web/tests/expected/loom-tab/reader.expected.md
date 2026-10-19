@@ -1,0 +1,20 @@
+- article:
+  - heading "Loom family" [level=2]
+  - button "Inherited from parent · turn 1 · 1 step"
+  - term: You
+  - definition: CHAT_SCROLL_LOOMTAB_USER_001 Review the long-runn…
+  - term: Agent
+  - definition: CHAT_SCROLL_LOOMTAB_ASSISTANT_001 The conversation remains readable after several paragraphs. Turn 1 deliberately carri…
+  - paragraph: Branched from Loom family after turn 1 · Variant 1 of 2
+  - region "Turn 2":
+    - text: LOOM_TAB_A Take the other approach from here.
+    - button "What the model saw for this turn" [expanded]
+    - list:
+      - listitem: System prompt 36 characters
+      - listitem: 0 tools
+      - listitem: Inherited 1 turn · 1 step
+      - listitem: Own 1 turn · 1 step
+    - paragraph: "Own turn usage: 1,200 new input · 6,000 cached · 300 output tokens"
+    - paragraph: 4 messages, 3 inherited Route deepseek-official · deepseek-v4-flash
+    - button "Reasoning 120 tokens this turn"
+    - paragraph: LOOM_TAB_A This branch continues from the inherited answer.

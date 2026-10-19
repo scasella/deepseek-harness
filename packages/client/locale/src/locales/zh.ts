@@ -41,6 +41,7 @@ export const zh = {
   'markdown.truncatedCharacters': '… 已截断，共 {total} 字符',
   'number.thousand': '{value}K',
   'number.million': '{value}M',
+  'number.groupSeparator': ',',
 } satisfies Record<string, string>
 
 /** The common vocabulary key union (zh is the key-set source of truth). */

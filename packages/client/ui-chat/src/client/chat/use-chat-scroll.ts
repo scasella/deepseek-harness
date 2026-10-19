@@ -31,6 +31,7 @@ interface ChatScrollState extends ChatReadingState {
   readonly busyTurn: number | null
   readonly navigateToTurn: ChatNavigation['navigateToTurn']
   readonly loadEarlier: ChatNavigation['loadEarlier']
+  readonly holdRow: ChatNavigation['holdRow']
   readonly returnToBottom: () => void
   readonly motion: FlowMotionRows
 }
@@ -176,6 +177,7 @@ export function useChatScroll(input: ChatScrollInput): ChatScrollState {
     listRef, columnRef, ...state, busyTurn, motion: viewport.motion,
     navigateToTurn: navigation.navigateToTurn,
     loadEarlier: navigation.loadEarlier,
+    holdRow: navigation.holdRow,
     returnToBottom,
   }
 }

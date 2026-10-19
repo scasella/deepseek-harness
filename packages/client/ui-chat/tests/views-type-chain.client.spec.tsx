@@ -19,6 +19,8 @@ describe('Chat View type chain', () => {
       chat.renderSlot('conversation.chat.node', {}, { hookContext: nodeContext })
       // @ts-expect-error Output images belong to the Assistant node entry.
       chat.renderSlot('conversation.chat.message.images', {})
+      // @ts-expect-error The fork-cut Seat is a flow child; ChatView passes only the cut data.
+      chat.renderSlot('conversation.chat.fork-cut', {})
       // @ts-expect-error Flow owner data cannot override the flow's render authority.
       void flowOwner.renderSlot
       // @ts-expect-error Node renderers receive the bound hook, not the viewport controller.

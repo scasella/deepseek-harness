@@ -22,6 +22,11 @@ interface Breadcrumb {
   readonly subagent: boolean
 }
 
+/**
+ * Climb header parents from the current Session: a subagent's owner and a
+ * fork's parent alike, so a fork of a subagent and a subagent of a fork keep
+ * every ancestor. The chain stops at an unlisted parent or a repeated Session.
+ */
 function deriveAncestry(list: SessionListState, id: SessionId): readonly Breadcrumb[] {
   const chain: Breadcrumb[] = []
   const seen = new Set<SessionId>()
@@ -36,7 +41,6 @@ function deriveAncestry(list: SessionListState, id: SessionId): readonly Breadcr
       displayTitle: summary.displayTitle,
       subagent: summary.origin === 'subagent',
     })
-    if (summary.origin !== 'subagent') break
     cursor = summary.parentId
   }
   return chain
@@ -47,6 +51,7 @@ function equalBreadcrumbs(left: readonly Breadcrumb[], right: readonly Breadcrum
     && left.every((item, index) => {
       const other = right.at(index)
       return other !== undefined && item.id === other.id && item.displayTitle === other.displayTitle
+        && item.subagent === other.subagent
     })
 }
 

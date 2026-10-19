@@ -3,12 +3,15 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { Button, IconCloseOutlineRegular, IconRefreshOutlineRegular, Modal, ShortcutKeys, Tooltip, Toast, focusWithoutRing, isBehindModal, rankByName } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot, PropsStore } from '@deepseek-ai/dsh-client-store'
-import type { ShortcutCatalogEntry, ShortcutPlatform, Shortcuts } from '@deepseek-ai/dsh-client-shortcuts/client'
+import type { ShortcutCatalogEntry, ShortcutFixedGroup, ShortcutPlatform, Shortcuts } from '@deepseek-ai/dsh-client-shortcuts/client'
 import { ShortcutEditor } from './Editor.tsx'
 import { ShortcutIcon } from './Icons.tsx'
 import { shortcutFailure, shortcutReadFailure } from './feedback.ts'
 import type { createShortcutsStore } from './store.ts'
 import css from './Reference.module.css'
+
+/** Reference sections in display order; each fixed group needs a section to be listed. */
+const GROUP_ORDER = ['application', 'input', 'menus', 'tree', 'approval'] as const satisfies readonly ShortcutFixedGroup[]
 
 /** Catalog and device labels delivered through renderer-bound hooks. */
 export interface ReferenceInjected {
@@ -178,7 +181,7 @@ export function ShortcutReference({
         </div>
       </div>
       <div className={css.list} aria-busy={config.status === 'loading'}>
-        {(['application', 'input', 'menus', 'approval'] as const).map((group) => {
+        {GROUP_ORDER.map((group) => {
           const rows = matches.filter(row => row.group === group)
           if (rows.length === 0) return null
           return <section key={group} aria-label={t(group)}>

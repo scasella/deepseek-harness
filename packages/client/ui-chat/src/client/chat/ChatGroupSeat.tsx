@@ -129,7 +129,9 @@ const ProcessGroupHeader = memo(function ProcessGroupHeader({ groupKey, useChatG
 })
 
 /** Render a process group with local disclosure and the existing outer-Turn visibility. */
-export const ChatGroupSeat = memo(function ChatGroupSeat({ groupKey, useChatGroup, useGroupHeaderAction, ...props }: ChatGroupSeatProps) {
+export const ChatGroupSeat = memo(function ChatGroupSeat({
+  groupKey, useChatGroup, useGroupHeaderAction, revealInherited, ...props
+}: ChatGroupSeatProps) {
   const members = useChatGroup(groupKey, group => group?.members)
   const turn = useChatGroup(groupKey, group => group?.data.turn)
   const closed = useChatGroup(groupKey, group => group?.data.closed)
@@ -156,9 +158,10 @@ export const ChatGroupSeat = memo(function ChatGroupSeat({ groupKey, useChatGrou
   const outerHidden = foldCompleted && presentation?.turnClosed === true && spec !== undefined
     && !alwaysOpen && !storedOpen
   const revealOuter = useCallback(() => {
+    revealInherited?.()
     if (spec !== undefined && !alwaysOpen) props.actions.setTurnProcessOpen(spec.turn, spec.answerStep ?? 0, true)
-  }, [props.actions, spec, alwaysOpen])
-  const rootRef = props.useGroupAction(outerHidden, revealOuter)
+  }, [props.actions, spec, alwaysOpen, revealInherited])
+  const rootRef = props.useGroupAction(revealInherited !== undefined || outerHidden, revealOuter)
   // The header appears when a flat latest Turn becomes historical; it grows on the fold clock while the
   // body closes. A group whose whole Turn is folding never shows one in the frame it starts closing.
   const headerRef = useRef<HTMLDivElement>(null)

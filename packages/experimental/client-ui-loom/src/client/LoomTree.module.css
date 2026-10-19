@@ -1,0 +1,222 @@
+/* Outline tree of one fork family: 44px rows indented 19px a level with 0.5px guide lines,
+   the current path marked by an accent rule, and the key hints pinned to the pane's bottom. */
+.root {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 100%;
+  padding: 16px 12px;
+}
+
+.heading {
+  margin: 0 0 8px;
+  padding: 0 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.tree {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.row {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 44px;
+  padding: 6px 8px;
+  border-radius: var(--dsw-radius-md);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 17px;
+  cursor: pointer;
+  outline: none;
+  /* A click must not leave a text caret in the row, which suppresses the label's ellipsis. */
+  user-select: none;
+}
+
+.row:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.row:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--dsw-alias-state-business-primary);
+}
+
+.onPath::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--dsw-alias-state-business-primary);
+}
+
+.selected {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.selected .label {
+  color: var(--dsw-alias-state-business-primary);
+  font-weight: 500;
+}
+
+.point .label {
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* Guide lines sit left of the row box at the parent levels' chevron centres; each line also
+   covers the 2px gap above its row, so consecutive rows join into one line. */
+.rail,
+.elbow,
+.stem {
+  position: absolute;
+  width: 0;
+  border-left: 0.5px solid var(--dsw-alias-border-l2);
+  pointer-events: none;
+}
+
+.rail {
+  top: -2px;
+  bottom: 0;
+}
+
+.elbow {
+  top: -2px;
+  height: 16px;
+}
+
+.elbowThrough {
+  height: auto;
+  bottom: 0;
+}
+
+/* The tick reaches the row's chevron or dot; a row on the current path drops it so it never
+   crosses the accent rule. */
+.elbow::after {
+  content: '';
+  position: absolute;
+  top: 16px;
+  left: 0;
+  width: 12px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.onPath .elbow::after {
+  content: none;
+}
+
+.stem {
+  top: 24px;
+  bottom: 0;
+}
+
+.disclosure {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 17px;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  transition: transform 120ms ease;
+}
+
+.disclosure:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.disclosureOpen {
+  transform: rotate(90deg);
+}
+
+.mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 17px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.label,
+.summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.label {
+  font-weight: 400;
+}
+
+.summary,
+.metric {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.metric {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  line-height: 17px;
+  white-space: nowrap;
+}
+
+.hints {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: auto;
+  padding: 12px 8px 0;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hint kbd {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-xs);
+  color: var(--dsw-alias-label-secondary);
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.note {
+  flex-basis: 100%;
+  margin: 0;
+}

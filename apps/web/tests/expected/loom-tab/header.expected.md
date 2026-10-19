@@ -1,0 +1,12 @@
+- banner:
+  - navigation "Session hierarchy":
+    - button "Loom family"
+    - text: / Loom family
+  - button "Variant 1 of 2, after turn 1. Switch variant": Variant 1 of 2 · after turn 1
+  - text: Standard mode
+  - button "More actions"
+  - button "Open right sidebar"
+  - tablist:
+    - tab "Chat" [selected]
+    - tab "Trajectory"
+    - tab "Loom"

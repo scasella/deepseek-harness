@@ -58,7 +58,7 @@ Each stage lands as one or more commits on `loom/loom-interface`. A stage is don
 - F9: pi-ai route fixes: map `usage.reasoning`, pass `stop` through `samplingParams`, provider pinning through the route profile's `openRouterProvider` field, and a working "thinking off" mapping.
 - Toolchain probes: `persistence-changes --record` and the Python SDK snapshot refresh on this machine.
 
-**S1 Orientation (reads only).** L1 fork band, the inherited span collapsed in Chat, fork crumbs in the header, and own/inherited footer counts; L8 Loom tab with an outline tree and reading pane; L26 "what the model saw" as a `loom.requestAt` Remote; L20 tree keys; L27 reasoning collapsed on sibling cards with its token count.
+**S1 Orientation (reads only).** L1 fork band, the inherited span collapsed in Chat (a ui-chat release change with its `conversation.chat.fork-cut` seat), fork crumbs in the header, and own/inherited footer counts; L8 Loom tab with an outline tree and reading pane; L26 "what the model saw" as a `loom.requestAt` Remote; L20 tree keys; L27 reasoning collapsed on sibling cards with its token count.
 
 **S2 Branching.** L3 regenerate ×N; L4 N-way branch with a steering line per child; L5 running-branches strip; L11 route override; L2 sibling pager (needs a wider `AssistantActionOwnerProps` and a seat after Branch in ui-chat); L13 edit an earlier user message and branch (new `conversation.chat.user-actions` seat); L15 private marks with a telemetry redaction listener; L23 prompt-variant sets.
 
@@ -95,7 +95,7 @@ Each stage adds live cases for what it changed: S0 verifies fork routing (`fork-
 
 ## Acceptance criteria
 
-- Every L1–L27 proposal and Weave is reachable in the Web app when the Loom bundle is enabled, and nothing changes when it is disabled, except the owner changes in release packages listed above (fork families in the sidebar, fork crumbs, own/inherited footer counts, own-only fork-mode subagent header tokens, the pi-ai `stop`, thinking-off and reasoning-count mapping, the `forkLineage` projection, scoped search parameter, logprob capture).
+- Every L1–L27 proposal and Weave is reachable in the Web app when the Loom bundle is enabled, and nothing changes when it is disabled, except the owner changes in release packages listed above (fork families in the sidebar, fork crumbs, the inherited history folded behind one row in Chat with its `conversation.chat.fork-cut` seat, own/inherited footer counts, own-only fork-mode subagent header tokens, the pi-ai `stop`, thinking-off and reasoning-count mapping, the `forkLineage` projection, scoped search parameter, logprob capture).
 - Each stage's keyless specs, snapshots and Web goldens pass in CI, and its live suite passes locally under the $5 ledger approved for this work.
 - No new `as unknown` casts, no growth in the no-unknown-casts baseline, 100% per-file coverage for new and gated files, and passing `doc-sync`.
 - Persistence acknowledgements exist for `block-end.logprobs` and `turn/start.continuation?`; TypeScript and Python SDK expected outputs are refreshed for F10.

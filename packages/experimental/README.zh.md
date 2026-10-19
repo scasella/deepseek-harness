@@ -60,8 +60,8 @@ kind: "package-group"
 | [`client-ui-voice-input`](client-ui-voice-input/README.zh.md) | 麦克风录音与版本检查后的草稿插入 | — |
 | [`plugin-market-bundle`](plugin-market-bundle/README.zh.md) | 默认禁用的可选自定义插件市场：市场服务和「发现」标签页 | — |
 | [`voice-input-bundle`](voice-input-bundle/README.zh.md) | 默认禁用的可选语音输入组合 | — |
-| [`loom`](loom/README.zh.md) | Loom fork 家族、分支记录与 `loom` Remote | `ctx.loom` |
-| [`client-ui-loom`](client-ui-loom/README.zh.md) | Loom 浏览器插件：Remote 挂载、语言包与 fork 家族数据源 | — |
+| [`loom`](loom/README.zh.md) | Loom fork 家族、分支记录、请求视图与 `loom` Remote | `ctx.loom` |
+| [`client-ui-loom`](client-ui-loom/README.zh.md) | Loom 浏览器插件：分支标记、变体标签与 Loom 标签页 | — |
 | [`loom-bundle`](loom-bundle/README.zh.md) | 默认禁用的可选 Loom 组合 | — |
 | [`agent-team-profile`](agent-team-profile/README.zh.md) | Agent Teams 协作、工具与 Web UI 组合包 | — |
 | [`agent-team`](agent-team/README.zh.md) | 具名 teammate，成员之间直接消息与持久共享任务板 | `ctx.agentTeams` |

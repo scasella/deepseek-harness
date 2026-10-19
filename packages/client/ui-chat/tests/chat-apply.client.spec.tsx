@@ -175,6 +175,21 @@ describe('Chat apply wiring', () => {
     expect(() => b.runtime.factoryOf('conversation.chat.user.content')).toThrow('no definition')
   })
 
+  it('declares the fork-cut Seat on the flow for plugin bands and removes it with Chat', async () => {
+    const b = await bench()
+    onTestFinished(() => b.runtime.dispose())
+    const flow = b.runtime.slots.entries('conversation.chat.flow')[0]
+    expect(flow?.children?.['conversation.chat.fork-cut']).toEqual({ kind: 'list', scope: 'session' })
+    expect(b.runtime.slots.spec('conversation.chat.fork-cut')).toMatchObject({ kind: 'list', scope: 'session' })
+    function Band() { return null }
+    const dispose = b.runtime.ctx.slots.register({ name: 'conversation.chat.fork-cut', id: 'band', order: 0 }, Band)
+    expect(b.runtime.slots.entriesOfSlot('conversation.chat.fork-cut').map(entry => entry.component)).toEqual([Band])
+    dispose()
+    expect(b.runtime.slots.entriesOfSlot('conversation.chat.fork-cut')).toEqual([])
+    await b.chat.dispose()
+    expect(b.runtime.slots.spec('conversation.chat.fork-cut')).toBeUndefined()
+  })
+
   it('lets another registrant replace one composer stats pill by id', async () => {
     const b = await bench()
     onTestFinished(() => b.runtime.dispose())

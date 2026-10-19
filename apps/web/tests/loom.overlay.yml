@@ -1,0 +1,7 @@
+# Equivalent to the Loom bundle over the stable base and Web bundles; also the
+# development overlay: pnpm dsh web --patch apps/web/tests/loom.overlay.yml
+- insert:
+    - id: loom
+      name: '@deepseek-ai/dsh-experimental-loom'
+    - id: ui-loom
+      name: '@deepseek-ai/dsh-experimental-client-ui-loom'

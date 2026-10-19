@@ -5,7 +5,14 @@ import { mountLoom } from './mount.ts'
 
 export { inject } from './mount.ts'
 export type { LoomFamilyState } from './family.ts'
+export type { ForkBandProps } from './ForkBand.tsx'
+export type { LoomLinkInjected } from './links.ts'
 export type { LoomKey } from './locales.ts'
+export type { LoomViewInjected, LoomViewProps } from './LoomView.tsx'
+export type { LoomReaderDocument, LoomReaderState, LoomReaderTurn } from './reader.ts'
+export type { LoomRequestState } from './requests.ts'
+export type { VariantChipProps } from './VariantChip.tsx'
+export type { LoomViewState } from './view-store.ts'
 
 /**
  * Activate the experimental Loom contribution.

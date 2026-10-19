@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The `ctx.loom` service holds the Host half of Loom, which treats forked Sessions as a tree. It exposes the `loom` Remote namespace, declares the `plugin:loom/branch` record, publishes each Session's fork cut and branch membership as the `loomBranch` projection, and removes Loom record payloads from exported telemetry. Enable it through [`@deepseek-ai/dsh-experimental-loom-bundle`](../loom-bundle/README.md).
+The `ctx.loom` service holds the Host half of Loom, which treats forked Sessions as a tree. It exposes the `loom` Remote namespace, which reads fork families and rebuilds what the model received at any event of a Session, declares the `plugin:loom/branch` record, publishes each Session's fork cut and branch membership as the `loomBranch` projection, and removes Loom record payloads from exported telemetry. Enable it through [`@deepseek-ai/dsh-experimental-loom-bundle`](../loom-bundle/README.md).
 
 ## Table of Contents
 
@@ -25,13 +25,19 @@ The `ctx.loom` service holds the Host half of Loom, which treats forked Sessions
 <a id="use-this-package"></a>
 ## Use this package
 
-Compose the row with the Session Controller, the Session projection registry, Remote access, and Typert; the Web profile supplies all four. The package has no configuration fields. The browser half, [`@deepseek-ai/dsh-experimental-client-ui-loom`](../client-ui-loom/README.md), mounts this package's generated `/remote` contribution.
+Compose the row with the Session Controller, the Session store, the Session projection registry, Remote access, and Typert; the Web profile supplies all five. The package has no configuration fields. The browser half, [`@deepseek-ai/dsh-experimental-client-ui-loom`](../client-ui-loom/README.md), mounts this package's generated `/remote` contribution.
 
 ### Read a fork family
 
 `family({ sessionId })` reads the current Session list without activating an Agent and returns the fork family of `sessionId`: the highest listed fork ancestor as `rootId`, the requested Session as `focusId`, and every listed fork descendant of the root in `nodes`. Nodes are in depth-first order, with siblings ordered by creation time and then by Session id; the creation time comes from the row's `forkLineage` list hint, and a sibling without that hint follows every sibling with one. Each node carries its depth, its parent node, its creation time when known, and the `updatedAt`, `running`, and `blank` list facts. A subagent's parent link is not a fork link, so subagent children are not family members. Only Sessions the caller may list appear. An unlisted `sessionId` fails with `session/not-found`.
 
 The `@deepseek-ai/dsh-experimental-loom/family` export holds the same derivation without Host dependencies: `forkFamily(rows, sessionId, previous?)` takes `LoomFamilyRow` values mapped from any Session list and, given an earlier result, keeps each unchanged node reference. The browser plugin derives families from its client Session list with it and does not call `family()`.
+
+### Read what the model saw
+
+`requestAt({ sessionId, seq })` rebuilds one model request from the Session's whole log without activating its Agent. `seq` may name any event; the result describes the latest request whose `assistant/message` or `assistant/attempt` settlement is at or before it, so each attempt of a retried step addresses its own request. The `LoomRequestView` holds the `route` (provider, model, and reasoning effort) and tool `names` of the `request/header` in force, the tools that `developer/message` additions and removals changed in the request's turn before it, the effective `systemPrompt` text with the turn that wrote it when that was not the Session's first prompt, and every request message in model-visible order. Each message row carries its producing seq, its role (a developer message reports `system`), whether the Session inherited it from its fork source, a whitespace-collapsed preview of at most `LOOM_REQUEST_PREVIEW_MAX_CODE_POINTS` code points, and its length in code points. `inheritedTurns` and `ownTurns` count the turns started before the request on each side of the fork cut.
+
+A seq outside the log, or before the first settlement, fails with `loom/seq-out-of-range`, whose `range` names the seqs that address a request, or is null when no request has settled. An unknown Session fails with `session/not-found`; a caller without access to the Session receives the Gateway's `remote-access/denied`.
 
 ### Branch membership
 
@@ -45,7 +51,7 @@ The `@deepseek-ai/dsh-experimental-loom/family` export holds the same derivation
 <details>
 <summary>Maintainer details — click to expand</summary>
 
-`Loom` extends `TypertRemoteService` with service key and namespace `loom`. Its constructor registers the `loomBranch` unit and a `session-telemetry/record` listener on its own fiber, so unloading the plugin removes both. The Gateway authorizes `family()` against the addressed Session through the `sessionId` field the Session Controller registers as the `session` resource; the method then filters list rows through `ctx.remoteAccess.allows()`. The redaction listener calls `next()` and replaces the `body` of every `plugin:loom/*` ledger record with `null`, keeping `sourceEvent`.
+`Loom` extends `TypertRemoteService` with service key and namespace `loom`. Its constructor registers the `loomBranch` unit and a `session-telemetry/record` listener on its own fiber, so unloading the plugin removes both. The Gateway authorizes `family()` and `requestAt()` against the addressed Session through the `sessionId` field the Session Controller registers as the `session` resource; `family()` then filters list rows through `ctx.remoteAccess.allows()`. `requestAt()` reads `ctx.sessionController.inspect()`, the attached log or a cold read, and derives the request as the agent loop does: `foldSurface()` over the events before the settlement with `ctx.sessions.messageProjections`, `deriveEventMessage()` per surface node, and `foldRequestHeader()` for the header. The result equals the request the loop passes to `llm/stream` listeners; the host spec compares the two across a fork of a fork, a compaction-style surface replacement, and a retried step, and the Loader composition spec compares them in the shipped Web profile with the Loom bundle patch. The redaction listener calls `next()` and replaces the `body` of every `plugin:loom/*` ledger record with `null`, keeping `sourceEvent`.
 
 </details>
 
@@ -61,7 +67,7 @@ The `@deepseek-ai/dsh-experimental-loom/family` export holds the same derivation
 <a id="model-experience"></a>
 ## Model Experience
 
-None, as the service reads Session lists and Loom plugin records, which never enter model requests.
+None, as the service reads Session lists, Session logs, and Loom plugin records and adds nothing to model requests.
 
 #### KV Cache effect
 
@@ -74,6 +80,8 @@ No direct effect; plugin records stay outside the model-visible surface.
 - Loom records are experimental plugin records. A Session format migration keeps them only on a best-effort basis; a dropped `plugin:loom/branch` record makes `loomBranch` report the Session as an ordinary fork.
 - `family()` reads the whole Session list on each call and stops at a parent that is hidden, deleted, or outside the caller's access, so such a family is rooted at its highest visible ancestor.
 - Exported telemetry still carries each Loom record's envelope, including its type and seq; only the payload is removed.
+- `requestAt()` describes the request the agent loop built, before the provider route projects it: a route without tool-update support receives the messages without developer rows and learns tool changes only from the tool list, and file and offloaded image blocks reach every route as handle text.
+- `requestAt()` reads and folds the whole log on every call and returns every message and the complete system prompt text, without paging.
 
 -----
 

@@ -1,0 +1,192 @@
+/* Fork band at the cut: a label row, the variant chips, and the hairline that closes the band.
+   With Chat's 6px flow gap, the bottom margin keeps the next own row 24px under the hairline,
+   the spacing of Chat's turn dividers. */
+.band {
+  container-type: inline-size;
+  margin-bottom: 18px;
+  padding-bottom: 10px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.label {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 24px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsh-content-font-size, 14px);
+  line-height: 24px;
+  white-space: nowrap;
+}
+
+.icon {
+  flex: none;
+  margin-right: 6px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.parent {
+  overflow: hidden;
+  min-width: 0;
+  margin-left: 0.28em;
+  color: var(--dsw-alias-label-secondary);
+  text-overflow: ellipsis;
+}
+
+.tail {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  margin-left: 0.28em;
+}
+
+.open {
+  margin-left: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--dsw-radius-xs);
+  background: transparent;
+  color: var(--dsw-alias-link);
+  font: inherit;
+  font-weight: 400;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.open:hover {
+  text-decoration: underline;
+}
+
+.variants {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding-top: 10px;
+}
+
+.caption {
+  flex: none;
+  margin-right: 10px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* The chips keep one row at every width and scroll sideways; an end that hides chips fades. */
+.strip {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.strip::-webkit-scrollbar {
+  display: none;
+}
+
+.strip[data-scroll-start] {
+  mask-image: linear-gradient(to right, transparent, #000 24px);
+}
+
+.strip[data-scroll-end] {
+  mask-image: linear-gradient(to left, transparent, #000 24px);
+}
+
+.strip[data-scroll-start][data-scroll-end] {
+  mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent);
+}
+
+.chip {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 240px;
+  height: 24px;
+  padding: 0 8px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chip:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.chipCurrent {
+  border-color: transparent;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+  cursor: default;
+}
+
+.chipIndex {
+  color: var(--dsw-alias-label-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.chipCurrent .chipIndex {
+  color: var(--dsw-alias-label-primary);
+}
+
+.chipTitle {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+/* Narrow form (phone width): the parent title takes its own ellipsized line,
+   and the chip strip drops its caption and uses 32px targets. */
+@container (max-width: 480px) {
+  .label {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr);
+    column-gap: 6px;
+    white-space: normal;
+  }
+
+  .icon {
+    grid-area: 1 / 1;
+    justify-self: center;
+    margin: 0;
+  }
+
+  .lead {
+    grid-area: 1 / 2;
+  }
+
+  .parent {
+    grid-area: 2 / 2;
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  .tail {
+    grid-area: 3 / 2;
+    margin: 0;
+  }
+
+  .variants {
+    margin-left: 22px;
+  }
+
+  .caption {
+    display: none;
+  }
+
+  .chip {
+    max-width: 172px;
+    height: 32px;
+    padding: 0 10px;
+  }
+}

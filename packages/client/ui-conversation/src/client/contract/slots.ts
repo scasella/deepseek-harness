@@ -396,6 +396,15 @@ export interface ConvViewOwnerProps {
   openView: (view: string, focus: string) => void
   /** Acknowledge the current one-shot focus request. */
   completeViewRequest: () => void
+  /**
+   * Keep the floating composer clear of a side column. A View that sets
+   * `data-conversation-composer-overlay` passes the distance in CSS pixels
+   * from its inline start to its main column, and the composer then spans
+   * only that column; zero spans the whole View. The shell resets the
+   * distance to zero whenever the selected View changes or unmounts.
+   * @param pixels - non-negative inline-start offset of the composer.
+   */
+  insetComposerStart: (pixels: number) => void
 }
 
 /** Base props of one target-owned Conversation View entry. */

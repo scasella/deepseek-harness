@@ -62,6 +62,10 @@ describe('Loom family sources', () => {
     second()
     sessions.set(listState([row(ROOT), fork(A, ROOT, 10, { running: true })]))
     expect(source.getSnapshot()).toEqual({ status: 'ready', family })
+    // The last unsubscribe dropped the source; a new lookup starts a fresh one.
+    const fresh = sources.source(A)
+    expect(fresh).not.toBe(source)
+    expect(fresh.getSnapshot()).toEqual({ status: 'loading' })
     source.subscribe(vi.fn())
     expect(ready(source.getSnapshot()).nodes[1]?.running).toBe(true)
     sources.source(ROOT)

@@ -65,10 +65,10 @@
 /* The flow slot's display:contents anchor preserves layout but not selector ancestry.
    `hidden="until-found"` retains a searchable zero-height box; hidden and empty
    Seats do not contribute spacing. */
-:is(.column, :global([data-slot="conversation.chat.flow"])) > :not([hidden]):not(.flowItem:is(:empty, :has(> [data-slot="conversation.chat.node"]:empty)))
-  ~ :not([hidden]):not(.flowItem:is(:empty, :has(> [data-slot="conversation.chat.node"]:empty))),
+:is(.column, :global([data-slot="conversation.chat.flow"])) > :not([hidden]):not(.flowItem:is(:empty, :has(> [data-slot]:empty)))
+  ~ :not([hidden]):not(.flowItem:is(:empty, :has(> [data-slot]:empty))),
 .column:has(> .older) > :global([data-slot="conversation.chat.flow"])
-  > :not([hidden]):not(.flowItem:is(:empty, :has(> [data-slot="conversation.chat.node"]:empty))) {
+  > :not([hidden]):not(.flowItem:is(:empty, :has(> [data-slot]:empty))) {
   margin-top: var(--dsh-chat-flow-gap, 6px);
 }
 
@@ -79,7 +79,7 @@
 }
 
 :is(.column, :global([data-slot="conversation.chat.flow"])) > [data-chat-group-part="response"]:not([hidden]):not(:empty)
-  + :not([hidden]):not(.flowItem:is(:empty, :has(> [data-slot="conversation.chat.node"]:empty))):not(.running) {
+  + :not([hidden]):not(.flowItem:is(:empty, :has(> [data-slot]:empty))):not(.running) {
   --dsh-chat-flow-gap: 12px;
 }
 
@@ -116,13 +116,13 @@
 /* The Turn header has 16px clearance from its input and following content. */
 .flowItem[data-chat-flow-kind="turn-process"],
 .flowItem[data-turn-process-answer],
-:is(.column, :global([data-slot="conversation.chat.flow"])) > [data-chat-flow-kind="turn-process"] + :not([hidden]):not(.flowItem:is(:empty, :has(> [data-slot="conversation.chat.node"]:empty))):not(.running) {
+:is(.column, :global([data-slot="conversation.chat.flow"])) > [data-chat-flow-kind="turn-process"] + :not([hidden]):not(.flowItem:is(:empty, :has(> [data-slot]:empty))):not(.running) {
   --dsh-chat-flow-gap: 16px;
 }
 
 /* Empty Seats, including retained empty slot anchors, preserve Turn lookup
    without contributing height or the sibling gap. */
-.flowItem:is(:empty, :has(> [data-slot="conversation.chat.node"]:empty)) {
+.flowItem:is(:empty, :has(> [data-slot]:empty)) {
   height: 0;
 }
 
@@ -152,7 +152,7 @@
 
 /* The last visible row before the status must contain output, not an input.
    Hidden and empty seats do not separate a user message from the status. */
-:is(.column, :global([data-slot="conversation.chat.flow"])) > :nth-last-child(2 of :not([hidden]):not(.flowItem:is(:empty, :has(> [data-slot="conversation.chat.node"]:empty)))):is(
+:is(.column, :global([data-slot="conversation.chat.flow"])) > :nth-last-child(2 of :not([hidden]):not(.flowItem:is(:empty, :has(> [data-slot]:empty)))):is(
   .flowItem:not([data-chat-flow-kind="user"]):not([data-chat-flow-kind="steering"]):not([data-chat-flow-kind="turn-trigger"]),
   [data-chat-group-key]
 ) ~ .running > .runningDivider {

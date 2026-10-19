@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Loom",
-    "description": "Experimental groundwork for branching conversations"
+    "description": "Read forked conversations as a tree, with a fork band, variant switching, and the Loom tab"
   }
 }

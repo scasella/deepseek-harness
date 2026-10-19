@@ -608,6 +608,16 @@ export class ChatViewport {
   }
 
   /**
+   * Retain one rendered row at its current offset for later layout changes.
+   * @param anchorKey - the row's `data-chat-anchor-key`; an absent or hidden row retains nothing.
+   */
+  beginHolding(anchorKey: string): void {
+    this.stopPreserving()
+    const row = this.anchor(anchorKey)
+    if (row !== null) this.retain(row)
+  }
+
+  /**
    * Retain one old row and its inner/outer offsets for paging and later content growth.
    * @param position - an explicit landing to retain; omitted callers capture the current reading position.
    */

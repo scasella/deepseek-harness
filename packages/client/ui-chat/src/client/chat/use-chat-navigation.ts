@@ -90,6 +90,16 @@ export class ChatNavigation {
     this.request(jump)
   }
 
+  /**
+   * Keep one rendered row in place across the next layout changes and end tail following, as paging does.
+   * @param anchorKey - the row's `data-chat-anchor-key`.
+   */
+  readonly holdRow = (anchorKey: string): void => {
+    this.cancel()
+    this.viewport.beginHolding(anchorKey)
+    this.reading.pauseFollowing()
+  }
+
   /** Request one older page while retaining the current semantic position. */
   readonly loadEarlier = (): void => {
     this.cancel()

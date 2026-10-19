@@ -9,6 +9,7 @@ import type { SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-sess
 import { forkFamily, type LoomFamilyRow } from '@deepseek-ai/dsh-experimental-loom/family'
 import type { LoomFamily } from '@deepseek-ai/dsh-experimental-loom/types'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
+import { keyedSourceRegistry, type KeyedLifecycle } from './keyed-sources.ts'
 
 /** Current family of one Session as the browser knows it. */
 export type LoomFamilyState =
@@ -25,10 +26,11 @@ export interface LoomFamilyInputs {
 /** Keyed fork-family sources owned by one plugin fiber. */
 export interface LoomFamilySources {
   /**
-   * Return the stable source of one Session's family. The source follows the
-   * Session list from its first subscriber until its last unsubscribe.
+   * Return the source of one Session's family. The source follows the
+   * Session list from its first subscriber until its last unsubscribe, which
+   * also drops it, so a later call returns a fresh source.
    * @param key - Session id.
-   * @returns the identity-stable source for that Session.
+   * @returns the source for that Session, stable while observed.
    */
   source(key: string): ObservableSnapshot<LoomFamilyState>
   /** Drop every list subscription. */
@@ -61,7 +63,6 @@ function familyRow(summary: SessionSummary): LoomFamilyRow {
  * @returns keyed sources; the caller disposes them with its fiber.
  */
 export function createLoomFamilySources(inputs: LoomFamilyInputs): LoomFamilySources {
-  const sources = new Map<string, FamilySource>()
   // Every observed source reads the same snapshot, so the rows are mapped once per snapshot.
   let mapped: { readonly list: SessionListState; readonly rows: readonly LoomFamilyRow[] } | undefined
   const rowsOf = (list: SessionListState): readonly LoomFamilyRow[] => {
@@ -75,18 +76,11 @@ export function createLoomFamilySources(inputs: LoomFamilyInputs): LoomFamilySou
     }
     return mapped.rows
   }
+  const sources = keyedSourceRegistry((key, lifecycle) => new FamilySource(SessionId(key), inputs.sessions, rowsOf, lifecycle))
   return {
-    source(key) {
-      let source = sources.get(key)
-      if (source === undefined) {
-        source = new FamilySource(SessionId(key), inputs.sessions, rowsOf)
-        sources.set(key, source)
-      }
-      return source
-    },
+    source: key => sources.get(key),
     dispose() {
-      for (const source of sources.values()) source.close()
-      sources.clear()
+      sources.dispose()
       mapped = undefined
     },
   }
@@ -102,6 +96,7 @@ class FamilySource implements ObservableSnapshot<LoomFamilyState> {
     private readonly sessionId: SessionId,
     private readonly sessions: ObservableSnapshot<SessionListState>,
     private readonly rowsOf: (list: SessionListState) => readonly LoomFamilyRow[],
+    private readonly lifecycle: KeyedLifecycle,
   ) {}
 
   getSnapshot(): LoomFamilyState { return this.state }
@@ -109,12 +104,14 @@ class FamilySource implements ObservableSnapshot<LoomFamilyState> {
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener)
     if (this.listeners.size === 1) {
+      this.lifecycle.active()
       this.unsubscribeList = this.sessions.subscribe(() => { this.derive() })
       this.derive()
     }
     return () => {
       if (!this.listeners.delete(listener) || this.listeners.size > 0) return
       this.close()
+      this.lifecycle.idle()
     }
   }
 

@@ -1539,6 +1539,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the visible family rooted at the highest visible fork ancestor.',
         throws: ['RemoteError `session/not-found` when the caller cannot list the Session.'],
       },
+      {
+        signature: '@Remote async requestAt(request: LoomRequestAtRequest, signal: AbortSignal): Promise<LoomRequestView>',
+        description: 'Rebuild the model request in force at one event of a Session from its whole log, without activating its Agent: the latest request whose `assistant/message` or `assistant/attempt` settlement is at or before `seq`, with its route, tools, effective system prompt, and messages split at the fork cut. The Gateway authorizes the addressed Session through the `sessionId` field the Session Controller registers as the `session` resource, so a caller without access fails with `remote-access/denied` before this method runs.',
+        parameters: [{ name: 'request', description: 'Session and event to read.' }, { name: 'signal', description: 'cancellation for the Session read.' }],
+        returns: 'the request view.',
+        throws: ['RemoteError `session/not-found` when the Session does not exist.', 'RemoteError `loom/seq-out-of-range` when `seq` is not a seq of the log or precedes the first request settlement.', 'RemoteError `gateway/internal` when the log holds no `request/header` before the addressed request.'],
+      },
     ],
   },
   {
@@ -6014,6 +6021,30 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'LoomNodeId',
     declaration: 'export type LoomNodeId = Branded<\'LoomNodeId\'>;',
+  },
+  {
+    name: 'LoomRequestAtRequest',
+    declaration: 'export interface LoomRequestAtRequest {\n    readonly sessionId: SessionId;\n    readonly seq: SessionSeq;\n}',
+  },
+  {
+    name: 'LoomRequestMessage',
+    declaration: 'export interface LoomRequestMessage {\n    readonly seq: SessionSeq;\n    readonly role: \'system\' | \'user\' | \'assistant\' | \'tool\';\n    readonly inherited: boolean;\n    readonly preview: string;\n    readonly chars: number;\n}',
+  },
+  {
+    name: 'LoomRequestRoute',
+    declaration: 'export interface LoomRequestRoute {\n    readonly provider: string;\n    readonly model: string;\n    readonly reasoningEffort?: string;\n}',
+  },
+  {
+    name: 'LoomRequestSystemPrompt',
+    declaration: 'export interface LoomRequestSystemPrompt {\n    readonly chars: number;\n    readonly text: string;\n    readonly changedAtTurn?: number;\n}',
+  },
+  {
+    name: 'LoomRequestTools',
+    declaration: 'export interface LoomRequestTools {\n    readonly names: readonly string[];\n    readonly addedThisTurn: readonly string[];\n    readonly removedThisTurn: readonly string[];\n}',
+  },
+  {
+    name: 'LoomRequestView',
+    declaration: 'export interface LoomRequestView {\n    readonly route: LoomRequestRoute;\n    readonly systemPrompt: LoomRequestSystemPrompt;\n    readonly tools: LoomRequestTools;\n    readonly messages: readonly LoomRequestMessage[];\n    readonly inheritedTurns: number;\n    readonly ownTurns: number;\n}',
   },
   {
     name: 'LspHover',

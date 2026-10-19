@@ -325,6 +325,12 @@ describe('web e2e: long Chat interaction contract', () => {
     const currentCrumb = page.getByRole('navigation', { name: 'Session hierarchy' })
       .getByText(`${FIXTURE.title} (1)`, { exact: true })
     await expect.poll(() => currentCrumb.count(), { timeout: 15_000 }).toBe(1)
+    // The branched Turn is inherited, so Chat folds it behind one row; expanding the row shows it.
+    const inheritedRow = page.getByRole('button', { name: /^Inherited from parent/u })
+    await inheritedRow.waitFor({ timeout: 15_000 })
+    expect(await inheritedRow.getAttribute('aria-expanded')).toBe('false')
+    await inheritedRow.click()
+    expect(await inheritedRow.getAttribute('aria-expanded')).toBe('true')
     await page.getByText(branchAssistantMarker, { exact: false }).last().waitFor({ timeout: 15_000 })
     const settled = scaffold.whenTurnSettled(60_000)
     const composer = page.locator('[data-composer-input][contenteditable="true"]').last()

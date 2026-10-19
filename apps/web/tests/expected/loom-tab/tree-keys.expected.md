@@ -1,0 +1,3 @@
+- tree "Fork family":
+  - treeitem "Loom family, 2 turns · 2 steps, own 4.4K tok, ended" [expanded] [level=1]: Loom family 2 turns · 2 steps 4.4K tok
+  - treeitem "After turn 1, 2 branches, 7.5K tok total" [level=2]: After turn 1 2 branches 7.5K tok total

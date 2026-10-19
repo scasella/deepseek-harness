@@ -2,13 +2,15 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-api-remote-access'
-import type { SessionSummary } from '@deepseek-ai/dsh-api-session-controller'
+import { ApiSessionNotFound, type SessionSummary } from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-session-projection'
 import { forkFamily, type LoomFamilyRow } from './family.ts'
 import { loomBranchProjection } from './projection.ts'
+import { requestViewAt } from './request-at.ts'
 import { installLoomTelemetryRedaction } from './telemetry.ts'
-import type { LoomFamily, LoomFamilyRequest } from './types.ts'
+import type { LoomFamily, LoomFamilyRequest, LoomRequestAtRequest, LoomRequestView } from './types.ts'
 
+export { LOOM_REQUEST_PREVIEW_MAX_CODE_POINTS } from './request-at.ts'
 export type * from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -41,10 +43,10 @@ function familyRow(summary: SessionSummary): LoomFamilyRow {
  * and exposes the `loom` Remote namespace.
  */
 export default class Loom extends TypertRemoteService {
-  static inject = ['remoteAccess', 'sessionController', 'sessionProjections', 'typert']
+  static inject = ['remoteAccess', 'sessionController', 'sessionProjections', 'sessions', 'typert']
 
   /**
-   * @param ctx - Host context carrying the Session Controller, projection registry, and Remote access policy.
+   * @param ctx - Host context carrying the Session Controller, Session store, projection registry, and Remote access policy.
    */
   constructor(ctx: Context) {
     super(ctx, 'loom', { namespace: 'loom' })
@@ -73,5 +75,34 @@ export default class Loom extends TypertRemoteService {
       throw new RemoteError('session/not-found', `Session "${request.sessionId}" is not listed`, { sessionId: request.sessionId })
     }
     return family
+  }
+
+  /**
+   * Rebuild the model request in force at one event of a Session from its
+   * whole log, without activating its Agent: the latest request whose
+   * `assistant/message` or `assistant/attempt` settlement is at or before
+   * `seq`, with its route, tools, effective system prompt, and messages split
+   * at the fork cut. The Gateway authorizes the addressed Session through the
+   * `sessionId` field the Session Controller registers as the `session`
+   * resource, so a caller without access fails with `remote-access/denied`
+   * before this method runs.
+   * @param request - Session and event to read.
+   * @param signal - cancellation for the Session read.
+   * @returns the request view.
+   * @throws RemoteError `session/not-found` when the Session does not exist.
+   * @throws RemoteError `loom/seq-out-of-range` when `seq` is not a seq of the log or precedes the first request settlement.
+   * @throws RemoteError `gateway/internal` when the log holds no `request/header` before the addressed request.
+   */
+  @Remote
+  async requestAt(request: LoomRequestAtRequest, signal: AbortSignal): Promise<LoomRequestView> {
+    const { sessionId, seq } = request
+    const inspection = await this.ctx.sessionController.inspect(sessionId, signal).catch((error: unknown) => {
+      if (error instanceof ApiSessionNotFound) {
+        throw new RemoteError('session/not-found', error.message, { sessionId }, { cause: error })
+      }
+      throw error
+    })
+    signal.throwIfAborted()
+    return requestViewAt(sessionId, inspection, seq, this.ctx.sessions.messageProjections)
   }
 }

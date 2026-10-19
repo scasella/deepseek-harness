@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This optional bundle composes the Loom Host service and its browser plugin. Loom treats forked Sessions as a tree of branches. The installation ships the bundle switched off; no profile template selects it, and the plugin manager lists it under More until it is switched on.
+This optional bundle composes the Loom Host service and its browser plugin. Loom treats forked Sessions as a tree of branches: a fork shows a band at its cut and a variant chip in the conversation header, and every Session gains a Loom tab that reads the fork family. The installation ships the bundle switched off; no profile template selects it, and the plugin manager lists it under More until it is switched on.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ This optional bundle composes the Loom Host service and its browser plugin. Loom
 <a id="use-this-package"></a>
 ## Use this package
 
-Open **Plugins** in the Web sidebar, select **More** beside **Experimental plugins**, and switch on **Loom**; once on, it also appears on the main list. The bundle has no configuration form, and neither composed plugin has configuration fields. Enabling it adds no visible control, because the browser plugin registers no slot entry.
+Open **Plugins** in the Web sidebar, select **More** beside **Experimental plugins**, and switch on **Loom**; once on, it also appears on the main list. The bundle has no configuration form, and neither composed plugin has configuration fields. [`@deepseek-ai/dsh-experimental-client-ui-loom`](../client-ui-loom/README.md) describes what it shows. For development, `pnpm dsh web --patch apps/web/tests/loom.overlay.yml` composes the same rows without switching the bundle on.
 
 -----
 
@@ -51,7 +51,7 @@ The static `cordis.patch.yml` inserts the `loom` row for [`@deepseek-ai/dsh-expe
 <a id="model-experience"></a>
 ## Model Experience
 
-None, as the composed plugins read Session lists and Loom records without adding model-facing content.
+None, as the composed plugins read Session lists, Session logs, and Loom records without adding model-facing content.
 
 #### KV Cache effect
 

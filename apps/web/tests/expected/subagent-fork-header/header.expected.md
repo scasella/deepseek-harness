@@ -1,0 +1,11 @@
+- banner:
+  - navigation "Session hierarchy":
+    - button "Reply PARENT_READY."
+    - text: /
+    - 'button "Switch subagent: Check child reminder refusal"': Check child reminder refusal
+  - text: Standard mode
+  - button "More actions"
+  - button "Open right sidebar"
+  - tablist:
+    - tab "Chat" [selected]
+    - tab "Trajectory"

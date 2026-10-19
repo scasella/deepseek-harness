@@ -29,7 +29,7 @@ export const zh = {
   'global-hint': '全局唤起查看', 'clear-search': '清空搜索',
   title: '快捷键', open: '快捷键速查', settings: '快捷键', view: '编辑快捷键',
   description: '查看和编辑当前可用的快捷键和输入操作', search: '搜索快捷键', close: '关闭快捷键',
-  application: '应用操作', input: '消息输入', menus: '菜单与弹层', approval: '审批区域', unbound: '暂无快捷键',
+  application: '应用操作', input: '消息输入', menus: '菜单与弹层', tree: '树与大纲', approval: '审批区域', unbound: '暂无快捷键',
   empty: '没有匹配的快捷键',
   move: '移动菜单选择', select: '选择菜单项', dismiss: '关闭菜单或顶层弹窗',
 }
@@ -64,7 +64,7 @@ export const en: Record<keyof typeof zh, string> = {
   'global-hint': 'Open from anywhere', 'clear-search': 'Clear search',
   title: 'Keyboard shortcuts', open: 'Open keyboard shortcuts', settings: 'Keyboard shortcuts', view: 'Edit shortcuts',
   description: 'View and edit available shortcuts and input actions', search: 'Search shortcuts', close: 'Close keyboard shortcuts',
-  application: 'Application', input: 'Message input', menus: 'Menus and dialogs', approval: 'Approval area', unbound: 'No shortcut',
+  application: 'Application', input: 'Message input', menus: 'Menus and dialogs', tree: 'Trees and outlines', approval: 'Approval area', unbound: 'No shortcut',
   empty: 'No matching shortcuts',
   move: 'Move menu selection', select: 'Select menu item', dismiss: 'Close menu or top dialog',
 }

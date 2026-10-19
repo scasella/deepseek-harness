@@ -25,6 +25,11 @@ interface ChatNodeSeatProps extends ChatNodeOwnerProps {
   readonly useChatNodeBottom: ChatFlowSlotProps['useChatNodeBottom']
   readonly deferCollapse: boolean
   readonly useGroupAction: ChatFlowSlotProps['useGroupAction']
+  /**
+   * Present while the row belongs to a fork's folded inherited Turns: the row
+   * hides, and browser find or focus reaching it expands the Turns.
+   */
+  readonly revealInherited?: (() => void) | undefined
 }
 
 type RoutedChatNodeOwner = {
@@ -50,6 +55,7 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
   nodeKey, groupPart, useChatNode, useChatNodeProcess, usePresentation,
   cwd, openFile, inspectCall, forkAt,
   loadImage, fileMentions, useStore, actions, renderSlot, t, useChatNodeBottom, deferCollapse, useGroupAction,
+  revealInherited,
 }: ChatNodeSeatProps) {
   const bottom = useChatNodeBottom(nodeKey)
   const node = useChatNode(nodeKey)
@@ -109,9 +115,10 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
     && !processOpen
   const processHidden = controllerInactive || (foldable && processMember && !processOpen)
   const revealProcess = useCallback(() => {
+    revealInherited?.()
     if (processMember) setOpen(true)
-  }, [processMember, setOpen])
-  const wrapperRef = useGroupAction(processHidden, revealProcess)
+  }, [revealInherited, processMember, setOpen])
+  const wrapperRef = useGroupAction(revealInherited !== undefined || processHidden, revealProcess)
   const [disclosureReset] = useState(() => createSnapshotStore(0))
   const turnData = turnDataOf(routedNode)
   const hookContext = useMemo<ChatNodeHookContext>(

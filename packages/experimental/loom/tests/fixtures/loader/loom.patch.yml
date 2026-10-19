@@ -1,0 +1,24 @@
+# Test-only patch over the shipped Web profile and the Loom bundle patch.
+# The production layers own every service; this patch owns only the model
+# route, the persistence directory, the fixture adapter, and turns off
+# profile HMR, which needs launcher readiness this driver does not provide,
+# and title generation, whose background request could outlive the driver.
+- id: agent-default-model
+  config:
+    provider: loom-mock
+    model: loom-mock
+
+- id: session-persistence-jsonl
+  config:
+    root: './.sessions'
+    compression: none
+
+- id: hmr
+  disabled: true
+
+- id: session-title-llm
+  disabled: true
+
+- insert:
+    - id: loom-mock-llm
+      name: './mock-llm.ts'

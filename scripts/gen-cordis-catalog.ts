@@ -703,6 +703,8 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   TranscriptionRequest: 'voice-input.md',
   LoomFamily: 'loom.md',
   LoomFamilyRequest: 'loom.md',
+  LoomRequestAtRequest: 'loom.md',
+  LoomRequestView: 'loom.md',
   CreateTeamTaskRequest: 'agent-team.md',
   SendTeamMessageRequest: 'agent-team.md',
   SendTeamMessageResult: 'agent-team.md',

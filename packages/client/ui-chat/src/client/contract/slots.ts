@@ -64,6 +64,39 @@ export interface AssistantActionOwnerProps {
   messageId: MessageId
 }
 
+/**
+ * Fork lineage offered at a fork's cut. The fields mirror the `forkLineage`
+ * projection; Chat offers them only for a Session with a parent and an
+ * inherited prefix.
+ */
+export interface ForkCutOwnerProps {
+  /** Parent recorded in this Session's header. */
+  readonly parentSession: SessionId
+  /** Seq of the last inherited event, equal in parent and child. */
+  readonly cutSeq: SessionSeq
+  /** Parent Turn of the last inherited `turn/end`; absent when the prefix completes no Turn. */
+  readonly cutTurn?: number
+  /**
+   * Last parent Turn opened before the cut: `cutTurn` for a cut between Turns,
+   * the interrupted Turn for a cut inside one. Absent when the prefix opens no Turn.
+   */
+  readonly inheritedTurn?: number
+  /** Whether the inherited Turns are expanded above the seat. */
+  readonly inheritedOpen: boolean
+}
+
+/** Inherited fork history at the head of the loaded window and the seat at its cut. */
+export interface ChatFlowForkCut {
+  /** Lineage handed to each `conversation.chat.fork-cut` entry. */
+  readonly owner: ForkCutOwnerProps
+  /** Leading flow entries inherited from the parent; zero renders no disclosure row. */
+  readonly inheritedEntries: number
+  /** Inherited closed steps reported by the Session statistics, when available. */
+  readonly inheritedSteps: number | undefined
+  /** Expand or collapse the inherited entries while the disclosure row keeps its position. */
+  readonly toggle: () => void
+}
+
 /** Stable quota failure codes retained in the Session log; both raise the frame-wide notice. */
 export type QuotaNoticeCode = 'QUOTA' | 'ACCOUNT_QUOTA'
 
@@ -335,12 +368,14 @@ export interface ChatFlowOwnerProps extends Pick<ChatNodeOwnerProps,
   readonly pendingInputs: readonly (PendingSubmission | InboxState['next-step'][number])[]
   readonly lastInputTurn: number | undefined
   readonly deferCollapse: boolean
+  /** Present for a fork whose cut lies in the loaded window. */
+  readonly forkCut: ChatFlowForkCut | undefined
 }
 
 /** Full props of the Chat-owned flow renderer. */
 export type ChatFlowSlotProps =
   PropsRuntime<'conversation.chat.flow'>
-  & PropsRenderSlots<'conversation.chat.node'>
+  & PropsRenderSlots<'conversation.chat.node' | 'conversation.chat.fork-cut'>
   & PropsRenderFactories
   & PropsStore<ChatStore>
   & InjectFace<ChatFlowDataInjected>
@@ -427,6 +462,16 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * values replace it. Contributions must preserve access to the original text.
      */
     'conversation.chat.reasoning.body': { kind: 'single'; scope: 'session'; owner: ReasoningBodyOwnerProps }
+    /**
+     * Ordered contributions at a fork's cut, such as a band naming the parent.
+     * In a fork, Chat folds the Turns opened before the cut into one collapsed
+     * disclosure row and renders this seat directly after it, or after the
+     * inherited Turns while they are expanded. The seat renders only while the
+     * cut lies in the loaded window, and never for an unforked Session. Each
+     * entry receives the parent, the cut, and the expansion state; a fresh `id`
+     * adds an entry and entries without content return null.
+     */
+    'conversation.chat.fork-cut': { kind: 'list'; scope: 'session'; owner: ForkCutOwnerProps }
     /**
      * Ordered feature contributions before a completed Turn's action row. Each
      * entry receives the Turn, closing sequence, and file opener. A fresh `id`

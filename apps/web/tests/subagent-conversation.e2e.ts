@@ -623,9 +623,9 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     expect(await page.getByRole('tree', { name: 'Sessions' })
       .getByRole('treeitem', { name: 'Ungrouped', exact: true }).count()).toBe(0)
     const hierarchy = page.getByRole('navigation', { name: 'Session hierarchy' })
-    // The current crumb is plain text; the fork sits at the root, so no ancestor crumb buttons remain.
+    // The current crumb is plain text after the fork's full parent chain: the owner, then the subagent it forked.
     await expect.poll(() => hierarchy.getByText(`${CHILD_TITLE} (1)`, { exact: true }).count()).toBe(1)
-    expect(await hierarchy.getByRole('button').count()).toBe(0)
+    expect(await hierarchy.getByRole('button').allTextContents()).toEqual(['Ask a research subagent to', LABEL])
     await compareOrRefreshGolden(
       FORK_EXPECTED,
       await captureStableAria(page, '[role="tree"][aria-label="Sessions"]', scaffold.workspaceCwd),

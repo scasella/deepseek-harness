@@ -13,7 +13,7 @@ import { installNativeKeyboard } from './native.ts'
 import { Config } from '../config.ts'
 
 export type { ShortcutCatalogEntry, ShortcutCommand, ShortcutContext, ShortcutGesture, Shortcuts } from './types.ts'
-export type { ShortcutFixedInput, ShortcutFixedCommand, ShortcutFixedCatalogEntry } from './types.ts'
+export type { ShortcutFixedInput, ShortcutFixedCommand, ShortcutFixedCatalogEntry, ShortcutFixedGroup } from './types.ts'
 export type { ShortcutBinding, ShortcutCommandId, ShortcutPlatform, ShortcutRuntime } from '../protocol.ts'
 
 declare module '@deepseek-ai/cordis' {

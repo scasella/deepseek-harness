@@ -109,6 +109,23 @@ it('publishes fixed reservations and removes them with their owning registration
   expect(registry.definitions()).toEqual([])
 })
 
+it('lists tree keys under their group and leaves firing to the focused tree', () => {
+  const registry = new ShortcutRegistry('web', 'macos')
+  const keep: ShortcutFixedCommand = { id: 'tree.keep' as ShortcutCommandId, label: () => 'Keep branch', keys: ['K'], bindings: [{ code: 'KeyK', modifiers: [] }], group: 'tree' }
+  const off = registry.registerFixed(keep)
+  expect(registry.fixedCatalog.getSnapshot()).toEqual([{ id: 'tree.keep', label: 'Keep branch', keys: ['K'], bindings: [{ code: 'KeyK', modifiers: [] }], group: 'tree' }])
+  expect(registry.definitions()).toEqual([{ id: 'tree.keep', defaults: {}, fixed: [{ code: 'KeyK', modifiers: [] }] }])
+  // A fixed row never dispatches: a bare letter typed in a page or an editor passes to its local owner.
+  const consume = vi.fn()
+  const gesture = { code: 'KeyK', control: false, alt: false, shift: false, meta: false, repeat: false, composing: false, defaultPrevented: false }
+  for (const region of ['page', 'editable'] as const) {
+    expect(registry.dispatch(gesture, { region, modal: null, target: null }, consume)).toEqual({ status: 'pass' })
+  }
+  expect(consume).not.toHaveBeenCalled()
+  off()
+  expect(registry.fixedCatalog.getSnapshot()).toEqual([])
+})
+
 it('contains observer failures and makes prior consumption visible to later observers', async () => {
   const ctx = new Context()
   ctx.provide('locale', new LocaleRuntime(ctx))

@@ -3,35 +3,38 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/experimental/client-ui-loom/README.md
 /:
-  en: a94b1ffaa09bf42a
-  zh: 18aa01e2baf1d0a8
+  en: eb8909ab48de6d1b
+  zh: a44452794db5afbf
 /deepseek-ai-dsh-experimental-client-ui-loom:
   en: 2cccae0479fa38fe
   zh: 652c99ce2816ef21
 /deepseek-ai-dsh-experimental-client-ui-loom/summary:
-  en: 9a524addabff6df3
-  zh: 36ce230209805c3d
+  en: cda1922721c3a634
+  zh: a2481eb72ff617d3
 /deepseek-ai-dsh-experimental-client-ui-loom/table-of-contents:
   en: d152484eb41ac6b4
   zh: 364c80ee00a374ff
 /deepseek-ai-dsh-experimental-client-ui-loom/use-this-package:
-  en: 6419eaaaf5547e03
-  zh: c9a5a406b3586064
+  en: c450e1428e5ce9a6
+  zh: a1f65fd16d44bbe5
+/deepseek-ai-dsh-experimental-client-ui-loom/use-this-package/the-loom-tab:
+  en: 7b3414fce4a8929c
+  zh: 9cde3837d9643f8b
 /deepseek-ai-dsh-experimental-client-ui-loom/understand-the-implementation:
-  en: 6091a6daece05a28
-  zh: 074da862e74d74b3
+  en: 90b0baed9a05dcf4
+  zh: cccf8c4ba196e8a0
 /deepseek-ai-dsh-experimental-client-ui-loom/further-exploration:
-  en: f01db495a7af9007
-  zh: fbe8bdbeb7b54cb4
+  en: 0479b537d05f4235
+  zh: 5404decd18ff61f3
 /deepseek-ai-dsh-experimental-client-ui-loom/model-experience:
-  en: 4323709a2a8af8f1
-  zh: e798a5e56c9aa2e5
+  en: ad6bf1fb30029d9a
+  zh: 245c92e002972bcf
 /deepseek-ai-dsh-experimental-client-ui-loom/model-experience/kv-cache-effect:
-  en: 592f7fd3f7a70ab5
-  zh: c4d07744adfa78e2
+  en: 116451a350c87e7e
+  zh: 59041ef58023cc30
 /deepseek-ai-dsh-experimental-client-ui-loom/known-limitations-and-deferred-work:
-  en: d0e30f4f51316503
-  zh: 6d8bc493c8e51078
+  en: 0cb4175c54621e0e
+  zh: 65d24b4296e3c2f1
 /deepseek-ai-dsh-experimental-client-ui-loom/known-limitations-and-deferred-work/dev-note:
   en: 0225ba087c5266f3
   zh: 4e706f1b2b984e63

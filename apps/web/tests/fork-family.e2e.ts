@@ -1,6 +1,7 @@
 // Keyless Web e2e over a fork family seeded without model calls: the footer
-// splits a fork's own work from its inherited prefix, the Host lists the fork's
-// lineage, and the seeded log starts as the one the session.fork RPC stores.
+// splits a fork's own work from its inherited prefix, Chat folds the inherited
+// turns and the header names the parent, the Host lists the fork's lineage, and
+// the seeded log starts as the one the session.fork RPC stores.
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import type { Browser, Page } from 'playwright'
@@ -19,6 +20,8 @@ import { newEnglishPage, saveFailureShot } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./expected/fork-family', import.meta.url))
 const DOCK_EXPECTED = join(SNAPSHOT_DIR, 'dock.expected.md')
+const FLOW_EXPECTED = join(SNAPSHOT_DIR, 'flow.expected.md')
+const CRUMBS_EXPECTED = join(SNAPSHOT_DIR, 'crumbs.expected.md')
 const MODE = webSnapshotMode()
 const ROOT_ID = 'fork-family-root'
 const BRANCH_A = 'fork-family-a'
@@ -124,6 +127,32 @@ describe.skipIf(MODE === 'record')('web e2e: seeded fork family', () => {
     await compareOrRefreshGolden(DOCK_EXPECTED, await captureStableAria(page, '[data-composer-dock]', scaffold.workspaceCwd), MODE)
   })
 
+  it('folds the opened fork\'s inherited turns and names its parent in the header', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-fork-family-flow'))
+    // Reading the root lists its durable title, which A's crumb then shows.
+    await page.locator('[role="treeitem"]').nth(3).click()
+    await page.getByText(rootFixture.markers.user(2), { exact: false }).last().waitFor({ timeout: 15_000 })
+    expect(await page.getByRole('button', { name: /Inherited from parent/u }).count()).toBe(0)
+    await expect.poll(() => page.locator('[role="treeitem"]').nth(3).textContent(), { timeout: 15_000 }).toContain(rootFixture.title)
+    await page.locator('[role="treeitem"]').nth(2).click()
+    await page.getByText(`${MARKER_A} This branch continues`, { exact: false }).last().waitFor({ timeout: 15_000 })
+    const inherited = page.getByRole('button', { name: 'Inherited from parent · turn 1 · 1 step' })
+    expect(await inherited.getAttribute('aria-expanded')).toBe('false')
+    expect(await page.getByText(rootFixture.markers.user(1), { exact: false }).isVisible()).toBe(false)
+    await compareOrRefreshGolden(FLOW_EXPECTED, await captureStableAria(page, '[data-chat-flow]', scaffold.workspaceCwd), MODE)
+    await compareOrRefreshGolden(
+      CRUMBS_EXPECTED,
+      await captureStableAria(page, 'nav[aria-label="Session hierarchy"]', scaffold.workspaceCwd),
+      MODE,
+    )
+    await inherited.click()
+    expect(await inherited.getAttribute('aria-expanded')).toBe('true')
+    await page.getByText(rootFixture.markers.user(1), { exact: false }).waitFor({ timeout: 15_000 })
+    await page.getByRole('navigation', { name: 'Session hierarchy' }).getByRole('button', { name: rootFixture.title, exact: true }).click()
+    await expect.poll(() => page.getByRole('button', { name: /Inherited from parent/u }).count(), { timeout: 15_000 }).toBe(0)
+    await page.getByText(rootFixture.markers.user(2), { exact: false }).last().waitFor({ timeout: 15_000 })
+  })
+
   it('lists the opened fork\'s parent, cut, and last inherited turn', async () => {
     const { items } = await scaffold.ctx.sessionController.list({}, new AbortController().signal)
     const row = items.find(item => item.sessionId === SessionId(BRANCH_A))
@@ -176,6 +205,6 @@ describe.skipIf(MODE === 'record')('web e2e: seeded fork family', () => {
   it('kept the console clean and the fixture inventory closed', async () => {
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-    await assertFixtureInventory(SNAPSHOT_DIR, ['dock.expected.md'])
+    await assertFixtureInventory(SNAPSHOT_DIR, ['crumbs.expected.md', 'dock.expected.md', 'flow.expected.md'])
   })
 })

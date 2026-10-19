@@ -21,6 +21,7 @@ kind: "package-reference"
 - [指令与失败行](#command-and-failure-rows)
 - [轮次 token 用量](#turn-token-usage)
 - [已完成轮次的页脚](#completed-turn-footer)
+- [Fork 历史](#fork-history)
 - [轮次过程折叠](#turn-process-folding)
 - [分组渲染](#grouped-rendering)
 - [滚动归属](#scroll-ownership)
@@ -80,6 +81,15 @@ Assistant 尝试结束且没有可见消息时，Chat 隐藏已发布的 Node，
 产物扩展可通过 `ChatNodeStore.turnDataSource` 订阅一个 Turn 中指定类型的节点数据。来源包含隐藏节点，并按锚点顺序提供其业务数据。成员关系增量更新；只有被订阅的集合才生成有序数组，其他 Turn 或类型的更新不通知该集合。
 
 已完成轮次的操作页脚位于记录的轮次结束之后。操作行与前方正文或扩展内容相隔 20px。只有最新轮次且最后可见内容为回复时，操作常显；其他结尾及历史轮次在悬停或键盘聚焦时显示操作。不支持悬停的设备始终显示操作。
+
+-----
+
+<a id="fork-history"></a>
+## Fork 历史
+
+当 `forkLineage` 投影给出父会话和切点时，Chat 会把切点之前开启的轮次（包括被切点打断的轮次）折叠到一行展开控件之后：“继承自父会话 · 第 1 轮 · 7 步”，多轮时显示“第 1–N 轮”，继承步数来自 `sessionStats`，未报告时省略。折叠的行保持挂载并以可搜索方式隐藏，因此浏览器查找、焦点进入和跳转到继承轮次的轮次导航都会先展开该区段。每个 Session 的展开状态保存在 Chat store 中，默认折叠。切换时展开控件保持原位，并停止跟随底部。折叠区段位于已加载窗口开头时，Chat 不显示“加载更早”。
+
+会话作用域的列表 Slot `conversation.chat.fork-cut` 在切点渲染一次：折叠时位于展开控件之后，展开时位于继承轮次之后。条目接收 `ForkCutOwnerProps`：`parentSession`、`cutSeq`、可选的 `cutTurn` 与 `inheritedTurn`，以及 `inheritedOpen`。没有父会话或继承前缀的 Session 既不渲染该行也不渲染该 Slot；切点位于已加载窗口之前时两者也都不渲染；前缀未开启任何轮次时只渲染该 Slot。该 Slot 是 `conversation.chat.flow` 注册的子 Slot，替换 flow 的实现需自行渲染该行和该 Slot。
 
 -----
 

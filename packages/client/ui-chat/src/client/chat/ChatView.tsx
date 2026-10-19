@@ -1,7 +1,7 @@
 // An enclosing `[data-conversation-scroll]` owns scrolling when present;
 // otherwise this view owns it. Each row subscribes to one stable node key.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type {
   NodeKey, RenderEntry,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -11,10 +11,11 @@ import {
   Button, IconChevronDownOutlineRegular, MarkdownDelegateProvider, Modal,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { isAtOrOutside } from '../contract/group-tree.ts'
-import type { ChatFlowHookContext, ChatViewSlotProps, OpenFileOptions } from '../contract/slots.ts'
+import type { ChatFlowForkCut, ChatFlowHookContext, ChatViewSlotProps, OpenFileOptions } from '../contract/slots.ts'
 import type { ChatSnapshot } from '../contract/snapshot.ts'
+import { INHERITED_ROW_KEY, forkCutOf, inheritedEntryCount, lastInheritedTurn } from './inherited-span.ts'
 import { TurnNavigator } from './TurnNavigator.tsx'
-import { mergeTurnRailItems } from './turn-rail-items.ts'
+import { mergeTurnRailItems, type TurnRailItem } from './turn-rail-items.ts'
 import { useChatScroll } from './use-chat-scroll.ts'
 import { fileMediaUrl, resolveWorkspacePath } from '@deepseek-ai/dsh-util-workspace-path'
 import css from './ChatView.module.css'
@@ -60,9 +61,10 @@ const MOTION_TAIL_MS = 800
 export function ChatView({
   useSession, useChat, useConversation, useSessions, renderSlot,
   sessionId, openFile, openExternalLink, loadOlder, loadThrough, loadImage, inspectCall, chatScroll, forkAt, fileMentions,
-  usePresentation, useProjection, t,
+  usePresentation, useProjection, useStore, actions, t,
 }: ChatViewSlotProps) {
   const order = useChat(s => s.order)
+  const groupedView = useConversation(snapshot => snapshot.views.grouped('chat'))
   const groupedEntries = useConversation(snapshot => snapshot.views.grouped('chat')?.entries)
   const entries = useMemo<readonly RenderEntry[]>(() => groupedEntries
     ?? order.map(key => ({ kind: 'node', key: key as NodeKey })), [groupedEntries, order])
@@ -194,6 +196,57 @@ export function ChatView({
   })
   const flowContext = useMemo<ChatFlowHookContext>(() => ({ motion: scroll.motion }), [scroll.motion])
 
+  // A fork folds the Turns opened before its cut into one row while the cut lies in the loaded window.
+  const lineage = useProjection('forkLineage')
+  const cut = useMemo(() => forkCutOf(lineage), [lineage])
+  const inheritedTurn = useChat(s => cut === undefined ? undefined : lastInheritedTurn(s.timeline, cut))
+  const inheritedSteps = useProjection('sessionStats', stats => stats?.fork?.inherited.steps)
+  const inheritedOpen = useStore(s => s.inheritedOpen)
+  const inheritedEntries = useMemo(() => cut === undefined ? 0 : inheritedEntryCount(
+    entries,
+    key => nodeStore.get(key),
+    // A process group never changes Turn, so its current snapshot classifies it.
+    key => groupedView?.groupSource(key).getSnapshot()?.data.turn,
+    cut.cutSeq,
+    inheritedTurn,
+  ), [cut, entries, nodeStore, groupedView, inheritedTurn])
+  const cutVisible = cut !== undefined && openState === 'open' && (!hasMore || inheritedEntries > 0)
+  const folded = cutVisible && inheritedTurn !== undefined && inheritedEntries > 0 && !inheritedOpen
+  const { holdRow, navigateToTurn } = scroll
+  const toggleInherited = useCallback(() => {
+    holdRow(INHERITED_ROW_KEY)
+    actions.setInheritedOpen(!inheritedOpen)
+  }, [holdRow, actions, inheritedOpen])
+  const forkCut = useMemo<ChatFlowForkCut | undefined>(() => !cutVisible ? undefined : {
+    owner: {
+      parentSession: cut.parentSession,
+      cutSeq: cut.cutSeq,
+      ...cut.cutTurn === undefined ? {} : { cutTurn: cut.cutTurn },
+      ...inheritedTurn === undefined ? {} : { inheritedTurn },
+      inheritedOpen,
+    },
+    inheritedEntries,
+    inheritedSteps,
+    toggle: toggleInherited,
+  }, [cutVisible, cut, inheritedTurn, inheritedOpen, inheritedEntries, inheritedSteps, toggleInherited])
+  // The rail lists inherited Turns too: reaching a folded one expands the span first and
+  // lands after the expanded rows have dropped their hidden state.
+  const expandedTurn = useRef<TurnRailItem | null>(null)
+  const navigate = useCallback((item: TurnRailItem) => {
+    if (!inheritedOpen && inheritedTurn !== undefined && item.turn <= inheritedTurn) {
+      expandedTurn.current = item
+      actions.setInheritedOpen(true)
+      return
+    }
+    navigateToTurn(item)
+  }, [actions, inheritedOpen, inheritedTurn, navigateToTurn])
+  useLayoutEffect(() => {
+    const item = expandedTurn.current
+    if (item === null || !inheritedOpen) return
+    expandedTurn.current = null
+    navigateToTurn(item)
+  }, [inheritedOpen, navigateToTurn])
+
   return (
     <div className={css.frame}>
       {scroll.initialized && (
@@ -201,7 +254,7 @@ export function ChatView({
           items={railItems}
           activeTurn={scroll.activeTurn}
           busyTurn={scroll.busyTurn}
-          onNavigate={scroll.navigateToTurn}
+          onNavigate={navigate}
           t={t}
         />
       )}
@@ -216,7 +269,8 @@ export function ChatView({
                 {t('chat.loadError', { message: openError.message, code: openError.code })}
               </div>
             )}
-            {hasMore && (
+            {/* Older pages before a folded span would only add hidden inherited rows. */}
+            {hasMore && !folded && (
               <div className={css.older}>
                 <button type="button" disabled={loadingOlder} onClick={scroll.loadEarlier}>
                   {loadingOlder ? t('loading') : t('chat.loadOlder')}
@@ -225,7 +279,7 @@ export function ChatView({
             )}
             <MarkdownDelegateProvider openFile={requestOpenFile} openExternalLink={openExternalLink} fileImages={fileImages}>
               {renderSlot('conversation.chat.flow', {
-                entries, pendingInputs, lastInputTurn, deferCollapse,
+                entries, pendingInputs, lastInputTurn, deferCollapse, forkCut,
                 cwd, openFile: requestOpenFile, inspectCall, forkAt, loadImage, fileMentions,
               }, { hookContext: flowContext })}
             </MarkdownDelegateProvider>

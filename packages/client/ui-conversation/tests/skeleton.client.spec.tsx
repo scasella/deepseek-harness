@@ -136,6 +136,10 @@ function mount(
     summaryOrigin?: 'subagent'
     /** Insert a first-level subagent between the root and selected child. */
     nestedSubagent?: boolean
+    /** Make the inserted parent an ordinary fork of the root instead of a subagent. */
+    parentFork?: boolean
+    /** Drop the root's summary row (an archived or unlisted parent). */
+    omitRootRow?: boolean
     /** A composer block another plugin raised for this session. */
     composerBlock?: { reason: string }
     /** Mutable view ledger used by registration-order regressions. */
@@ -147,7 +151,8 @@ function mount(
   const parent = sid('parent')
   const rootRow = { id: root, displayTitle: 'Root', running: false, retainedBy: {}, blank: false, updatedAt: 1 }
   const parentRow = {
-    id: parent, displayTitle: 'Parent', parentId: root, origin: 'subagent' as const,
+    id: parent, displayTitle: 'Parent', parentId: root,
+    ...options.parentFork === true ? {} : { origin: 'subagent' as const },
     running: false, retainedBy: {}, blank: false, updatedAt: 2,
   }
   const childRow = {
@@ -161,7 +166,7 @@ function mount(
       ? [root, ...options.nestedSubagent === true ? [parent] : [], SID]
       : [root],
     byId: {
-      [root]: rootRow,
+      ...options.omitRootRow !== true && { [root]: rootRow },
       ...listed && options.nestedSubagent === true && { [parent]: parentRow },
       ...listed && { [SID]: childRow },
     },
@@ -479,7 +484,54 @@ describe('ConversationRoot resident composer', () => {
     // The current crumb is plain text (a drag surface on darwin), not a button.
     expect(b.view.queryByRole('button', { name: 'Child' })).toBeNull()
     expect(b.view.getByText('Child').tagName).toBe('SPAN')
-    expect(b.view.queryByText('Root')).toBeNull()
+  })
+
+  it('shows a fork under its parent, which opens on click', () => {
+    const b = mount(sessionSnapshotOf())
+    const hierarchy = b.view.getByRole('navigation', { name: zh['session.hierarchy'] })
+    expect(hierarchy.textContent).toBe('Root/Child')
+    const root = within(hierarchy).getByRole('button', { name: 'Root' })
+    expect(root.className).not.toContain('crumbSubagent')
+    fireEvent.click(root)
+    expect(b.open).toHaveBeenCalledWith(sid('root'))
+    // Fork ancestors are plain crumbs; only the current crumb offers the lineage seat.
+    expect([...new Set(b.lineageOwners.map(owner => owner.lineageSessionId))]).toEqual([SID])
+  })
+
+  it('keeps every fork ancestor of a fork of a fork', () => {
+    const b = mount(sessionSnapshotOf(), undefined, undefined, { nestedSubagent: true, parentFork: true })
+    const hierarchy = b.view.getByRole('navigation', { name: zh['session.hierarchy'] })
+    expect(hierarchy.textContent).toBe('Root/Parent/Child')
+    expect(within(hierarchy).getAllByRole('button').map(button => button.textContent)).toEqual(['Root', 'Parent'])
+    fireEvent.click(within(hierarchy).getByRole('button', { name: 'Parent' }))
+    expect(b.open).toHaveBeenCalledWith(sid('parent'))
+  })
+
+  it('shows a fork of a subagent child under the subagent and its owner', () => {
+    const b = mount(sessionSnapshotOf(), undefined, undefined, { nestedSubagent: true })
+    const hierarchy = b.view.getByRole('navigation', { name: zh['session.hierarchy'] })
+    expect(hierarchy.textContent).toBe('Root/Parent/Child')
+    expect(within(hierarchy).getByRole('button', { name: 'Parent' }).className).toContain('crumbSubagent')
+    expect(b.view.getByText('Child').className).not.toContain('crumbSubagent')
+    expect(b.lineageOwners.slice(-2).map(owner => owner.lineageSessionId)).toEqual([sid('parent'), SID])
+  })
+
+  it('shows a subagent of a fork under the fork and its parent', () => {
+    const b = mount(sessionSnapshotOf(), undefined, undefined, {
+      nestedSubagent: true, parentFork: true, summaryOrigin: 'subagent',
+    })
+    const hierarchy = b.view.getByRole('navigation', { name: zh['session.hierarchy'] })
+    expect(hierarchy.textContent).toBe('Root/Parent/Child')
+    expect(within(hierarchy).getByRole('button', { name: 'Parent' }).className).not.toContain('crumbSubagent')
+    expect(b.view.getByText('Child').className).toContain('crumbSubagent')
+    expect([...new Set(b.lineageOwners.map(owner => owner.lineageSessionId))]).toEqual([SID])
+  })
+
+  it('starts the hierarchy at the first listed ancestor', () => {
+    const b = mount(sessionSnapshotOf(), undefined, undefined, { omitRootRow: true })
+    const hierarchy = b.view.getByRole('navigation', { name: zh['session.hierarchy'] })
+    expect(hierarchy.textContent).toBe('Child')
+    expect(within(hierarchy).queryByRole('button')).toBeNull()
   })
 
   it('shows hierarchy only for subagents and opens their ordinary owner', () => {

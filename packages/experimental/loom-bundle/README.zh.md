@@ -9,7 +9,7 @@ kind: "package-bundle"
 
 ## 概述
 
-这个可选组合包组合 Loom Host 服务及其浏览器插件。Loom 把 fork 出的 Session 视为由分支组成的树。安装包随附此组合包且默认关闭；没有配置档模板选用它，插件管理器在启用前把它列在「更多」中。
+这个可选组合包组合 Loom Host 服务及其浏览器插件。Loom 把 fork 出的 Session 视为由分支组成的树：fork 出的会话在切点处显示分支标记，并在对话标题栏显示变体标签；每个 Session 都多出一个阅读 fork 家族的 Loom 标签页。安装包随附此组合包且默认关闭；没有配置档模板选用它，插件管理器在启用前把它列在「更多」中。
 
 ## 目录
 
@@ -25,7 +25,7 @@ kind: "package-bundle"
 <a id="use-this-package"></a>
 ## 使用此包
 
-打开 Web 侧栏中的**插件**，点击**实验性插件**旁的**更多**，启用**织机**；启用后它也会出现在主列表中。该组合包没有配置表单，所组合的两个插件也都没有配置字段。启用后没有新增可见控件，因为浏览器插件不注册任何 slot 条目。
+打开 Web 侧栏中的**插件**，点击**实验性插件**旁的**更多**，启用**织机**；启用后它也会出现在主列表中。该组合包没有配置表单，所组合的两个插件也都没有配置字段。[`@deepseek-ai/dsh-experimental-client-ui-loom`](../client-ui-loom/README.zh.md) 说明它显示的内容。开发时，`pnpm dsh web --patch apps/web/tests/loom.overlay.yml` 无需启用组合包即可组合相同的行。
 
 -----
 
@@ -51,7 +51,7 @@ kind: "package-bundle"
 <a id="model-experience"></a>
 ## 模型体验
 
-无，因为所组合的插件只读取 Session 列表与 Loom 记录，不添加面向模型的内容。
+无，因为所组合的插件只读取 Session 列表、Session 日志与 Loom 记录，不添加面向模型的内容。
 
 #### KV 缓存影响
 

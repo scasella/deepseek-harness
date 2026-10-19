@@ -12,6 +12,10 @@
 
 `plugin:loom/branch` 是分支子会话在首次提示前持有的 `LoomBranchRecord`：其分支请求的 `LoomSetId`、源 Session 与包含在内的切点 seq、在 `variantCount` 个子会话中从 1 开始的 `variant`、`LoomBranchKind`，以及可选的 `variantKey` 与 `LoomRunId`。`loomBranch` 投影发布 `{ inheritedEventCount, branch }` 形式的 `LoomBranchView`；只有位于 Session 继承事件数之后（含）的记录才算归属。
 
+## 模型看到的内容
+
+`LoomRequestAtRequest` 指定一个 Session 与任一事件 seq。`LoomRequestView` 描述 settlement（`assistant/message` 或 `assistant/attempt`）位于该 seq 或之前的最新一次模型请求，并按 agent loop 的推导方式从完整日志重建：来自当时生效的 `request/header` 的 `LoomRequestRoute` 与工具名，记录该请求所在 turn 中 `developer/message` 事件所增删工具的 `LoomRequestTools`，包含生效系统提示及其在首个提示之后变化时写入它的 turn 的 `LoomRequestSystemPrompt`，以及每条请求消息对应的一个 `LoomRequestMessage`，带有产生它的 seq、角色、继承标记、有界预览与长度。`inheritedTurns` 与 `ownTurns` 以 fork 切点划分请求之前开始的 turn。该视图是 loop 构建、尚未经提供方路由投影的请求，因此不支持工具更新的路由不会收到 developer 行。不在日志中或早于首个 settlement 的 seq 以 `loom/seq-out-of-range` 失败。
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>
@@ -40,6 +44,24 @@ Loom Host service. It registers the `loomBranch` projection unit and the telemet
  * @throws RemoteError `session/not-found` when the caller cannot list the Session.
  */
 @Remote async family(request: LoomFamilyRequest, signal: AbortSignal): Promise<LoomFamily>
+
+/**
+ * Rebuild the model request in force at one event of a Session from its
+ * whole log, without activating its Agent: the latest request whose
+ * `assistant/message` or `assistant/attempt` settlement is at or before
+ * `seq`, with its route, tools, effective system prompt, and messages split
+ * at the fork cut. The Gateway authorizes the addressed Session through the
+ * `sessionId` field the Session Controller registers as the `session`
+ * resource, so a caller without access fails with `remote-access/denied`
+ * before this method runs.
+ * @param request - Session and event to read.
+ * @param signal - cancellation for the Session read.
+ * @returns the request view.
+ * @throws RemoteError `session/not-found` when the Session does not exist.
+ * @throws RemoteError `loom/seq-out-of-range` when `seq` is not a seq of the log or precedes the first request settlement.
+ * @throws RemoteError `gateway/internal` when the log holds no `request/header` before the addressed request.
+ */
+@Remote async requestAt(request: LoomRequestAtRequest, signal: AbortSignal): Promise<LoomRequestView>
 ```
 
 Source: [`packages/experimental/loom/src/index.ts`](../../packages/experimental/loom/src/index.ts)

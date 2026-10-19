@@ -12,6 +12,10 @@ The experimental [Loom service](../../packages/experimental/loom/README.md) trea
 
 `plugin:loom/branch` is a `LoomBranchRecord` that a branch child holds before its first prompt: the `LoomSetId` of its branch request, the source Session and the inclusive source seq it was cut at, its one-based `variant` among `variantCount` children, the `LoomBranchKind`, and optional `variantKey` and `LoomRunId`. The `loomBranch` projection publishes a `LoomBranchView` of `{ inheritedEventCount, branch }`; only a record at or after the Session's inherited event count is membership.
 
+## What the model saw
+
+`LoomRequestAtRequest` names a Session and any event seq. `LoomRequestView` describes the latest model request whose `assistant/message` or `assistant/attempt` settlement is at or before that seq, rebuilt from the whole log the way the agent loop derives it: a `LoomRequestRoute` and the tool names from the `request/header` in force, a `LoomRequestTools` with the tool additions and removals that `developer/message` events logged in the request's turn, a `LoomRequestSystemPrompt` with the effective system prompt and the turn that wrote it when it changed after the first prompt, and one `LoomRequestMessage` per request message with its producing seq, role, inherited flag, bounded preview, and length. `inheritedTurns` and `ownTurns` split the turns started before the request at the fork cut. The view is the request the loop built before the provider route projects it, so a route without tool-update support does not receive the developer rows. A seq outside the log or before the first settlement fails with `loom/seq-out-of-range`.
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>
@@ -40,6 +44,24 @@ Loom Host service. It registers the `loomBranch` projection unit and the telemet
  * @throws RemoteError `session/not-found` when the caller cannot list the Session.
  */
 @Remote async family(request: LoomFamilyRequest, signal: AbortSignal): Promise<LoomFamily>
+
+/**
+ * Rebuild the model request in force at one event of a Session from its
+ * whole log, without activating its Agent: the latest request whose
+ * `assistant/message` or `assistant/attempt` settlement is at or before
+ * `seq`, with its route, tools, effective system prompt, and messages split
+ * at the fork cut. The Gateway authorizes the addressed Session through the
+ * `sessionId` field the Session Controller registers as the `session`
+ * resource, so a caller without access fails with `remote-access/denied`
+ * before this method runs.
+ * @param request - Session and event to read.
+ * @param signal - cancellation for the Session read.
+ * @returns the request view.
+ * @throws RemoteError `session/not-found` when the Session does not exist.
+ * @throws RemoteError `loom/seq-out-of-range` when `seq` is not a seq of the log or precedes the first request settlement.
+ * @throws RemoteError `gateway/internal` when the log holds no `request/header` before the addressed request.
+ */
+@Remote async requestAt(request: LoomRequestAtRequest, signal: AbortSignal): Promise<LoomRequestView>
 ```
 
 Source: [`packages/experimental/loom/src/index.ts`](../../packages/experimental/loom/src/index.ts)

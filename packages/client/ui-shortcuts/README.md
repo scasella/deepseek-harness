@@ -45,7 +45,7 @@ Hover an application row to highlight its rounded surface and reveal the edit ic
 
 The General Settings entry and shell overlay share one declared interaction store. Catalog and configuration updates arrive through injected observable hooks; recording and persistence use injected service callbacks. The shared modal primitive owns top-layer Escape, Tab traversal, and restoration to the invoking control.
 
-All fixed actions come from the service's observable fixed catalog. Conversation and approval plugins contribute their own actions; this integration contributes shared menu actions. Rows follow locale updates and disappear when their registration is disposed.
+All fixed actions come from the service's observable fixed catalog. Conversation and approval plugins contribute their own actions; this integration contributes shared menu actions. Sections follow the order Application, Message input, Menus and dialogs, Trees and outlines, Approval area; a section without rows is hidden. Rows follow locale updates and disappear when their registration is disposed.
 
 </details>
 

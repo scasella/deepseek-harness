@@ -14,4 +14,6 @@ export interface TurnProcessViewEntry {
 /** Per-Session state shared only by the Chat view and details surface. */
 export interface ChatStoreState {
   turnProcesses: TurnProcessViewEntry[]
+  /** Whether a fork's inherited Turns are expanded; they start collapsed. */
+  inheritedOpen: boolean
 }

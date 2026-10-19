@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useEffect, useMemo } from 'react'
 import type {
-  AssistantMessageNode, ChatFlowHookContext, ChatFlowOwnerProps, ChatFlowSlotProps,
+  AssistantMessageNode, ChatFlowHookContext, ChatFlowOwnerProps, ChatFlowSlotProps, ForkCutOwnerProps,
   ChatNode, ChatNodeHookContext, ChatNodeOwnerProps, ChatSnapshot,
   ChatViewSlotProps, CommandNode, CompactionSummaryNode, ContextMessageNode, ConversationNode,
   LegacyConversationSlice, ModelRetryNode, StartedToolCall, SteeringMessageNode,
@@ -405,6 +405,8 @@ function makeHarness(
   const loadThrough = vi.fn<(seq: number) => Promise<void>>().mockResolvedValue(undefined)
   // Mutable outline holder: tests swap the value and drive a re-render via set().
   let outlineValue: unknown
+  // Keys set here answer before the outline holder, which stands for every other key.
+  const projectionValues = new Map<string, unknown>()
   const openView = vi.fn<(view: string, focus: string) => void>()
   // In-memory scroll memory matching the apply.ts per-session map contract.
   let savedScroll: ReturnType<ChatViewSlotProps['chatScroll']['read']> = null
@@ -437,12 +439,18 @@ function makeHarness(
       hookContext={opts.hookContext} usePerformanceUsage={usePerformanceUsage}
       toolOwners={toolOwners} fallback={opts.fallback} renderAssistantSlot={renderAssistantSlot} />
   }
+  // The fork-cut Seat records each owner and renders a marker standing for a plugin band.
+  const forkCutOwners: ForkCutOwnerProps[] = []
   const renderFlowSlot: ChatFlowSlotProps['renderSlot'] = (key: string, owner: object, opts?: {
     fallback?: React.ReactNode
     hookContext?: unknown
   }) => {
     if (key === 'conversation.chat.node') {
       return renderNodeSlot(key, owner as RoutedChatNodeOwner, opts as Parameters<NodeRenderer>[2])
+    }
+    if (key === 'conversation.chat.fork-cut') {
+      forkCutOwners.push(owner as ForkCutOwnerProps)
+      return <div data-testid="fork-band" />
     }
     throw new Error(`Undeclared flow child: ${key}`)
   }
@@ -480,10 +488,11 @@ function makeHarness(
     ),
     useWorkspaces: emptyWorkspaces(),
     ...allowAllAccess,
-    useProjection: (key: string) => {
+    useProjection: ((key: string, selector?: (value: unknown) => unknown) => {
       const inbox = useTestSession(snapshot => snapshot.testInbox)
-      return key === 'inbox' ? inbox : outlineValue
-    },
+      const value = key === 'inbox' ? inbox : projectionValues.has(key) ? projectionValues.get(key) : outlineValue
+      return selector === undefined ? value : selector(value)
+    }),
     useInput: (() => { throw new Error('unused') }),
     inputActions: {
       captureInsertion: () => ({ start: 0, end: 0, draftRev: 0 }),
@@ -505,6 +514,7 @@ function makeHarness(
     viewRequest: null,
     openView,
     completeViewRequest: () => {},
+    insetComposerStart: () => {},
     openFile,
     openExternalLink: vi.fn(),
     loadOlder,
@@ -538,6 +548,8 @@ function makeHarness(
     set, setSession: session.set, setChat: chatSource.set, ChatView, props,
     openFile, openUserFile, loadOlder, loadThrough, openView,
     setOutline: (value: unknown) => { outlineValue = value },
+    setProjection: (key: string, value: unknown) => { projectionValues.set(key, value) },
+    forkCutOwners,
     chatScroll, forkAt, toolOwners,
     setPerformanceUsage: (mode: 'compact' | 'detailed') => { performanceUsage.set(mode) },
     setGrouped: (value: ConversationGroupedView<ProcessGroupData> | undefined) => {
@@ -4403,5 +4415,219 @@ describe('ChatView', () => {
     expect(status?.querySelector('animate')).toBeNull()
     act(() => { h.setSession({ running: false }) })
     expect(column.querySelector('[data-chat-running]')).toBeNull()
+  })
+})
+
+describe('fork inherited span', () => {
+  const PARENT = 'parent-session' as SessionId
+  const FOLLOWING = Node.DOCUMENT_POSITION_FOLLOWING
+  const lineage = { parentSession: PARENT, cutSeq: SessionSeq(4), cutTurn: 1, createdAt: 1 }
+  // Fixture Turns start one seq before their end: Turn 1 opens at 3 (before the cut at 4), Turn 2 at 7.
+  const forkChat = {
+    nodes: [
+      userInTurn(1, 'inherited question', 1), assistant(2, 'inherited answer', 1),
+      userInTurn(5, 'own question', 2), assistant(6, 'own answer', 2),
+    ],
+    turnTimings: new Map([[1, { startTime: 1_000 }], [2, { startTime: 5_000 }]]),
+    turnEnds: new Map([[1, 4], [2, 8]]),
+  }
+  const ROW = '继承自父会话 · 第 1 轮 · 7 步'
+
+  function forkHarness(session: Partial<TestSessionSnapshot> = {}, init: HarnessUpdate = forkChat) {
+    const h = makeHarness(init, session)
+    h.setProjection('forkLineage', lineage)
+    h.setProjection('sessionStats', { fork: { inherited: { steps: 7 } } })
+    return h
+  }
+
+  function rowOf(view: ReturnType<typeof render>, key: string): HTMLElement {
+    return view.container.querySelector<HTMLElement>(`[data-chat-flow-key="${key}"]`)!
+  }
+
+  it('folds the inherited Turns into one row followed by the fork-cut Seat, and expands them in place', () => {
+    const h = forkHarness()
+    const view = render(<h.ChatView {...h.props} />)
+    const row = view.getByRole('button', { name: ROW })
+    expect(row.getAttribute('aria-expanded')).toBe('false')
+    const inherited = rowOf(view, 'fixture:user:1')
+    expect(inherited.getAttribute('hidden')).toBe('until-found')
+    expect(rowOf(view, 'fixture:assistant:2').hasAttribute('hidden')).toBe(true)
+    expect(rowOf(view, 'fixture:user:5').hasAttribute('hidden')).toBe(false)
+    const band = view.getByTestId('fork-band')
+    expect(row.compareDocumentPosition(band) & FOLLOWING).toBeTruthy()
+    expect(band.compareDocumentPosition(rowOf(view, 'fixture:user:5')) & FOLLOWING).toBeTruthy()
+    expect(h.forkCutOwners.at(-1)).toEqual({
+      parentSession: PARENT, cutSeq: 4, cutTurn: 1, inheritedTurn: 1, inheritedOpen: false,
+    })
+
+    fireEvent.click(row)
+    expect(row.getAttribute('aria-expanded')).toBe('true')
+    expect(inherited.hasAttribute('hidden')).toBe(false)
+    // Expanded, the Seat moves to the cut: after the inherited Turn, before the own one.
+    const movedBand = view.getByTestId('fork-band')
+    expect(inherited.compareDocumentPosition(movedBand) & FOLLOWING).toBeTruthy()
+    expect(movedBand.compareDocumentPosition(rowOf(view, 'fixture:user:5')) & FOLLOWING).toBeTruthy()
+    expect(h.forkCutOwners.at(-1)?.inheritedOpen).toBe(true)
+
+    fireEvent.click(row)
+    expect(row.getAttribute('aria-expanded')).toBe('false')
+    expect(inherited.hasAttribute('hidden')).toBe(true)
+  })
+
+  it('renders neither the row nor the Seat for an unforked Session', () => {
+    const h = makeHarness(forkChat)
+    h.setProjection('forkLineage', { createdAt: 1 })
+    const view = render(<h.ChatView {...h.props} />)
+    expect(view.queryByTestId('fork-band')).toBeNull()
+    expect(view.queryByRole('button', { name: /继承自父会话/ })).toBeNull()
+    expect(rowOf(view, 'fixture:user:1').hasAttribute('hidden')).toBe(false)
+    expect(h.forkCutOwners).toEqual([])
+  })
+
+  it('folds a Turn interrupted by the cut and omits unreported steps', () => {
+    const h = makeHarness({
+      nodes: [userInTurn(1, 'interrupted question', 1), userInTurn(5, 'own question', 2), assistant(6, 'own answer', 2)],
+      turnTimings: new Map([[1, { startTime: 1_000 }], [2, { startTime: 5_000 }]]),
+      turnEnds: new Map([[1, 3], [2, 8]]),
+    })
+    h.setProjection('forkLineage', { parentSession: PARENT, cutSeq: SessionSeq(2), createdAt: 1 })
+    const view = render(<h.ChatView {...h.props} />)
+    expect(view.getByRole('button', { name: '继承自父会话 · 第 1 轮' })).toBeTruthy()
+    expect(rowOf(view, 'fixture:user:1').hasAttribute('hidden')).toBe(true)
+    expect(h.forkCutOwners.at(-1)).toEqual({ parentSession: PARENT, cutSeq: 2, inheritedTurn: 1, inheritedOpen: false })
+  })
+
+  it('names a range of inherited Turns and a single step', () => {
+    const h = makeHarness({
+      nodes: [
+        userInTurn(1, 'first', 1), assistant(2, 'first answer', 1),
+        userInTurn(4, 'second', 2), assistant(5, 'second answer', 2),
+        userInTurn(8, 'own', 3), assistant(9, 'own answer', 3),
+      ],
+      turnTimings: new Map([[1, { startTime: 1_000 }], [2, { startTime: 4_000 }], [3, { startTime: 8_000 }]]),
+      turnEnds: new Map([[1, 3], [2, 6], [3, 10]]),
+    })
+    h.setProjection('forkLineage', { parentSession: PARENT, cutSeq: SessionSeq(6), cutTurn: 2, createdAt: 1 })
+    h.setProjection('sessionStats', { fork: { inherited: { steps: 1 } } })
+    const view = render(<h.ChatView {...h.props} />)
+    expect(view.getByRole('button', { name: '继承自父会话 · 第 1–2 轮 · 1 步' })).toBeTruthy()
+    expect(rowOf(view, 'fixture:user:4').hasAttribute('hidden')).toBe(true)
+    expect(rowOf(view, 'fixture:user:8').hasAttribute('hidden')).toBe(false)
+  })
+
+  it('withholds older pages while the folded span starts the window', () => {
+    const h = forkHarness({ hasMore: true })
+    const view = render(<h.ChatView {...h.props} />)
+    expect(view.queryByText('加载更早')).toBeNull()
+    fireEvent.click(view.getByRole('button', { name: ROW }))
+    expect(view.getByText('加载更早')).toBeTruthy()
+  })
+
+  it('renders no row or Seat while the cut lies before the loaded window', () => {
+    const h = forkHarness({ hasMore: true }, {
+      nodes: [userInTurn(5, 'own question', 2), assistant(6, 'own answer', 2)],
+      turnTimings: new Map([[2, { startTime: 5_000 }]]),
+      turnEnds: new Map([[2, 8]]),
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    expect(view.queryByTestId('fork-band')).toBeNull()
+    expect(view.queryByRole('button', { name: ROW })).toBeNull()
+    expect(view.getByText('加载更早')).toBeTruthy()
+  })
+
+  it('places the Seat at the window head for a fork whose prefix opens no Turn', () => {
+    const h = makeHarness(forkChat)
+    h.setProjection('forkLineage', { parentSession: PARENT, cutSeq: SessionSeq(0), createdAt: 1 })
+    const view = render(<h.ChatView {...h.props} />)
+    const band = view.getByTestId('fork-band')
+    expect(band.compareDocumentPosition(rowOf(view, 'fixture:user:1')) & FOLLOWING).toBeTruthy()
+    expect(view.queryByRole('button', { name: /继承自父会话/ })).toBeNull()
+    expect(h.forkCutOwners.at(-1)).toEqual({ parentSession: PARENT, cutSeq: 0, inheritedOpen: false })
+  })
+
+  it('expands the span when browser find reaches a hidden inherited row', () => {
+    const h = forkHarness()
+    const view = render(<h.ChatView {...h.props} />)
+    act(() => { rowOf(view, 'fixture:user:1').dispatchEvent(new Event('beforematch')) })
+    expect(view.getByRole('button', { name: ROW }).getAttribute('aria-expanded')).toBe('true')
+    expect(rowOf(view, 'fixture:user:1').hasAttribute('hidden')).toBe(false)
+  })
+
+  it('holds the row in place and stops following the tail while the span grows', () => {
+    let notify: (() => void) | undefined
+    class ResizeObserverStub implements ResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        notify = () => { callback([], this) }
+      }
+
+      observe = vi.fn()
+      unobserve = vi.fn()
+      disconnect = vi.fn()
+    }
+    vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+    const h = forkHarness()
+    const view = render(<h.ChatView {...h.props} />)
+    const scroller = view.container.querySelector('[data-chat-flow]')!.parentElement as HTMLDivElement
+    const metrics = installScrollMetrics(scroller, 1_000, 300)
+    metrics.setLayout(1_000, 700)
+    vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue({ top: 0, bottom: 300 } as DOMRect)
+    const row = view.getByRole('button', { name: ROW })
+    vi.spyOn(view.container.querySelector<HTMLElement>('[data-chat-flow-kind="fork-inherited"]')!, 'getBoundingClientRect').mockReturnValue({ top: 20, bottom: 53 } as DOMRect)
+    expect(view.queryByLabelText('回到底部')).toBeNull()
+
+    fireEvent.click(row)
+    metrics.setHeight(1_600)
+    act(() => { notify?.() })
+    // The expanded Turns grow below the row; a following tail would have moved to 1,300.
+    expect(scroller.scrollTop).toBe(700)
+    expect(view.getByLabelText('回到底部')).toBeTruthy()
+  })
+
+  it('expands the span before a rail jump lands on an inherited Turn', async () => {
+    const h = forkHarness()
+    const view = render(<h.ChatView {...h.props} />)
+    const first = await view.findByRole('button', { name: '跳转到第 1 轮' })
+    const scroller = view.container.querySelector('[data-chat-flow]')!.parentElement as HTMLDivElement
+    const metrics = installScrollMetrics(scroller, 1_000, 300)
+    metrics.setLayout(1_000, 700)
+    vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue({ top: 0, bottom: 300 } as DOMRect)
+    vi.spyOn(rowOf(view, 'fixture:user:1'), 'getBoundingClientRect').mockReturnValue({ top: -500, bottom: -440 } as DOMRect)
+
+    fireEvent.click(first)
+    expect(view.getByRole('button', { name: ROW }).getAttribute('aria-expanded')).toBe('true')
+    expect(scroller.scrollTop).toBe(176)
+
+    // An own Turn lands without touching the span.
+    fireEvent.click(view.getByRole('button', { name: ROW }))
+    fireEvent.click(view.getByRole('button', { name: '跳转到第 2 轮' }))
+    expect(view.getByRole('button', { name: ROW }).getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('hides an inherited process group with its Turn', () => {
+    const nodes = [
+      userInTurn(1, 'inherited question', 1), reasoningAssistant(2, 'inherited analysis', 1, 1),
+      assistant(3, 'inherited answer', 1, 2),
+      userInTurn(5, 'own question', 2), reasoningAssistant(6, 'own analysis', 2, 1), assistant(7, 'own answer', 2, 2),
+    ]
+    const builder = new ChatSnapshotBuilder()
+    const groups = new ConversationGroupStore<ProcessGroupData>()
+    const state = new ProcessState()
+    const snapshot = installGroupedSnapshot(builder, state, groups, chatSnapshotFixture({
+      nodes,
+      turnTimings: new Map([[1, { startTime: 1_000 }], [2, { startTime: 5_000 }]]),
+      turnEnds: new Map([[1, 4], [2, 8]]),
+    }))
+    const h = forkHarness({}, { chat: snapshot })
+    h.setGrouped(groups)
+    // Verbose keeps completed Turns unfolded, so only the span hides a group.
+    h.setTranscriptView('verbose')
+    const view = render(<h.ChatView {...h.props} />)
+    const [inheritedGroup, ownGroup] = view.container.querySelectorAll<HTMLElement>('[data-chat-group-key]')
+    expect(inheritedGroup?.getAttribute('hidden')).toBe('until-found')
+    expect(ownGroup?.hasAttribute('hidden')).toBe(false)
+    // Members keep their own visibility; only the group root carries the span's hiding.
+    expect(inheritedGroup?.querySelector('[data-chat-flow-key][hidden]')).toBeNull()
+    act(() => { inheritedGroup?.dispatchEvent(new Event('beforematch')) })
+    expect(inheritedGroup?.hasAttribute('hidden')).toBe(false)
   })
 })

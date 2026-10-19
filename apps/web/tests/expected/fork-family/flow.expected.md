@@ -1,0 +1,11 @@
+- button "Inherited from parent · turn 1 · 1 step"
+- text: FORK_FAMILY_A Take the other approach from here. {{clock}}
+- button "Copy"
+- status: Completed
+- button "Completed in {{duration}}" [disabled]
+- paragraph: FORK_FAMILY_A This branch continues from the inherited answer.
+- button "Copy"
+- button "Good response"
+- button "Bad response"
+- button "Branch into a new conversation"
+- text: {{clock}}

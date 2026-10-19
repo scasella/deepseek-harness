@@ -1,0 +1,244 @@
+/* One Session's path read as a document, in the Chat column's width and type. */
+.document {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: min(742px, 100% - 32px);
+  margin: 0 auto;
+  padding: 24px 0;
+  font-size: var(--dsh-content-font-size, 14px);
+  line-height: 24px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.title {
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.openButton,
+.linkButton {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-link);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.linkButton {
+  margin-left: 8px;
+}
+
+.openButton:hover,
+.linkButton:hover {
+  text-decoration: underline;
+}
+
+.inherited {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.inheritedToggle,
+.sawToggle {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.inheritedToggle:hover,
+.sawToggle:hover {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.preview {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px 12px;
+  margin: 0 0 0 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.preview dt {
+  color: var(--dsw-alias-label-caption);
+}
+
+.preview dd {
+  overflow: hidden;
+  margin: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inheritedTurns {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0 0 0 18px;
+  list-style: none;
+}
+
+.inheritedTurns .preview {
+  margin-left: 0;
+}
+
+.inheritedTurns .preview dd {
+  white-space: normal;
+}
+
+.turnLabel {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.cut {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding-bottom: 10px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.cutIcon {
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.parent {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.status {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.prompt {
+  align-self: flex-end;
+  max-width: 80%;
+  padding: 10px 16px;
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-specific-bubble);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.saw {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-left: 18px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-sm);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+}
+
+.chipName {
+  flex: none;
+  color: var(--dsw-alias-label-primary);
+  white-space: nowrap;
+}
+
+.line,
+.messages {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+}
+
+/* The message count keeps its width; the route ids after it ellipsize on the same line. */
+.messages {
+  display: flex;
+  min-width: 0;
+  white-space: pre;
+}
+
+.messageCount {
+  flex: none;
+}
+
+.route {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reasoning {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.reasoningCount {
+  color: var(--dsw-alias-label-caption);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.reply {
+  min-width: 0;
+}

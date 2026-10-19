@@ -182,7 +182,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     replaceRisk: 'none',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.chat.assistant-actions\', () => ctx.slots.register(\n      { name: \'conversation.chat.assistant-actions\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
-    source: 'packages/client/ui-chat/src/client/contract/slots.ts:441',
+    source: 'packages/client/ui-chat/src/client/contract/slots.ts:486',
   },
   {
     key: 'conversation.chat.commandview',
@@ -233,7 +233,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     occupants: [],
     replaceRisk: 'none',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.chat.commandview\', () => ctx.slots.register(\n      { name: \'conversation.chat.commandview\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
-    source: 'packages/client/ui-chat/src/client/contract/slots.ts:423',
+    source: 'packages/client/ui-chat/src/client/contract/slots.ts:458',
   },
   {
     key: 'conversation.chat.flow',
@@ -243,9 +243,10 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     doc: 'Ordered Chat rows and local echoes with viewport-bound visibility hooks.',
     registerOptions: [],
     ownerProps: [
-      '/** Ordered rows and reconciled local echoes rendered inside one Chat viewport. */\nexport interface ChatFlowOwnerProps extends Pick<ChatNodeOwnerProps,\n  \'cwd\' | \'openFile\' | \'inspectCall\' | \'forkAt\' | \'loadImage\' | \'fileMentions\'> {\n  readonly entries: readonly RenderEntry[]\n  readonly pendingInputs: readonly (PendingSubmission | InboxState[\'next-step\'][number])[]\n  readonly lastInputTurn: number | undefined\n  readonly deferCollapse: boolean\n}',
+      '/** Ordered rows and reconciled local echoes rendered inside one Chat viewport. */\nexport interface ChatFlowOwnerProps extends Pick<ChatNodeOwnerProps,\n  \'cwd\' | \'openFile\' | \'inspectCall\' | \'forkAt\' | \'loadImage\' | \'fileMentions\'> {\n  readonly entries: readonly RenderEntry[]\n  readonly pendingInputs: readonly (PendingSubmission | InboxState[\'next-step\'][number])[]\n  readonly lastInputTurn: number | undefined\n  readonly deferCollapse: boolean\n  /** Present for a fork whose cut lies in the loaded window. */\n  readonly forkCut: ChatFlowForkCut | undefined\n}',
     ],
     ownerPropsReferences: [
+      'ChatFlowForkCut',
       'ChatNodeOwnerProps',
       'PendingSubmission',
       'RenderEntry',
@@ -279,7 +280,71 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     replaceRisk: 'shadows-shipped-ui',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.chat.flow\', () => ctx.slots.register(\n      { name: \'conversation.chat.flow\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
-    source: 'packages/client/ui-chat/src/client/contract/slots.ts:390',
+    source: 'packages/client/ui-chat/src/client/contract/slots.ts:425',
+  },
+  {
+    key: 'conversation.chat.fork-cut',
+    kind: 'list',
+    scope: 'session',
+    summary: 'Ordered contributions at a fork\'s cut, such as a band naming the parent.',
+    doc: 'Ordered contributions at a fork\'s cut, such as a band naming the parent.\nIn a fork, Chat folds the Turns opened before the cut into one collapsed\ndisclosure row and renders this seat directly after it, or after the\ninherited Turns while they are expanded. The seat renders only while the\ncut lies in the loaded window, and never for an unforked Session. Each\nentry receives the parent, the cut, and the expansion state; a fresh `id`\nadds an entry and entries without content return null.',
+    registerOptions: [
+      {
+        name: 'id',
+        requirement: 'required',
+        type: 'string',
+        doc: 'Your cell key. Use an id of your own: a fresh id is added beside the shipped entries, while reusing a shipped id puts you in THAT cell and replaces it. Owners that filter by id address you by it.',
+      },
+      {
+        name: 'order',
+        requirement: 'optional',
+        type: 'number',
+        doc: 'Position among the entries, ascending (default 0).',
+      },
+      {
+        name: 'label',
+        requirement: 'optional',
+        type: 'string | (() => string)',
+        doc: 'Display text where the owner projects one (nav rows, tabs). A thunk is re-read on every projection, so localized text follows the active locale without re-registering.',
+      },
+    ],
+    ownerProps: [
+      '/**\n * Fork lineage offered at a fork\'s cut. The fields mirror the `forkLineage`\n * projection; Chat offers them only for a Session with a parent and an\n * inherited prefix.\n */\nexport interface ForkCutOwnerProps {\n  /** Parent recorded in this Session\'s header. */\n  readonly parentSession: SessionId\n  /** Seq of the last inherited event, equal in parent and child. */\n  readonly cutSeq: SessionSeq\n  /** Parent Turn of the last inherited `turn/end`; absent when the prefix completes no Turn. */\n  readonly cutTurn?: number\n  /**\n   * Last parent Turn opened before the cut: `cutTurn` for a cut between Turns,\n   * the interrupted Turn for a cut inside one. Absent when the prefix opens no Turn.\n   */\n  readonly inheritedTurn?: number\n  /** Whether the inherited Turns are expanded above the seat. */\n  readonly inheritedOpen: boolean\n}',
+    ],
+    ownerPropsReferences: [
+      'SessionId',
+      'SessionSeq',
+    ],
+    standardProps: [
+      'useRemoteAccess: (action: RemoteEndpoint) => boolean',
+      'useResource: UseResource',
+      'useWorkspaces: SnapshotSelectorHook<WorkspaceSnapshot>',
+      'usePanelInfo: UsePanelInfo',
+      'useSessions: UseSessions',
+      'useSessionStatus: UseSessionStatus',
+      'useSessionRetainInfo: UseSessionRetainInfo',
+      'useSessionAccess: (sessionId: SessionId, action: RemoteEndpoint) => boolean',
+      'useWorkspaceAccess: (workspaceId: WorkspaceId, action: RemoteEndpoint) => boolean',
+      'useChat: UseChat',
+      'useConversation: UseConversation',
+      'useInput: SnapshotSelectorHook<InputState>',
+      'inputActions: InputActions',
+      'useSession: SessionSnapshotSelector',
+      'sessionId: SessionId',
+      'useProjection: UseProjection',
+      'useAccess: (action: RemoteEndpoint) => boolean',
+      'useTrajectory: UseTrajectory',
+    ],
+    keyDomain: '',
+    hookContext: '',
+    slotInject: '',
+    declaredBy: 'an entry in \'conversation.chat.flow\' (client-ui-chat), so it exists while that entry is mounted',
+    occupants: [
+      'experimental-client-ui-loom ForkBand id \'loom-fork-band\'',
+    ],
+    replaceRisk: 'none',
+    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.chat.fork-cut\', () => ctx.slots.register(\n      { name: \'conversation.chat.fork-cut\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+    source: 'packages/client/ui-chat/src/client/contract/slots.ts:474',
   },
   {
     key: 'conversation.chat.message.images',
@@ -325,7 +390,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     replaceRisk: 'shadows-shipped-ui',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.chat.message.images\', () => ctx.slots.register(\n      { name: \'conversation.chat.message.images\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
-    source: 'packages/client/ui-chat/src/client/contract/slots.ts:415',
+    source: 'packages/client/ui-chat/src/client/contract/slots.ts:450',
   },
   {
     key: 'conversation.chat.node',
@@ -398,7 +463,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     replaceRisk: 'shadows-shipped-ui',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.chat.node\', () => ctx.slots.register(\n      { name: \'conversation.chat.node\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
-    source: 'packages/client/ui-chat/src/client/contract/slots.ts:402',
+    source: 'packages/client/ui-chat/src/client/contract/slots.ts:437',
   },
   {
     key: 'conversation.chat.reasoning.body',
@@ -441,7 +506,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     replaceRisk: 'shadows-shipped-ui',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.chat.reasoning.body\', () => ctx.slots.register(\n      { name: \'conversation.chat.reasoning.body\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
-    source: 'packages/client/ui-chat/src/client/contract/slots.ts:429',
+    source: 'packages/client/ui-chat/src/client/contract/slots.ts:464',
   },
   {
     key: 'conversation.chat.turnTail',
@@ -506,7 +571,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     replaceRisk: 'none',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.chat.turnTail\', () => ctx.slots.register(\n      { name: \'conversation.chat.turnTail\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
-    source: 'packages/client/ui-chat/src/client/contract/slots.ts:435',
+    source: 'packages/client/ui-chat/src/client/contract/slots.ts:480',
   },
   {
     key: 'conversation.chat.user.images',
@@ -552,7 +617,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     replaceRisk: 'shadows-shipped-ui',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.chat.user.images\', () => ctx.slots.register(\n      { name: \'conversation.chat.user.images\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
-    source: 'packages/client/ui-chat/src/client/contract/slots.ts:417',
+    source: 'packages/client/ui-chat/src/client/contract/slots.ts:452',
   },
   {
     key: 'conversation.composer',
@@ -1678,6 +1743,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
       'client-ui-jobs JobListAction id \'job-list\'',
       'client-ui-subagent SubagentCatalogAction id \'subagent-catalog\'',
       'experimental-client-ui-agent-team TeamAction id \'agent-team\'',
+      'experimental-client-ui-loom VariantChip id \'loom-variant\'',
     ],
     replaceRisk: 'none',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.session.header.actions\', () => ctx.slots.register(\n      { name: \'conversation.session.header.actions\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
@@ -1960,7 +2026,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
       },
     ],
     ownerProps: [
-      '/** Conversation View entries obtain their data from registered standard hooks. */\nexport interface ConvViewOwnerProps {\n  /** Open a tool call\'s inspector when an inspection target is available. */\n  inspectCall: ((callId: string) => void) | undefined\n  /** Focus request addressed to the selected View. */\n  viewRequest: import(\'./views.ts\').ConversationViewRequest | null\n  /** Select a View and address one opaque focus identity to it. */\n  openView: (view: string, focus: string) => void\n  /** Acknowledge the current one-shot focus request. */\n  completeViewRequest: () => void\n}',
+      '/** Conversation View entries obtain their data from registered standard hooks. */\nexport interface ConvViewOwnerProps {\n  /** Open a tool call\'s inspector when an inspection target is available. */\n  inspectCall: ((callId: string) => void) | undefined\n  /** Focus request addressed to the selected View. */\n  viewRequest: import(\'./views.ts\').ConversationViewRequest | null\n  /** Select a View and address one opaque focus identity to it. */\n  openView: (view: string, focus: string) => void\n  /** Acknowledge the current one-shot focus request. */\n  completeViewRequest: () => void\n  /**\n   * Keep the floating composer clear of a side column. A View that sets\n   * `data-conversation-composer-overlay` passes the distance in CSS pixels\n   * from its inline start to its main column, and the composer then spans\n   * only that column; zero spans the whole View. The shell resets the\n   * distance to zero whenever the selected View changes or unmounts.\n   * @param pixels - non-negative inline-start offset of the composer.\n   */\n  insetComposerStart: (pixels: number) => void\n}',
     ],
     ownerPropsReferences: [
       'ConversationViewRequest',
@@ -1992,6 +2058,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     occupants: [
       'client-ui-chat ChatView id \'chat\'',
       'client-ui-trajectory TrajectoryView id \'trajectory\'',
+      'experimental-client-ui-loom LoomView',
     ],
     replaceRisk: 'none',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.view\', () => ctx.slots.register(\n      { name: \'conversation.view\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
@@ -3444,7 +3511,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     replaceRisk: 'none',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'shell.quota-notice\', () => ctx.slots.register(\n      { name: \'shell.quota-notice\', select: owner => null },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
-    source: 'packages/client/ui-chat/src/client/contract/slots.ts:449',
+    source: 'packages/client/ui-chat/src/client/contract/slots.ts:494',
   },
   {
     key: 'sidebar',

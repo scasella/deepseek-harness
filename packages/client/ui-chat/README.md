@@ -21,6 +21,7 @@ File-mention providers receive the viewed Session ID with the closing-turn owner
 - [Command and failure rows](#command-and-failure-rows)
 - [Turn token usage](#turn-token-usage)
 - [Completed-turn footer](#completed-turn-footer)
+- [Fork history](#fork-history)
 - [Turn Process Folding](#turn-process-folding)
 - [Grouped rendering](#grouped-rendering)
 - [Scroll ownership](#scroll-ownership)
@@ -80,6 +81,15 @@ Preference menus restore focus to their trigger without scrolling before publish
 Artifact extensions can subscribe to one Turn and Node kind through `ChatNodeStore.turnDataSource`. The source includes hidden Nodes and exposes their business data in anchor order. Membership updates incrementally; only observed collections materialize ordered arrays, and unrelated Turns or kinds do not notify them.
 
 The completed-turn action footer follows the recorded Turn end. Its action row starts 20px below preceding prose or extension content. Actions remain visible only on the latest Turn when its final visible content is a reply; other endings and historical Turns reveal actions on hover or keyboard focus. Devices without hover keep actions visible.
+
+-----
+
+<a id="fork-history"></a>
+## Fork history
+
+When the `forkLineage` projection names a parent and a cut, Chat folds the Turns opened before the cut, including a Turn the cut interrupts, behind one disclosure row: "Inherited from parent · turn 1 · 7 steps", with "turns 1–N" for several Turns and the inherited step count from `sessionStats`, omitted until reported. The folded rows stay mounted under searchable hiding, so browser find, focus, and turn-rail jumps into an inherited Turn expand the span first. Each Session's choice lives in the Chat store and starts collapsed. A toggle holds the disclosure row in place and stops tail following. While the folded span starts the loaded window, Chat withholds the Load earlier control.
+
+The session-scoped `conversation.chat.fork-cut` list Slot renders once at the cut: after the folded row, or after the inherited Turns while they are expanded. Entries receive `ForkCutOwnerProps`: `parentSession`, `cutSeq`, optional `cutTurn` and `inheritedTurn`, and `inheritedOpen`. A Session without a parent or an inherited prefix renders neither the row nor the Slot, and neither renders while the cut lies before the loaded window; a prefix that opens no Turn renders the Slot without the row. The Slot is a child of the `conversation.chat.flow` registration, so a replacement flow renders the row and the Slot itself.
 
 -----
 

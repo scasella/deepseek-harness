@@ -187,6 +187,24 @@ it('skips hidden and empty paging markers without reading their geometry', () =>
   expect(h.viewport.preserve()?.position?.anchorKey).toBe('visible')
 })
 
+it('holds a named row at its offset and retains nothing for an absent or hidden row', () => {
+  const h = fixture()
+  const held = h.row(h.column, 'held', 120)
+  const hidden = h.row(h.column, 'hidden', 200)
+  hidden.hidden = true
+  h.viewport.beginHolding('missing')
+  expect(h.viewport.preserving).toBe(false)
+  h.viewport.beginHolding('hidden')
+  expect(h.viewport.preserving).toBe(false)
+  h.viewport.beginHolding('held')
+  expect(h.viewport.preserving).toBe(true)
+  // Content growing above the held row moves it down; preservation scrolls by the same amount.
+  h.prepend(80)
+  expect(h.viewport.preserve()?.position).toMatchObject({ anchorKey: 'held', anchorTop: 120 })
+  expect(h.column.scrollTop).toBe(80)
+  expect(held.isConnected).toBe(true)
+})
+
 it('does not measure the viewport when no paging marker is available', () => {
   const h = fixture()
   h.viewport.beginPaging()

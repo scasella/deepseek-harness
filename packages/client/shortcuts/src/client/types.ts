@@ -62,6 +62,11 @@ export type ShortcutFixedInput = {
   readonly context: ShortcutContext
   consume(): void
 } | { readonly type: 'reset' }
+/**
+ * Reference group of a fixed action. `menus` and `tree` hold keys a focused control handles itself:
+ * a `tree` row describes a key an outline tree acts on only while it has focus, never in an editable region.
+ */
+export type ShortcutFixedGroup = 'application' | 'input' | 'menus' | 'tree' | 'approval'
 /** Read-only input action contributed while its owning feature is mounted. */
 export interface ShortcutFixedCommand {
   readonly id: ShortcutCommandId
@@ -69,7 +74,7 @@ export interface ShortcutFixedCommand {
   readonly keys: readonly string[]
   /** One or more physical combinations reserved by this action, including individual steps of a sequence. */
   readonly bindings: readonly [ShortcutBinding, ...ShortcutBinding[]]
-  readonly group: 'application' | 'input' | 'menus' | 'approval'
+  readonly group: ShortcutFixedGroup
 }
 /** Localized fixed-action row; its key sequence is not an editable binding. */
 export interface ShortcutFixedCatalogEntry {

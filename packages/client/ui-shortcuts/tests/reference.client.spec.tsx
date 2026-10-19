@@ -197,6 +197,8 @@ it('keeps core actions in product order across registration, remount and label c
     { ...stop, id: 'fixed.select' as ShortcutCommandId, label: 'Select', keys: ['Enter'], bindings: [{ code: 'Enter', modifiers: [] }], group: 'menus' },
     { ...stop, id: 'fixed.dismiss' as ShortcutCommandId, label: 'Dismiss', group: 'menus' },
     { ...stop, id: 'approval.accept' as ShortcutCommandId, label: 'Approve', keys: ['Enter'], bindings: [{ code: 'Enter', modifiers: [] }], group: 'approval' },
+    { ...stop, id: 'tree.keep' as ShortcutCommandId, label: 'Keep branch', keys: ['K'], bindings: [{ code: 'KeyK', modifiers: [] }], group: 'tree' },
+    { ...stop, id: 'tree.branch' as ShortcutCommandId, label: 'Branch here', keys: ['G'], bindings: [{ code: 'KeyG', modifiers: [] }], group: 'tree' },
     { ...stop, id: 'fontSize.increase' as ShortcutCommandId, label: 'Increase font size', keys: ['⌘', '='], bindings: [{ code: 'Equal', modifiers: ['meta'] }], group: 'application' },
     { ...stop, id: 'fontSize.decrease' as ShortcutCommandId, label: 'Decrease font size', keys: ['⌘', '-'], bindings: [{ code: 'Minus', modifiers: ['meta'] }], group: 'application' },
     stop,
@@ -213,7 +215,12 @@ it('keeps core actions in product order across registration, remount and label c
     expect(labels(en.application)).toEqual(expected)
     expect(labels(en.input)).toEqual(['Newline', 'Send', 'Stop reply'])
     expect(labels(en.menus)).toEqual(['Dismiss', 'Select'])
+    expect(labels(en.tree)).toEqual(['Branch here', 'Keep branch'])
     expect(labels(en.approval)).toEqual(['Approve'])
+    // Tree keys sit between the menu and approval sections, under their own heading.
+    expect(screen.getAllByRole('region').map(region => region.getAttribute('aria-label')))
+      .toEqual([en.application, en.input, en.menus, en.tree, en.approval])
+    expect(within(screen.getByRole('region', { name: en.tree })).getByRole('heading', { level: 3 }).textContent).toBe(en.tree)
   }
   const stopRow = screen.getByText('Stop reply').closest('li')!
   expect(within(stopRow).queryByRole('button')).toBeNull()

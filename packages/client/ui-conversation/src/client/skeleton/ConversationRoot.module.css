@@ -115,8 +115,20 @@
   min-width: 0;
 }
 
+/* Ancestors shrink before the current Session's crumb, which keeps a readable share of the row. */
+.crumbSeg:not(:last-child) {
+  flex: 0 100 auto;
+  min-width: 3em;
+}
+
+.crumbSeg:last-child {
+  flex: 0 1 auto;
+  min-width: min(55%, 12em);
+}
+
 .crumbSep {
   /* figma: "/" separators are 14px caption gray (75:7903), one tint lighter than crumb text. */
+  flex: none;
   color: var(--dsw-alias-label-caption);
   font-size: 14px;
   line-height: 20px;
@@ -497,7 +509,8 @@ button.crumb:hover {
      ([decision](../../../../../../.agents/notes/archived/bug-fix/2026-08-12-composer-overlay-seat-width-compensation.md)). */
   right: var(--dsh-scrollbar-width);
   bottom: 0;
-  left: 0;
+  /* A View with a side column keeps the composer under its main column through `insetComposerStart`. */
+  left: var(--dsh-composer-inset-start, 0px);
 }
 
 /* Hero phase: the composer stack (hero chrome + workspace row + card) is

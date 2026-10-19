@@ -58,7 +58,7 @@ Loom 分支始终是通过 `SessionController.fork` 创建的顶层 fork Session
 - F9：修复 pi-ai 路由：映射 `usage.reasoning`，经 `samplingParams` 透传 `stop`，通过路由 profile 的 `openRouterProvider` 字段固定模型提供商，并提供可用的「关闭思考」映射。
 - 工具链探查：在本机检验 `persistence-changes --record` 与 Python SDK 快照刷新。
 
-**S1 定位（只读）。** L1：fork 横条、在 Chat 中折叠继承区段、页眉中的 fork 面包屑，以及页脚中自身／继承的计数；L8：带大纲树与阅读窗格的 Loom 标签页；L26：以 `loom.requestAt` Remote 提供「模型看到了什么」；L20：树形快捷键；L27：在同级卡片上折叠推理（reasoning）内容并显示其 token 数。
+**S1 定位（只读）。** L1：fork 横条、在 Chat 中折叠继承区段（ui-chat 的发布改动，含其 `conversation.chat.fork-cut` slot）、页眉中的 fork 面包屑，以及页脚中自身／继承的计数；L8：带大纲树与阅读窗格的 Loom 标签页；L26：以 `loom.requestAt` Remote 提供「模型看到了什么」；L20：树形快捷键；L27：在同级卡片上折叠推理（reasoning）内容并显示其 token 数。
 
 **S2 分支。** L3：重新生成 ×N；L4：N 路分支，每个子 Session 各带一行 steering（中途引导）；L5：运行中分支条带；L11：路由覆盖；L2：同级翻页器（需要扩展 `AssistantActionOwnerProps`，并在 ui-chat 的 Branch 之后增加一个座位）；L13：编辑较早的用户消息并分支（新的 `conversation.chat.user-actions` 座位）；L15：带遥测脱敏监听器的私有标记；L23：提示词变体集。
 
@@ -95,7 +95,7 @@ Loom 分支始终是通过 `SessionController.fork` 创建的顶层 fork Session
 
 ## 验收标准
 
-- 启用 Loom 组合包时，L1–L27 的每项提案和 Weave 都能在 Web 应用中使用；停用时没有任何变化，上文列出的发布包所有者改动除外（侧边栏中的 fork 家族、fork 面包屑、页脚中自身／继承的计数、fork 模式 subagent 页眉中只统计自身的 token、pi-ai 的 `stop`／关闭思考／推理计数映射、`forkLineage` 投影、限定范围的搜索参数、logprob 采集）。
+- 启用 Loom 组合包时，L1–L27 的每项提案和 Weave 都能在 Web 应用中使用；停用时没有任何变化，上文列出的发布包所有者改动除外（侧边栏中的 fork 家族、fork 面包屑、Chat 中折叠到一行的继承历史及其 `conversation.chat.fork-cut` slot、页脚中自身／继承的计数、fork 模式 subagent 页眉中只统计自身的 token、pi-ai 的 `stop`／关闭思考／推理计数映射、`forkLineage` 投影、限定范围的搜索参数、logprob 采集）。
 - 每个阶段的无密钥测试、快照和 Web 预期输出在 CI 中通过，其真实 API 套件在本地通过，且花费控制在为本工作批准的 5 美元台账之内。
 - 没有新增 `as unknown` 断言，no-unknown-casts 基线不增长，新文件和受门禁约束的文件达到逐文件 100% 覆盖率，并且 `doc-sync` 通过。
 - `block-end.logprobs` 与 `turn/start.continuation?` 都有持久化确认记录；TypeScript 与 Python SDK 的预期输出已为 F10 刷新。

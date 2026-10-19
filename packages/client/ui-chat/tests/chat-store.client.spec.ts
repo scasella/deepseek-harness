@@ -16,6 +16,15 @@ describe('createChatStore', () => {
     expect(store.store.getSnapshot().turnProcesses).toEqual([{ turn: 2, answerStep: 4 }])
   })
 
+  it('starts a fork with its inherited Turns collapsed and keeps the reader\'s choice', () => {
+    const store = createChatStore().create()
+    expect(store.store.getSnapshot().inheritedOpen).toBe(false)
+    store.actions.setInheritedOpen(true)
+    expect(store.store.getSnapshot()).toEqual({ turnProcesses: [], inheritedOpen: true })
+    store.actions.setInheritedOpen(false)
+    expect(store.store.getSnapshot().inheritedOpen).toBe(false)
+  })
+
   it('closes only the requested Turn-process entry', () => {
     const store = createChatStore().create()
     store.actions.setTurnProcessOpen(2, 3, true)
