@@ -28,6 +28,12 @@ interface LoomLoaderReport {
   readonly settlements: readonly number[]
   readonly views: readonly LoomRequestView[]
   readonly outOfRange: string | undefined
+  readonly search: {
+    readonly own: readonly string[]
+    readonly inherited: readonly string[]
+    readonly excludedInherited: readonly string[]
+    readonly excludedOwn: readonly string[]
+  }
 }
 
 describe('Loom through a real Loader composition', () => {
@@ -52,12 +58,18 @@ describe('Loom through a real Loader composition', () => {
     })
     expect(stderr).not.toContain('UNHANDLED')
     if (report === undefined) throw new Error('the Loom driver wrote no report')
-    expect(report.entries).toEqual([
+    expect([...report.entries].sort((a, b) => a.id.localeCompare(b.id))).toEqual([
       { id: 'loom', name: '@deepseek-ai/dsh-experimental-loom', active: true },
       { id: 'ui-loom', name: '@deepseek-ai/dsh-experimental-client-ui-loom', active: true },
     ])
     expect(report.clientRoster).toContain('@deepseek-ai/dsh-experimental-client-ui-loom')
     expect(report.outOfRange).toBe('loom/seq-out-of-range')
+    expect(report.search).toEqual({
+      own: [report.childId],
+      inherited: [report.childId],
+      excludedInherited: [],
+      excludedOwn: [],
+    })
 
     const [rootRequest, ...rootRest] = requests.filter(request => request.sessionId === report?.rootId)
     const [childRequest, ...childRest] = requests.filter(request => request.sessionId === report?.childId)

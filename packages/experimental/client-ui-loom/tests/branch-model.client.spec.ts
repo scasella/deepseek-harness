@@ -8,7 +8,10 @@ import { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import { RemoteError, type RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { LoomTrackedSet } from '../src/client/branching.ts'
 import { duplicateRows } from '../src/client/BranchForm.tsx'
-import { cachePercent, failureText, routeLabel, routeText, rowsText } from '../src/client/format.ts'
+import {
+  cachePercent, durationText, failureText, isolationReasonText, listText, pathsText, pointReading, rangeText, routeLabel, routeText,
+  rowsText, usdText,
+} from '../src/client/format.ts'
 import { branchOf, lastInheritedTurnOf, markOf } from '../src/client/lineage.ts'
 import { createLoomRoutes, inheritedRoute, type LoomRouteOption } from '../src/client/routes.ts'
 import { stripOf, type LoomStripInput } from '../src/client/strip.ts'
@@ -287,6 +290,75 @@ describe('marks, routes, and failures', () => {
     ])
     expect(text({ code: 'loom/turn-unavailable', unknownOutcome: false })[0]).toBe('The request failed (loom/turn-unavailable)')
     expect(text({ code: 'other/code', unknownOutcome: false })).toEqual(['The request failed (other/code)', '请求失败（other/code）'])
+  })
+
+  it('reads prices, ranges, durations, paths, cuts, and lists in both locales', () => {
+    expect([0, 0.0004, 0.001, 0.0062805, 0.0099, 1, 12.345].map(amount => usdText(amount, tEn)))
+      .toEqual(['$0', '<$0.001', '$0.001', '$0.006', '$0.010', '$1.00', '$12.35'])
+    expect(usdText(0.5, tZh)).toBe('$0.500')
+    const dollars = (value: number): string => usdText(value, tEn)
+    expect(rangeText(0.006, 0.01, dollars, tEn)).toBe('$0.006–$0.010')
+    expect(rangeText(0.0081, 0.0082, dollars, tEn)).toBe('$0.008')
+    expect([0, 400, 22_000, 59_600, 60_000, 65_000, 3_725_000].map(ms => durationText(ms, tEn)))
+      .toEqual(['0s', '0s', '22s', '1m 0s', '1m 0s', '1m 5s', '62m 5s'])
+    expect(durationText(65_000, tZh)).toBe('1 分 5 秒')
+    expect([pathsText(['a'], tEn), pathsText(['a', 'b', 'c'], tEn), pathsText(['a', 'b', 'c', 'd', 'e'], tEn)])
+      .toEqual(['a', 'a, b, c', 'a, b, c and 2 more'])
+    expect(pathsText(['a', 'b', 'c', 'd'], tZh)).toBe('a、b、c 等另外 1 个')
+    expect([pointReading(1, undefined, tEn), pointReading(undefined, undefined, tEn), pointReading(1, 2, tEn), pointReading(2, 2, tZh)])
+      .toEqual(['After turn 1', 'Before turn 1 ended', 'During turn 2', '第 2 轮之后'])
+    expect(listText(['a'], tEn)).toBe('a')
+    expect(listText(['a', 'b', 'c'], tZh)).toBe('a、b、c')
+  })
+
+  it('names the reasons worktree isolation can be refused, and shows an unknown reason verbatim', () => {
+    expect((['service-unavailable', 'read-only', 'no-repository', 'subdirectory', 'linked-checkout'] as const).map(reason => isolationReasonText(reason, tEn))).toEqual([
+      'the worktree service is not running',
+      'this Session cannot write its folder',
+      'this folder is not in a git repository',
+      'the git repository root lies above this folder, outside what this Session may write',
+      'this folder is a linked checkout or submodule whose git data lies elsewhere',
+    ])
+    expect(isolationReasonText('no-repository', tZh)).toBe('此文件夹不在 git 仓库中')
+    // A reason a newer Host names shows verbatim, whatever it is called.
+    expect(isolationReasonText('constructor' as 'read-only', tEn)).toBe('constructor')
+  })
+
+  it('describes the refusals of isolation and apply in both locales', () => {
+    const text = (failure: Parameters<typeof failureText>[0]) => [failureText(failure, tEn), failureText(failure, tZh)]
+    expect(text({ code: 'loom/isolation-unavailable', isolationReason: 'no-repository', unknownOutcome: false })).toEqual([
+      'Worktree isolation is unavailable: this folder is not in a git repository; no branch started',
+      'worktree 隔离不可用：此文件夹不在 git 仓库中；未开始任何分支',
+    ])
+    expect(text({ code: 'loom/isolation-unavailable', unknownOutcome: false })[0]).toBe('The request failed (loom/isolation-unavailable)')
+    expect(text({ code: 'loom/apply-dirty', paths: ['a.py', 'b.py'], unknownOutcome: false })).toEqual([
+      'The source folder has uncommitted changes in a.py, b.py; nothing was applied',
+      '源文件夹中 a.py、b.py 有未提交的改动，未应用任何内容',
+    ])
+    expect(text({ code: 'loom/apply-conflict', paths: ['a.py'], unknownOutcome: false })[0])
+      .toBe('This change conflicts with the source folder in a.py; nothing was applied')
+    expect(text({ code: 'loom/apply-conflict', unknownOutcome: false })[0]).toBe('This change does not apply to the source folder; nothing was applied')
+    expect(text({ code: 'loom/apply-conflict', paths: [], unknownOutcome: false })[1]).toBe('此改动无法应用到源文件夹，未应用任何内容')
+    expect(text({ code: 'loom/apply-dirty', unknownOutcome: false })[0]).toBe('The source folder has uncommitted changes in ; nothing was applied')
+    expect(text({ code: 'loom/apply-not-isolated', unknownOutcome: false })[0]).toBe('This branch shares the folder, so it has no worktree change to apply')
+    expect(text({ code: 'loom/apply-too-large', limit: 4096, unknownOutcome: false })[0]).toBe('This change is larger than the apply limit of 4096 bytes; nothing was applied')
+    expect(text({ code: 'loom/apply-too-large', unknownOutcome: false })[0]).toBe('This change is larger than the apply limit of 0 bytes; nothing was applied')
+    expect((['shared', 'removed', 'missing'] as const).map(worktreeReason => failureText({ code: 'loom/worktree-unavailable', worktreeReason, unknownOutcome: false }, tEn))).toEqual([
+      'This branch worked in the shared folder, so it has no worktree',
+      "This branch's worktree was already removed",
+      "This branch's worktree is no longer registered in its repository",
+    ])
+    expect(text({ code: 'loom/worktree-unavailable', unknownOutcome: false })[0]).toBe('The request failed (loom/worktree-unavailable)')
+    expect(text({ code: 'loom/diff-unavailable', unknownOutcome: false })).toEqual(["This Host does not hold this branch's changes", '此主机没有保存该分支的改动'])
+    expect(text({ code: 'loom/worktree-cleanup-failed', paths: ['a.py'], unknownOutcome: false })[0])
+      .toBe('The change was applied to the folder (a.py), but its worktree could not be removed; discard the worktree to try again')
+    expect(text({ code: 'loom/worktree-cleanup-failed', unknownOutcome: false })[0]).toContain('applied to the folder (),')
+    expect([1, 2].map(remaining => failureText({ code: 'loom/adopt-incomplete', remaining, unknownOutcome: false }, tEn))).toEqual([
+      'Adopted, but 1 sibling could not be archived; adopt again to archive the rest',
+      'Adopted, but 2 siblings could not be archived; adopt again to archive the rest',
+    ])
+    expect(text({ code: 'loom/adopt-incomplete', unknownOutcome: false })[0]).toContain('0 siblings')
+    expect(text({ code: 'loom/not-a-fork', unknownOutcome: false })).toEqual(['This Session is not a fork, so it has no siblings', '此会话不是 fork，没有同级分支'])
   })
 
   it('groups the rows that share a line', () => {

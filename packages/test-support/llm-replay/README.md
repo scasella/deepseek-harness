@@ -79,6 +79,10 @@ When replay serves `deepseek-official` with `ctx.deepseekLlmApiExtensions`, it p
 
 Two failure modes are not reconstructable from a durable Assistant settlement alone: a pure throw before any chunk has no exception-bearing stream member, and a cancel/hang requires nontermination rather than a replayed finite prefix. A scenario that needs those supplies an optional sidecar (`<scenario>/replay.override.json`) that either replaces the derived script with a bare `ReplayEntry[]` or augments it with `{ patches: [{ at, entry }] }`, which keeps every derived call and swaps the named 0-based call indexes; `at` equal to the derived length appends the retry attempt after an injected transient throw. A `throw` entry accepts DeepSeek request extensions when it has prefix chunks; a zero-chunk throw defaults to pre-2xx non-acceptance and may set `accepted: true` for a post-2xx failure. A `hang` entry may name `readyFile`, which replay writes before waiting for cancellation so an external driver can cancel deterministically.
 
+### Replay Loom auxiliary generations
+
+The reader retains `block-end.logprobs` unchanged and derives calls from `plugin:loom/weave-node` streams. Parallel siblings are ordered by their recorded `requestSeq` and `index`, independent of completion order; ordinary calls retain log order. Invalid node references or streams fail explicitly. Replay models may declare `tokenLogprobs: { maxTopLogprobs: 20 }` and `assistantPrefill: tool-free` so prepared auxiliary callers exercise the same admission rules without provider I/O.
+
 ### What can go wrong
 
 - **The fixture is not fully consumed** — `assertConsumed()` at teardown turns a scenario that silently drove fewer model calls than recorded into a crisp diagnostic; call it when installing replay directly in a test.

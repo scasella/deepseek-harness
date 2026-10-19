@@ -54,6 +54,7 @@ function sessionAgent(session: Session, id = 'agent'): Agent {
     status: 'running',
     ctx: new Context(),
     send: () => {},
+    continue: () => {},
     followup: () => {},
     steer: () => {},
     inject: () => { throw new Error('time-context must append directly to the open step') },

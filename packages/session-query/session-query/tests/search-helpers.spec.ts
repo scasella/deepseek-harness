@@ -6,6 +6,7 @@ import SessionStore, {
   SESSION_FORMAT_VERSION,
   SessionId,
   SessionSeq,
+  SessionLogOffset,
 } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
@@ -193,6 +194,27 @@ describe('session-query document and filter helpers', () => {
       [2, 'replacement', 'current'],
       [3, 'interrupted', 'log-only'],
     ])
+  })
+
+  it('filters ownership at the exact inherited prefix without changing surface classification', () => {
+    const documents = buildSessionEventSearchDocuments(id, events)
+    const inheritedEventCount = SessionLogOffset(2)
+    expect(filterSessionEventDocuments(documents, [{ kind: 'ownership', values: ['inherited'] }], inheritedEventCount))
+      .toEqual([documents[0]])
+    expect(filterSessionEventDocuments(documents, [{ kind: 'ownership', values: ['own'] }], inheritedEventCount))
+      .toEqual(documents.slice(1))
+    expect(filterSessionEventDocuments(documents, [{ kind: 'ownership', values: ['own', 'inherited'] }], inheritedEventCount))
+      .toEqual(documents)
+    expect(filterSessionEventDocuments(documents, [{ kind: 'ownership', values: [] }], inheritedEventCount)).toEqual([])
+    expect(filterSessionEventDocuments(documents, [{ kind: 'ownership', values: ['inherited'] }])).toEqual([])
+    expect(() => filterSessionEventDocuments(documents, [{ kind: 'ownership', values: ['future' as never] }]))
+      .toThrow(expectCode('SESSION_QUERY_INVALID_FILTER'))
+    const values = ['own'] as Array<'own' | 'inherited'>
+    const copied = materializeSessionEventResultFilters([{ kind: 'ownership', values }])
+    values.push('inherited')
+    expect(copied).toEqual([{ kind: 'ownership', values: ['own'] }])
+    expect(() => materializeSessionEventResultFilters([{ kind: 'ownership', values: ['future' as never] }]))
+      .toThrow(expectCode('SESSION_QUERY_INVALID_FILTER'))
   })
 
   it('applies every session clause with OR values and validates closed values', () => {

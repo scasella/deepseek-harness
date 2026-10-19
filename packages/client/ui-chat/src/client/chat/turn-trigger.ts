@@ -32,6 +32,10 @@ export function turnTriggerDetails(node: ContextMessageNode): {
       icon = 'goal'
       break
     }
+    case 'loom':
+      title = 'message.trigger.loom'
+      icon = 'agent'
+      break
     case 'agent-message':
       title = 'message.trigger.agent'
       icon = 'agent'

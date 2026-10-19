@@ -76,6 +76,7 @@ export function foldConsumedWork(events: readonly SessionEvent[]): ConsumedWork 
     switch (event.type) {
       case 'turn/start':
         open = event.data.turn
+        if (event.data.continuation !== undefined) claimed.add(open)
         break
       case 'step/start':
         stepped.add(event.data.turn)

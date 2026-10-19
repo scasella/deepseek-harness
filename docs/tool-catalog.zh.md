@@ -48,6 +48,7 @@
 | `@deepseek-ai/dsh-experimental-tool-agent-team` | `interrupt_agent`、`list_agents`、`send_message`、`spawn_teammate`、`team_task_create`、`team_task_get`、`team_task_list`、`team_task_update`、`wait_agent` | `ctx.tools`、`ctx.systemPrompt`、`ctx.agentTeams`、`an exact live Team member Agent` | `tool/call`、`team/member`、`team/task`、`agent/inbox/spliced`、`user/message on inbox claim`、`tool/result` | - | 这 9 个工具限定于隐式 Team Lead 与持久 teammate 作用域。随产品发布的 dsh-base bundle 默认禁用该包；文档中的 Agent Teams profile patch 会启用它，并禁用旧 continuable child 的同名控制工具。 |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`、`owning Agent session` | `tool/call`、`todo/write`、`tool/result` | - | todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为检查清单。`allowParallelInProgress` 是没有默认值的必填项，因此本目录明确选择 `true`，对应描述允许同时存在多个 `in_progress` 项。选择 `false` 的部署会获得同一工具，但描述会要求只能有 1 个活动任务。 |
 | `@deepseek-ai/dsh-tool-working-directory` | `working_directory` | `ctx.tools`, `ctx.workingDirectory` | `tool/call`, `working-directory/change`, `user context for directory changes`, `tool/result` | - | 读取或改变调用方 Session 的目录。已有 shell 和进程保留自己的目录；原始元数据和权限根目录保持不变。 |
+| `@deepseek-ai/dsh-experimental-tool-loom` | `loom_cull`, `loom_expand`, `loom_keep`, `loom_read`, `loom_wait` | `ctx.tools`, `ctx.loom`, `ctx.sessionController`, `ctx.sessionQuery`, `ctx.sessionProjections`, `ctx.tokenMeter`, `ctx.permissionPresets`, `ctx.workspaceRegistry`, `a calling Agent` | `tool/call`, `forked child Sessions (plugin:loom/branch, permission/preset, a loom-sourced user/message)`, `plugin:loom/mark`, `Workspace archive set`, `tool/result` | - | 仅通过显式实验组合加载，与实验性 Loom 服务一同使用。每个 Session 都能看到这五个工具；如果某个 Session 的首个自有提示词来自 weaver，则拒绝其调用。schema 文本中的等待和读取限制遵循插件 Config。 |
 | `@deepseek-ai/dsh-experimental-tool-worktree` | `create_worktree` | `ctx.tools`, `ctx.worktrees`, `a calling Agent` | `tool/call`, `Git branch and checkout`, `working-directory/change`, `tool/result` | - | 仅通过显式实验组合加载。在现有写权限下从固定的本地提交创建新分支与检出目录，再改变 Session 工作目录。离开时保留分支与检出目录。 |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`、`ctx.workflowEngine`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents the script children)` | `tool/call`、`tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-workspace-dependencies` | `load_workspace_dependencies` | `ctx.tools` | `tool/call`, `tool/result` | - | - |
@@ -2638,6 +2639,140 @@ todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为
 来源：[`packages/session/tool-working-directory/src/index.ts`](../packages/session/tool-working-directory/src/index.ts)
 
 读取或改变调用方 Session 的目录。已有 shell 和进程保留自己的目录；原始元数据和权限根目录保持不变。
+
+<a id="deepseek-aidsh-experimental-tool-loom"></a>
+
+## `@deepseek-ai/dsh-experimental-tool-loom`
+
+### `loom_cull`
+
+停止本 Session 启动的一个子 Session，并将其归档。归档会保留其历史。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string",
+      "description": "Child Session returned by loom_expand or loom_wait."
+    }
+  },
+  "required": [
+    "sessionId"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-loom/src/tools.ts`](../packages/experimental/tool-loom/src/tools.ts)
+
+### `loom_expand`
+
+将一个 Session 分支为多个子 Session，并从某个轮次结束处继续：每行提示词对应一个子 Session，或创建 count 个子 Session，重新采样下一轮。子 Session 使用非交互式权限预设在后台运行；通过 loom_wait 和 loom_read 跟踪它们。若调用会超过本 Session 的分支数、深度或自有 token 预算，则拒绝调用，不创建任何子 Session。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string",
+      "description": "Session to branch: another Session in the same working directory. Omit to branch this Session."
+    },
+    "afterTurn": {
+      "type": "integer",
+      "description": "Last turn every child keeps; each child continues from the end of this turn."
+    },
+    "lines": {
+      "type": "array",
+      "description": "One prompt per child, sent verbatim as that child's next user message. Give exactly one of lines and count.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "count": {
+      "type": "integer",
+      "description": "Number of children that each resend the opening prompt of turn afterTurn + 1 to sample that turn again. Give exactly one of lines and count."
+    }
+  },
+  "required": [
+    "afterTurn"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-loom/src/tools.ts`](../packages/experimental/tool-loom/src/tools.ts)
+
+### `loom_keep`
+
+将本 Session 启动的一个子 Session 标记为保留。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string",
+      "description": "Child Session returned by loom_expand or loom_wait."
+    }
+  },
+  "required": [
+    "sessionId"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-loom/src/tools.ts`](../packages/experimental/tool-loom/src/tools.ts)
+
+### `loom_read`
+
+读取本 Session 启动的一个子 Session 的最新助手输出，同时返回其状态及自有请求的 token 用量。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string",
+      "description": "Child Session returned by loom_expand or loom_wait."
+    },
+    "maxChars": {
+      "type": "integer",
+      "description": "Longest output to return, in characters, from 1 through 20000. Defaults to 4000."
+    }
+  },
+  "required": [
+    "sessionId"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-loom/src/tools.ts`](../packages/experimental/tool-loom/src/tools.ts)
+
+### `loom_wait`
+
+等待分支集中的所有子 Session 完成各自的轮次、失败或被撤回，或等待超时。返回每个子 Session 的状态及自有请求的 token 用量。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "setId": {
+      "type": "string",
+      "description": "Branch set id returned by loom_expand."
+    },
+    "timeoutMs": {
+      "type": "integer",
+      "description": "Longest wait in milliseconds, from 1 through 1800000. Defaults to 120000."
+    }
+  },
+  "required": [
+    "setId"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-loom/src/tools.ts`](../packages/experimental/tool-loom/src/tools.ts)
+
+仅通过显式实验组合加载，与实验性 Loom 服务一同使用。每个 Session 都能看到这五个工具；如果某个 Session 的首个自有提示词来自 weaver，则拒绝其调用。schema 文本中的等待和读取限制遵循插件 Config。
 
 <a id="deepseek-aidsh-experimental-tool-worktree"></a>
 

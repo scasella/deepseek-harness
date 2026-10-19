@@ -26,7 +26,12 @@
     - button "更换"
     - text: 与父会话相同
   - term: 工作区
-  - definition: 子分支共用此文件夹，包括先前分支所做的改动
+  - definition:
+    - radiogroup "分支文件的存放位置":
+      - radio "在共用文件夹中逐个运行 子分支共用此文件夹，包括先前分支所做的改动" [checked]
+      - radio "为每个分支单独创建 worktree 每个分支从此文件夹的快照开始：已提交的文件，加上已跟踪文件的未提交改动。未跟踪的文件不会带过去。"
+  - term: 费用
+  - definition: 每个分支 ≈ 8K token · 此路由未设置标价 6 个共 ≈ 48.2K token · 本家族各会话自身运行中 84% 的输入命中缓存
   - text: 开始之前不会运行任何内容
   - button "取消"
   - button "开始 6 个分支"

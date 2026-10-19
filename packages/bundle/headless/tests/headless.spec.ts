@@ -158,6 +158,7 @@ async function bench(script: Script, options: BenchOptions = {}): Promise<{
       cancel: () => {},
       runMaintenance: () => Promise.reject(new Error('not used')),
       send: () => {},
+      continue: () => {},
       followup: (message: UserMessage) => {
         agent.inbox.append('next-turn', message)
         running = true

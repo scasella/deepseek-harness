@@ -291,6 +291,8 @@ Subagent 工具遵循普通分组边界，不会仅因委派任务就单独成�
 
 准备中的调用使用首个具名 delta 的时间，已派发调用使用 tool/call 的时间。两者都从块的懒计算 `args` 视图读取详情。
 
+Assistant 文本块在实时块完成时保留捕获的 `block-end.logprobs`。结算时每条消息只调用一次 `assistantStreamBlockLogprobs()`，按组装后的内容顺序读取；最终节点复用已分类的块，因此概率对齐遵循达到 token 上限时的工具调用移除规则，不增加模型可见内容。
+
 仅 Tool Definition 保留流式参数分片。Assistant 块保留工具身份和时间，不累加参数 delta；完整文本由 `block-end` 和持久消息提供。Tool 读器将分片直接与 `block-end` 和 `tool/call` 的参数比较，仅在完全一致时保留字段索引。最终文本替换缺失或冲突的分片。
 
 TurnProcess 和 TurnTail 保留工具参数 Match，作为 Turn 起始事件在已加载窗口之外时的 Location 证据，即使这些片段不改变其 State。

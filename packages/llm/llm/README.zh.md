@@ -88,6 +88,12 @@ const configure = (maxTokens: number): ConfigureCall =>
 - **校验调用配置**——显式或配置的推理强度会在任何提供方 I/O 之前对照精确模型校验；请求省略输出上限时，会填入适配器配置的输出上限。
 - **不展开即读取内嵌 Assistant 流**——`assistantStreamFirstTokenTime`（首 token）、`assistantStreamHasVisibleContent`（任一可见内容）与 `assistantStreamHasVisibleText`（任一可见文本）通过可提前退出的扫描直接从紧凑记录得出结果；`lastAssistantStreamChunk` 反向扫描到某一类型的最后一个原始 chunk，`assistantStreamChunks` 与 `joinAssistantStreamText` 扫描整个流，`assembleAssistantStream` 向 `BlockAssembler` 每个 run 喂一段拼接 delta，blocks／usage／replayState 与逐成员展开相同。`runFirstTokenTime` 与 `runFirstVisibleTime` 对单个打包 run 做提前退出扫描，`isTokenDelta`、`isVisibleChunk` 与 `chunkHasVisibleText` 定义单个 chunk 的 token 与可见性规则。`expandAssistantStream` 仍是持久边界读取记录的校验路径；它不被记忆化，因为保留的展开在事件生命周期内约花费紧凑流的十倍内存。
 
+### 生成时的概率与前缀
+
+精确模型声明 `tokenLogprobs.maxTopLogprobs` 时，`topLogprobs` 请求采样 token 的概率及每个位置 0–20 个候选。它是记录在日志中的调用控制：更改它会更改请求头。不支持的模型以 `UNSUPPORTED_TOKEN_LOGPROBS` 失败；非法数量以 `INVALID_REQUEST` 失败。捕获的 `block-end.logprobs` 包含按位置对齐的 `tokens`、可为 null 的采样 `logprobs` 和 `top` 候选，不增加面向模型的内容。`assistantStreamBlockLogprobs(stream)` 按组装后的块顺序返回捕获值，未捕获的块为 undefined，达到 token 上限时与组装器一样移除工具调用。
+
+`assistantPrefix` 是仅供辅助调用使用的模型可见内容：调用方必须在分派前记录精确请求与前缀，输出只包含续写内容。模型必须声明 `assistantPrefill: 'tool-free'`。空前缀、loop 请求、声明工具或工具历史、工具消息或工具调用块，以及没有显式解析为 `off` 强度的推理模型，都以 `INVALID_REQUEST` 失败；缺少能力时以 `UNSUPPORTED_ASSISTANT_PREFILL` 失败。已准备调用在分派前同步拒绝；未准备的流报告终止错误 finish。
+
 ### 失败与恢复
 
 每个流都恰好以一个终止 `finish` 分片结束：失败为 `{ kind: 'error', failure }`，取消为 `{ kind: 'aborted', failure }`。失败携带稳定 code，如 `NO_ADAPTER`、`MISSING_CREDENTIAL`、`AUTH`、`RATE_LIMIT` 与 `CONTEXT_WINDOW_EXCEEDED`；消费方依据 code 路由，绝不解析消息文本。`QUOTA` 表示提供方中立的额度耗尽，`ACCOUNT_QUOTA` 专用于当前产品能够充值的第一方账号余额不足。点名未注册提供方的请求会以 `NO_ADAPTER` 失败，格式错误的凭据会以 `INVALID_CREDENTIAL` 失败，而不是表现为不透明的 fetch 错误。本服务从不自行重跑请求：重试是 `dsh-llm-retry` 在 agent 失败步骤扩展点上的职责。

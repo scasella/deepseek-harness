@@ -1,0 +1,7 @@
+version: 1
+scenario: loom-counterfactual
+profile: web
+composition: web-loom
+recording: authored
+header:
+  class: web-loom

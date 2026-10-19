@@ -3,44 +3,68 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/experimental/loom/README.md
 /:
-  en: 7d5feec6aa0ba2df
-  zh: 03793e4f4187982a
+  en: c79836428bc2b009
+  zh: 904303d4c6498aa8
 /deepseek-ai-dsh-experimental-loom:
   en: eff88cb59bc3004c
   zh: 002e0ea3e1525ce1
 /deepseek-ai-dsh-experimental-loom/summary:
-  en: 62ce5ea2940943ec
-  zh: 2c4846c625b11130
+  en: c0d87c16645dff91
+  zh: 2616feb0461e08ed
 /deepseek-ai-dsh-experimental-loom/table-of-contents:
   en: d152484eb41ac6b4
   zh: 364c80ee00a374ff
 /deepseek-ai-dsh-experimental-loom/use-this-package:
-  en: bc579536c3bd3382
-  zh: 98778c22c17acd40
+  en: 8271beccc1812141
+  zh: 0fb00f05afe237cf
 /deepseek-ai-dsh-experimental-loom/use-this-package/branch-a-session:
-  en: ab484e24ad4b744f
-  zh: 8da2bc23fa6194f0
+  en: 2f75dbffb611390e
+  zh: cccbc42ddb426508
 /deepseek-ai-dsh-experimental-loom/use-this-package/follow-and-cancel-a-branch-set:
-  en: 26d3acf79f393b4c
-  zh: 8112ccc5537de71c
+  en: 3fc260862fba4c80
+  zh: 1f656d6b89d36acc
+/deepseek-ai-dsh-experimental-loom/use-this-package/preview-list-price-cost:
+  en: 6679adf29e33e15f
+  zh: 544e92c471859b72
 /deepseek-ai-dsh-experimental-loom/use-this-package/mark-a-session:
-  en: f16aad88b6ad2304
-  zh: f369810c9551f147
+  en: b323425b98e24c2c
+  zh: 184683e21a8cb6cd
+/deepseek-ai-dsh-experimental-loom/use-this-package/isolate-children-in-worktrees:
+  en: 68484aa9a8eff012
+  zh: 7c16644c94080f17
+/deepseek-ai-dsh-experimental-loom/use-this-package/compare-siblings:
+  en: 5e6ada0b85db045c
+  zh: a6e3a607ed1a20ce
+/deepseek-ai-dsh-experimental-loom/use-this-package/read-a-branch-diff:
+  en: db2978b4cdbfa38d
+  zh: fb87e96f15a2bc80
+/deepseek-ai-dsh-experimental-loom/use-this-package/adopt-apply-and-discard:
+  en: 046b0787b95b1c61
+  zh: b21fc1779ec7f5f8
 /deepseek-ai-dsh-experimental-loom/use-this-package/read-a-fork-family:
   en: a96ca46c8db4562d
   zh: 4d3edaf4c86125e8
 /deepseek-ai-dsh-experimental-loom/use-this-package/read-what-the-model-saw:
   en: 7798185572ca62a5
   zh: 1cbe63efda9c52ab
+/deepseek-ai-dsh-experimental-loom/use-this-package/replace-a-tool-result-and-continue:
+  en: 931f5dc5d25daa48
+  zh: 4437088f93a49a0c
+/deepseek-ai-dsh-experimental-loom/use-this-package/generate-prose-at-a-cursor:
+  en: cc70dc8790d7a9cf
+  zh: c7c130d82a928e75
+/deepseek-ai-dsh-experimental-loom/use-this-package/export-a-path-or-selection:
+  en: cb7f176a073e0d9d
+  zh: b898bee24c2cf0b2
 /deepseek-ai-dsh-experimental-loom/use-this-package/branch-membership-and-marks:
-  en: 026b63d0e017b241
-  zh: 9a67220f939c2394
+  en: 234180505ef24d37
+  zh: 51de958af4f6be5a
 /deepseek-ai-dsh-experimental-loom/understand-the-implementation:
-  en: 24d94d1937057e93
-  zh: faf55a65fb821722
+  en: b4d5417b9698cd50
+  zh: 115e0e3809bdda12
 /deepseek-ai-dsh-experimental-loom/further-exploration:
-  en: f01db495a7af9007
-  zh: fbe8bdbeb7b54cb4
+  en: 271ef9ca4d592fbd
+  zh: 0914b2c68babffa3
 /deepseek-ai-dsh-experimental-loom/model-experience:
   en: 215e7ba838619b7b
   zh: a311da3843709f90
@@ -48,17 +72,29 @@
   en: 2e643f9d199320f0
   zh: b2e70e635da68f5b
 /deepseek-ai-dsh-experimental-loom/model-experience/branch-child-prompt/what-the-model-sees:
-  en: f1b67c634ddb5f84
-  zh: deefa66c1f0e275a
+  en: f52c3066182c0e88
+  zh: bf6c187b0469fa56
 /deepseek-ai-dsh-experimental-loom/model-experience/branch-child-prompt/token-effect:
   en: 04b8f31dc2774d01
   zh: aec6b477207e6a3c
 /deepseek-ai-dsh-experimental-loom/model-experience/branch-child-prompt/kv-cache-effect:
-  en: b3ad76e834593442
-  zh: 6dcd377499fcb715
+  en: 1bcce42a3005df4a
+  zh: 68ab0e581426d7e9
+/deepseek-ai-dsh-experimental-loom/model-experience/auxiliary-prose-requests:
+  en: 284d48f00464812d
+  zh: cba18ef3b75663f6
+/deepseek-ai-dsh-experimental-loom/model-experience/auxiliary-prose-requests/what-the-model-sees:
+  en: 10a71e1821b81769
+  zh: ef1f0056ceb81127
+/deepseek-ai-dsh-experimental-loom/model-experience/auxiliary-prose-requests/token-effect:
+  en: 1bf5d873971f818c
+  zh: de29ae39c5b133f4
+/deepseek-ai-dsh-experimental-loom/model-experience/auxiliary-prose-requests/kv-cache-effect:
+  en: 4df2788ff3b93654
+  zh: eee7d00799e5db7a
 /deepseek-ai-dsh-experimental-loom/known-limitations-and-deferred-work:
-  en: ab9b1af465f685a2
-  zh: 0361c730ccd037c2
+  en: 4cd3c8ccdeb1e1e6
+  zh: dcf2bf0525940662
 /deepseek-ai-dsh-experimental-loom/known-limitations-and-deferred-work/dev-note:
   en: 0225ba087c5266f3
   zh: 4e706f1b2b984e63

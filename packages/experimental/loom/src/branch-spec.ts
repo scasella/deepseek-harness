@@ -15,7 +15,8 @@ import { SessionSeq, type SessionEvent, type SessionHeader, type SessionId, type
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
-import type { LoomBranchKind, LoomBranchRequest } from './types.ts'
+import { nextRouteAt, routeOfHeader, sameRoute } from './route.ts'
+import type { LoomBranchKind, LoomBranchRequest, LoomEstimateRequest, LoomIsolation } from './types.ts'
 
 /** One child the runner forks and prompts. */
 export interface LoomChildSpec {
@@ -39,8 +40,9 @@ export interface LoomBranchSpec {
   readonly cut: SessionSeq
   /**
    * Route override for every child: the request's, or, for a first-own-turn
-   * regenerate or edit that names none, the last route the fork selected
-   * before that turn started.
+   * regenerate or edit that names none, the route the fork sent its first
+   * request on when that differs from the route in force at the cut, else the
+   * last route the fork selected before that turn started.
    */
   readonly selection?: ModelSelection
   /** Every child in request order. */
@@ -49,8 +51,12 @@ export interface LoomBranchSpec {
   readonly inheritedPrompts: readonly MessageId[]
   /** Browser time zone recorded on the source prompt the children's prompts stand in for. */
   readonly clientTimeZone?: string
+  /** Sandbox mode at the cut: the last `sandbox/mode` event through it, else the deployment default; undefined without a sandbox policy. */
+  readonly mode: string | undefined
   /** Whether the children's inherited sandbox mode can write their folder. */
   readonly writable: boolean
+  /** Where the children keep their files: the request's choice, else the configured default. */
+  readonly isolation: LoomIsolation
   /** Project folder the children share with the source: its header `cwd`, or the empty string without one. */
   readonly folder: string
 }
@@ -64,6 +70,8 @@ export interface LoomBranchPolicy {
    * undefined when no sandbox policy is composed, which counts as writable.
    */
   readonly defaultSandboxMode: string | undefined
+  /** Configured `defaultIsolation`, for a request that names no `isolation`. */
+  readonly defaultIsolation: LoomIsolation
   /**
    * Whether a regenerate or edit of a fork's first own turn is cut in the
    * fork's parent, beside the fork. False cuts it in the addressed fork, below
@@ -90,7 +98,14 @@ export function variantKeyOf(line: string): string {
   return createHash('sha256').update(line).digest('hex').slice(0, 16)
 }
 
-function turnUnavailable(
+/**
+ * Failure of a branch or estimate request that names a turn it cannot use.
+ * @param sessionId - source Session.
+ * @param turn - the turn the request named.
+ * @param reason - why the turn is unusable.
+ * @returns the RemoteError.
+ */
+export function turnUnavailable(
   sessionId: SessionId,
   turn: number,
   reason: 'not-found' | 'not-ended' | 'not-user-opened' | 'no-cut',
@@ -152,7 +167,7 @@ function openingPrompt(events: readonly SessionEvent[], sessionId: SessionId, tu
  * @returns the inclusive fork boundary.
  * @throws RemoteError `loom/turn-unavailable` when the turn is absent, has not ended, or leaves no cut.
  */
-function cutAfter(events: readonly SessionEvent[], sessionId: SessionId, afterTurn: number): SessionSeq {
+export function cutAfter(events: readonly SessionEvent[], sessionId: SessionId, afterTurn: number): SessionSeq {
   const opens = (turn: number) => events.some(event => event.type === 'turn/start' && event.data.turn === turn)
   if (!events.some(event => event.type === 'turn/end' && event.data.turn === afterTurn)) {
     throw turnUnavailable(sessionId, afterTurn, opens(afterTurn) ? 'not-ended' : 'not-found')
@@ -167,8 +182,11 @@ interface ForkParentCut {
   readonly sessionId: SessionId
   readonly cut: SessionSeq
   /**
-   * Last `model/selection` the fork logged before its first own turn started:
-   * the route its fork recorded, or a later pick.
+   * The fork's own route, when the plain fork of its parent at the cut would
+   * not take it: the route of the first `request/header` the fork logged in
+   * its first own turn if that differs from the route in force at the cut,
+   * else the last `model/selection` the fork logged before that turn started
+   * (the route its fork recorded, or a later pick).
    */
   readonly selection?: ModelSelection
 }
@@ -187,13 +205,84 @@ function forkParentAt(source: LoomBranchSource, turn: number): ForkParentCut | u
   if (meta.parentSession === undefined || meta.origin === 'subagent' || inheritedEventCount === 0) return undefined
   const firstOwn = events.find((event): event is SessionEvent<'turn/start'> => event.seq >= inheritedEventCount && event.type === 'turn/start')
   if (firstOwn?.data.turn !== turn) return undefined
-  const route = events.findLast((event): event is SessionEvent<'model/selection'> =>
-    event.seq >= inheritedEventCount && event.seq < firstOwn.seq && event.type === 'model/selection')
-  return {
-    sessionId: meta.parentSession,
-    cut: SessionSeq(inheritedEventCount - 1),
-    ...route === undefined ? {} : { selection: route.data },
+  const cut = SessionSeq(inheritedEventCount - 1)
+  const selection = usedRoute(events, firstOwn.seq, cut) ?? events.findLast((event): event is SessionEvent<'model/selection'> =>
+    event.seq >= inheritedEventCount && event.seq < firstOwn.seq && event.type === 'model/selection')?.data
+  return { sessionId: meta.parentSession, cut, ...selection === undefined ? {} : { selection } }
+}
+
+/**
+ * Route a fork's first own request was sent on, when that is not the route in
+ * force at the fork cut, which a plain fork of the parent there would take.
+ * The request's header records what ran, so it outranks the picks the fork logged.
+ * @param events - the fork's complete log.
+ * @param start - seq of the fork's first own `turn/start`.
+ * @param cut - the fork cut in the parent.
+ * @returns the route, or undefined when the first own turn logged no header or its header names the route in force at the cut.
+ */
+function usedRoute(events: readonly SessionEvent[], start: number, cut: number): ModelSelection | undefined {
+  const next = events.find(event => event.seq > start && event.type === 'turn/start')?.seq ?? events.length
+  const header = events.find((event): event is SessionEvent<'request/header'> =>
+    event.seq > start && event.seq < next && event.type === 'request/header')
+  if (header === undefined) return undefined
+  const used = routeOfHeader(header.data.header)
+  const inCut = nextRouteAt(events, cut)
+  return inCut !== undefined && sameRoute(used, inCut) ? undefined : used
+}
+
+/**
+ * Cut and route for a cost preview, using the same opening-prompt and turn rules as branching.
+ * @param request - preview request.
+ * @param source - addressed Session's complete log and fork metadata.
+ * @param maxBranches - configured maximum number of children.
+ * @returns inclusive cut and the route that would run, when the log names one.
+ * @throws RemoteError `gateway/bad-request`, `loom/too-many-branches`, or `loom/turn-unavailable`.
+ */
+export function resolveEstimate(
+  request: Exclude<LoomEstimateRequest, { readonly kind: 'weave' }>,
+  source: LoomBranchSource,
+  maxBranches: number,
+): { readonly cut: SessionSeq; readonly turn: number; readonly selection?: ModelSelection } {
+  if (!Number.isSafeInteger(request.count) || request.count < 1) {
+    throw new RemoteError('gateway/bad-request', 'loom.estimate count must be a positive integer', {})
   }
+  if (request.count > maxBranches) {
+    throw new RemoteError('loom/too-many-branches', `loom.estimate asks for ${String(request.count)} children; at most ${String(maxBranches)} are allowed`, {
+      requested: request.count, limit: maxBranches,
+    })
+  }
+  const turn = request.kind === 'regenerate' || request.kind === 'edit' ? request.turn : request.afterTurn
+  if (turn === undefined || !Number.isSafeInteger(turn) || turn < 1) {
+    throw new RemoteError('gateway/bad-request', 'loom.estimate requires a positive integer turn or afterTurn for its kind', {})
+  }
+  let cut: SessionSeq
+  let selected: ModelSelection | undefined
+  switch (request.kind) {
+    case 'regenerate':
+    case 'edit': {
+      openingPrompt(source.events, request.sessionId, turn)
+      const parent = forkParentAt(source, turn)
+      const found = parent?.cut ?? completedPrefixBefore(source.events, turn)
+      if (found === undefined) throw turnUnavailable(request.sessionId, turn, 'no-cut')
+      cut = found
+      selected = parent?.selection
+      break
+    }
+    case 'steer':
+    case 'variants':
+      cut = cutAfter(source.events, request.sessionId, turn)
+      break
+    /* v8 ignore next 2 -- closed LoomBranchKind union. */
+    default:
+      return assertNever(request.kind)
+  }
+  selected ??= nextRouteAt(source.events, cut)
+  if (selected === undefined) {
+    const first = source.events.find((event): event is SessionEvent<'request/header'> => event.type === 'request/header')
+    if (first !== undefined) selected = routeOfHeader(first.data.header)
+  }
+  const selection = request.selection ?? selected
+  return { cut, turn, ...selection === undefined ? {} : { selection } }
 }
 
 /**
@@ -223,14 +312,15 @@ function timeZoneOf(message: UserMessage): string | undefined {
  * validation failure is raised here, before any fork. A regenerate or edit of
  * a fork's first own turn resolves to the fork's parent at the fork's cut and
  * sends the fork's own opening prompt; without a request `selection`, the
- * children take the route the fork selected before that turn, so they run on
- * the fork's route, not on the parent's. The runner checks that the parent
+ * children take the fork's own route, the one its first request was sent on
+ * (when that differs from the route in force at the cut) or else the one it
+ * selected before that turn, so they run on the fork's route, not on the parent's. The runner checks that the parent
  * exists and that the caller may branch it, and resolves again with
  * `policy.redirect` false when it does not, which cuts in the addressed fork.
  * Every other request is cut in the addressed Session.
  * @param request - the branch request.
  * @param source - header, inherited prefix length, and complete log of the addressed Session.
- * @param policy - configured limit, the deployment sandbox default, and whether to redirect to the fork parent.
+ * @param policy - configured limit, the deployment sandbox and isolation defaults, and whether to redirect to the fork parent.
  * @returns the spec.
  * @throws RemoteError `gateway/bad-request`, `loom/too-many-branches`, `loom/empty-line`, or `loom/turn-unavailable`.
  */
@@ -300,7 +390,9 @@ export function resolveBranch(request: LoomBranchRequest, source: LoomBranchSour
     children,
     inheritedPrompts: inheritedNextTurnPrompts(events, cut).map(message => message.id),
     ...clientTimeZone === undefined ? {} : { clientTimeZone },
+    mode,
     writable: mode !== 'read-only',
+    isolation: request.isolation ?? policy.defaultIsolation,
     folder: source.meta.cwd ?? '',
   }
 }

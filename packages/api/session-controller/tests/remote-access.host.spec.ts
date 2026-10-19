@@ -152,7 +152,7 @@ describe('Session Controller access', () => {
       hasMore: true,
     }
     vi.spyOn(ApiSessionList.prototype, 'search').mockResolvedValue(hits)
-    await expect(guestCall(ctx, 'search', { request: { query: 'hit' } })).resolves.toEqual({
+    await expect(guestCall(ctx, 'search', { request: { query: 'hit', scope: 'own', sessionIds: [PRIVATE, SHARED] } })).resolves.toEqual({
       items: [{ sessionId: SHARED, snippet: 'shared hit' }],
       hasMore: true,
     })
@@ -207,6 +207,17 @@ describe('Session Controller access', () => {
       { kind: 'user', rpcId: 'guest-1', principal: GUEST },
       { kind: 'user', rpcId: 'owner-1' },
     ])
+  })
+
+  it('records a non-owner initiator on continuation turns', async () => {
+    const { shared, as } = await harness()
+    shared.session.append('user/message', message('Existing prompt'), { surfaceOp: 'append' })
+    await expect(as(GUEST, 'continue').sessionController.continue({
+      sessionId: SHARED, requestId: 'guest-continue' as SessionRequestId,
+    }, new AbortController().signal)).resolves.toEqual({ accepted: true })
+    await shared.whenIdle()
+    expect(shared.session.snapshotEvents().find(event => event.type === 'turn/start')?.data.continuation)
+      .toEqual({ kind: 'user', rpcId: 'guest-continue', principal: GUEST })
   })
 
   it('lets a non-owner read projections only in a Session its Session role names', async () => {

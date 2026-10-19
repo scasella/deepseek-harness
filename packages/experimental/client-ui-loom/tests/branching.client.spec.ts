@@ -61,6 +61,23 @@ describe('failure facts', () => {
     expect(failureOf(new RemoteError('gateway/cancelled', 'x', {}))).toEqual({ code: 'gateway/cancelled', unknownOutcome: true })
     expect(failureOf(new RemoteError('session/not-found', 'x', { sessionId: ROOT }))).toEqual({ code: 'session/not-found', unknownOutcome: false })
   })
+
+  it('keeps the reason of a refused isolation and the paths of a refused apply', () => {
+    expect(failureOf(new RemoteError('loom/isolation-unavailable', 'x', { reason: 'no-repository' })))
+      .toEqual({ code: 'loom/isolation-unavailable', isolationReason: 'no-repository', unknownOutcome: false })
+    expect(failureOf(new RemoteError('loom/apply-dirty', 'x', { paths: ['a.py'] })))
+      .toEqual({ code: 'loom/apply-dirty', paths: ['a.py'], unknownOutcome: false })
+    expect(failureOf(new RemoteError('loom/apply-conflict', 'x', { paths: ['b.py', 'c.py'] })))
+      .toEqual({ code: 'loom/apply-conflict', paths: ['b.py', 'c.py'], unknownOutcome: false })
+    expect(failureOf(new RemoteError('loom/apply-too-large', 'x', { sessionId: ROOT, limit: 10 })))
+      .toEqual({ code: 'loom/apply-too-large', limit: 10, unknownOutcome: false })
+    expect(failureOf(new RemoteError('loom/worktree-unavailable', 'x', { sessionId: ROOT, reason: 'removed' })))
+      .toEqual({ code: 'loom/worktree-unavailable', worktreeReason: 'removed', unknownOutcome: false })
+    expect(failureOf(new RemoteError('loom/worktree-cleanup-failed', 'x', { sessionId: ROOT, worktreePath: '/w', applied: ['a.py'] })))
+      .toEqual({ code: 'loom/worktree-cleanup-failed', paths: ['a.py'], unknownOutcome: false })
+    expect(failureOf(new RemoteError('loom/adopt-incomplete', 'x', { sessionId: ROOT, archived: [], remaining: [A, ROOT] })))
+      .toEqual({ code: 'loom/adopt-incomplete', remaining: 2, unknownOutcome: false })
+  })
 })
 
 describe('branch sets', () => {
@@ -301,7 +318,7 @@ describe('Branch ×N form', () => {
     const { branching } = bench()
     branching.openForm(OTHER, { sourceSessionId: ROOT, afterTurn: 1 })
     expect(branching.state.getSnapshot().forms[OTHER]).toEqual({
-      sourceSessionId: ROOT, afterTurn: 1, rows: ['', ''], samples: 1, selection: null, starting: false, failure: null,
+      sourceSessionId: ROOT, afterTurn: 1, rows: ['', ''], samples: 1, selection: null, isolation: 'shared', isolationUnavailable: null, starting: false, failure: null,
     })
     branching.editForm(OTHER, { rows: ['a'] })
     const before = branching.state.getSnapshot()
@@ -333,6 +350,24 @@ describe('Branch ×N form', () => {
     await branching.submitForm(ROOT)
     expect(inputs.branch).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'variants', lines: ['a'], samples: 3 }))
     expect(branch.mock.lastCall?.[0]).not.toHaveProperty('selection')
+  })
+
+  it('sends the isolation the form chose, and falls back to the shared folder with the Host\'s reason once it refuses worktrees', async () => {
+    const refusal: RemoteResult<LoomBranchValue> = { ok: false, error: new RemoteError('loom/isolation-unavailable', 'x', { reason: 'read-only' }) }
+    const branch = vi.fn<LoomBranchingInputs['branch']>().mockResolvedValueOnce(refusal).mockResolvedValue(ok(STARTED))
+    const { branching } = bench({ branch })
+    branching.openForm(ROOT, { sourceSessionId: ROOT, afterTurn: 1 })
+    branching.editForm(ROOT, { rows: ['a'], isolation: 'worktree' })
+    await expect(branching.submitForm(ROOT)).resolves.toBe(false)
+    expect(branch).toHaveBeenLastCalledWith(expect.objectContaining({ isolation: 'worktree' }))
+    expect(branching.state.getSnapshot().forms[ROOT]).toMatchObject({
+      isolation: 'shared', isolationUnavailable: 'read-only', starting: false, failure: { code: 'loom/isolation-unavailable' },
+    })
+    // Editing the draft does not clear the refusal; the shared folder still starts.
+    branching.editForm(ROOT, { rows: ['a', 'b'] })
+    expect(branching.state.getSnapshot().forms[ROOT]?.isolationUnavailable).toBe('read-only')
+    await expect(branching.submitForm(ROOT)).resolves.toBe(true)
+    expect(branch).toHaveBeenLastCalledWith(expect.objectContaining({ isolation: 'shared' }))
   })
 
   it('keeps the draft with its failure, ignores a second start in flight, and leaves a form replaced meanwhile alone', async () => {

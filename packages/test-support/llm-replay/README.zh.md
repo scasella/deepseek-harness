@@ -79,6 +79,10 @@ parent agent 委托给进程内 subagent 或 fork 出 child Session 的场景会
 
 有两种失败模式无法仅根据持久 Assistant settlement 重建：任何 chunk 之前的纯 throw 没有携带异常的 stream member，而 cancel/hang 需要的是不终止语义，不能用有限前缀回放。需要这些行为的场景可提供可选伴随文件（`<scenario>/replay.override.json`）：它用裸 `ReplayEntry[]` 替换派生脚本，或用 `{ patches: [{ at, entry }] }` 增补——保留所有派生调用，只替换指定的从 0 开始计数的调用索引；当 `at` 等于派生长度时，则在注入瞬态异常后的重试位置追加。有前缀分片的 `throw` 条目会接受 DeepSeek 请求扩展；零分片 throw 默认表示 2xx 前未接受，也可设 `accepted: true` 表示 2xx 后无分片失败。`hang` 条目可以指定 `readyFile`，回放在等待取消前写入它，使外部 driver 可以确定性取消。
 
+### 回放 Loom 辅助生成
+
+读取器原样保留 `block-end.logprobs`，并从 `plugin:loom/weave-node` 流派生调用。并行兄弟节点按记录的 `requestSeq` 与 `index` 排序，不受完成顺序影响；普通调用仍保持日志顺序。非法节点引用或流会明确失败。回放模型可以声明 `tokenLogprobs: { maxTopLogprobs: 20 }` 与 `assistantPrefill: tool-free`，让已准备的辅助调用方无需提供方 I/O 即可演练同样的准入规则。
+
 ### 可能出什么问题
 
 - **fixture 未被完全消费**——在测试中直接安装回放时调用 `assertConsumed()`，它会把场景静默驱动的模型调用少于记录数转换为明确诊断。

@@ -22,6 +22,7 @@ async function liveAgent(ctx: Context, rawId: string, initial: AgentStatus): Pro
     get status() { return status },
     ctx,
     send: () => {},
+    continue: () => {},
     followup: () => {},
     steer: () => ({ outcome: Promise.resolve({ status: 'rejected' as const }) }),
     inject: () => {},

@@ -8,6 +8,7 @@
  *
  * Script vocabulary (all optional):
  * - `FAKE_TEXT`: assistant text for each turn (default `hello from fake runtime`).
+ * - `FAKE_CONTINUATION_SOURCE`: JSON initiator attribution forwarded on turn/start.
  * - `FAKE_SESSION_EVENT`: one JSON event forwarded after the assistant with owned seq/time.
  * - `FAKE_SESSION_EVENTS`: JSON event array forwarded in order after the assistant with owned seq/time.
  * - `FAKE_STATUS`: the `session.finished` status (default `ok`).
@@ -124,7 +125,11 @@ function runTurn(sessionId: string): void {
     notify('session.event', { sessionId, event: 42 })
     return
   }
-  event(sessionId, 'turn/start', { turn: 0 })
+  const continuation: unknown = env.FAKE_CONTINUATION_SOURCE === undefined ? undefined : JSON.parse(env.FAKE_CONTINUATION_SOURCE)
+  event(sessionId, 'turn/start', {
+    turn: 0,
+    ...continuation === undefined ? {} : { continuation },
+  })
   if (env.FAKE_MALFORMED_MESSAGE !== undefined) {
     event(sessionId, 'assistant/attempt', {
       turn: 0,

@@ -56,16 +56,18 @@ const SESSION_WATERMARK_BASE = 5
 /** Highest watermark that attention-bearing Sessions raise automatically; Show more and search reveals may exceed it. */
 const SESSION_WATERMARK_AUTO_MAX = 50
 
-/** Show the blank row plus the first `watermark` non-blank rows, in list order. */
+/** Show complete families whose roots fit the row watermark, plus the blank row. */
 function watermarkRows(sessions: readonly SessionNode[], watermark: number): {
   rows: readonly SessionNode[]
   hiddenCount: number
 } {
   let count = 0
+  let familyVisible = false
   const rows = sessions.filter((session) => {
     if (session.blank) return true
     count += 1
-    return count <= watermark
+    if ((session.depth ?? 0) === 0) familyVisible = count <= watermark
+    return familyVisible
   })
   return { rows, hiddenCount: sessions.length - rows.length }
 }
@@ -593,7 +595,7 @@ function SessionTree({
         // Session drag never leaves its browser-local account, and pinned
         // rows reorder only within their leading pinned block.
           const sameGroupDrag = drag !== null && drag.accountKey === group.key
-          const compatibleTarget = sameGroupDrag && drag.pinned === node.pinned
+          const compatibleTarget = sameGroupDrag && drag.pinned === node.pinned && (node.depth ?? 0) === 0
           const normalizeHalf = (half: 'before' | 'after'): 'before' | 'after' =>
             node.blank ? 'after' : half
           const dragProps = {
@@ -742,7 +744,7 @@ function FlatList({
           <EmptySessions rowState={rowState} onLeaveArchivedOnly={onLeaveArchivedOnly} t={t} />
         )}
         {rows.map((node) => {
-          const active = drag !== null && drag.pinned === node.pinned
+          const active = drag !== null && drag.pinned === node.pinned && (node.depth ?? 0) === 0
           const normalizeHalf = (half: 'before' | 'after'): 'before' | 'after' =>
             node.blank ? 'after' : half
           return (

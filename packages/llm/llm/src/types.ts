@@ -426,6 +426,10 @@ export type ToolUpdate = 'in-history' | 'addition-only'
 
 /** Exact-route model metadata resolved by its owning adapter. */
 export interface LlmResolvedModelInfo extends LlmModelInfo {
+  /** Sampled-token probabilities with at most this many alternatives per position. */
+  tokenLogprobs?: { readonly maxTopLogprobs: number }
+  /** Assistant prefixes are accepted only on auxiliary requests without tools or tool history. */
+  assistantPrefill?: 'tool-free'
   /** Provider-owned context capacity when known. */
   context?: LlmModelContext
   /** Adapter-configured per-request output cap materialized when callers omit one. */
@@ -459,6 +463,23 @@ export interface ReplayEnvelope {
   blocks?: readonly unknown[]
 }
 
+/** One alternative token reported by the provider at a sampled position. */
+export interface TokenAlternative {
+  /** Token text reported by the provider. */
+  readonly token: string
+  /** Natural-log probability. */
+  readonly logprob: number
+}
+
+/** Generation-time probabilities aligned to one block; joining tokens reproduces its complete text. */
+export interface BlockTokenLogprobs {
+  readonly tokens: readonly string[]
+  /** Sampled-token log probabilities; null means the provider reported an unknown value outside its top list. */
+  readonly logprobs: readonly (number | null)[]
+  /** Reported alternatives at each sampled position, most likely first. */
+  readonly top: readonly (readonly TokenAlternative[])[]
+}
+
 /**
  * Raw streaming protocol emitted by adapters.
  * Block indexes correlate interleaved deltas, and `block-end` carries the
@@ -466,13 +487,14 @@ export interface ReplayEnvelope {
  * afterward; tool arguments remain raw JSON strings. An adapter implementation
  * may throw, but `LlmRuntime.stream()` normalizes that failure to a terminal
  * `error` or `aborted` finish before exposing it to consumers.
+ * Completed text blocks may carry generation-time token probabilities.
  */
 export type StreamChunk =
   | { type: 'block-start'; index: number; blockType: ContentBlockType }
   | { type: 'text-delta'; index: number; text: string }
   | { type: 'reasoning-delta'; index: number; text: string }
   | { type: 'tool-call-delta'; index: number; id: ToolCallId; name?: string; argumentsDelta: string }
-  | { type: 'block-end'; index: number; block: ContentBlock }
+  | { type: 'block-end'; index: number; block: ContentBlock; logprobs?: BlockTokenLogprobs }
   | { type: 'usage'; usage: TokenUsage }
   | {
     type: 'finish'
@@ -550,6 +572,10 @@ export interface GenerateOptions {
   toolHistory?: ToolHistory
   temperature?: number
   maxTokens?: number
+  /** Number of alternatives to capture per output token, 0–20; presence requests sampled-token probabilities. */
+  topLogprobs?: number
+  /** Tool-free auxiliary response prefix; output contains only its continuation. The exact prefix must be logged before dispatch. */
+  assistantPrefix?: string
   /**
    * Stop sequences: generation halts as soon as the model produces any one of
    * these strings (adapters map to the provider's stop field, e.g. OpenAI

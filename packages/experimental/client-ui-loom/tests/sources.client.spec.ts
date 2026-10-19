@@ -53,7 +53,7 @@ function chatOf(turns: readonly FakeTurn[]): ChatSnapshot {
 }
 
 function tail(
-  blocks: readonly ({ kind: 'text' | 'reasoning'; text: string } | { kind: 'other'; block: null })[],
+  blocks: readonly ({ kind: 'text' | 'reasoning'; text: string; logprobs?: import('@deepseek-ai/dsh-llm/types').BlockTokenLogprobs } | { kind: 'other'; block: null })[],
   seq: number,
   reasoningTokens?: number,
   cacheReadTokens?: number,
@@ -70,6 +70,17 @@ function tail(
 }
 
 describe('Loom reader document', () => {
+  it('retains captured answer probabilities and updates a turn when capture changes', () => {
+    const probs = { tokens: ['r'], logprobs: [-1], top: [[]] }
+    const make = (logprobs = probs) => chatOf([{ turn: 1, startSeq: 0, prompt: 'p', tail: tail([{ kind: 'text', text: 'r', logprobs }], 3) }])
+    const first = readerDocument(make(), false)
+    expect(first.turns[0]!.capturedReply).toEqual([{ text: 'r', logprobs: probs }])
+    expect(readerDocument(make(), false, first)).toBe(first)
+    expect(readerDocument(make({ ...probs }), false, first)).not.toBe(first)
+    const shifted = { ...first, turns: [{ ...first.turns[0]!, capturedReply: [{ text: 'other', logprobs: probs }] }] }
+    expect(readerDocument(make(), false, shifted)).not.toBe(shifted)
+  })
+
   it('folds loaded turns into prompts, closing replies and reasoning, and request seqs', () => {
     const document = readerDocument(chatOf([
       { turn: 1, startSeq: 0, prompt: 'first', tail: tail([{ kind: 'reasoning', text: 'think' }, { kind: 'text', text: 'one' }, { kind: 'text', text: 'two' }, { kind: 'other', block: null }], 5, 42) },

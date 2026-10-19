@@ -8,6 +8,7 @@ import type {
   SessionResultRange,
 } from './types.ts'
 import { SessionQueryError } from './config.ts'
+import { SessionLogOffset } from '@deepseek-ai/dsh-session'
 
 /**
  * Apply ANDed logical-session filters while preserving input order.
@@ -27,13 +28,15 @@ export function filterSessionResults<T extends SessionRecord>(
  * Apply ANDed event filters to extracted semantic documents.
  * @param documents - semantic documents produced by {@link buildSessionEventSearchDocuments}.
  * @param filters - metadata and literal-text predicates.
+ * @param inheritedEventCount - exact fork-inherited prefix length; omitted for an unseeded log.
  * @returns documents accepted by every clause, in input order.
  */
 export function filterSessionEventDocuments<T extends SessionEventSearchDocument>(
   documents: readonly T[],
   filters: readonly SessionEventResultFilter[] = [],
+  inheritedEventCount: SessionLogOffset = SessionLogOffset(0),
 ): T[] {
-  const predicates = filters.map(eventPredicate)
+  const predicates = filters.map(filter => eventPredicate(filter, inheritedEventCount))
   return documents.filter(document => predicates.every(predicate => predicate(document)))
 }
 
@@ -88,6 +91,11 @@ export function materializeSessionEventResultFilters(
         assertAllowedValues(filter.kind, values, ['current', 'shadowed', 'log-only'])
         return { kind: filter.kind, values }
       }
+      case 'ownership': {
+        const values = copyStrings(filter.kind, filter.values)
+        assertAllowedValues(filter.kind, values, ['own', 'inherited'])
+        return { kind: filter.kind, values }
+      }
       case 'text':
         if (typeof filter.text !== 'string') throw invalidFilter('text filter text must be a string')
         return { kind: filter.kind, text: filter.text }
@@ -137,7 +145,10 @@ function sessionPredicate(filter: SessionResultFilter): (record: SessionRecord) 
   }
 }
 
-function eventPredicate(filter: SessionEventResultFilter): (document: SessionEventSearchDocument) => boolean {
+function eventPredicate(
+  filter: SessionEventResultFilter,
+  inheritedEventCount: SessionLogOffset,
+): (document: SessionEventSearchDocument) => boolean {
   switch (filter.kind) {
     case 'seq': {
       const range = validateRange(filter.kind, filter)
@@ -152,6 +163,9 @@ function eventPredicate(filter: SessionEventResultFilter): (document: SessionEve
     case 'surface':
       assertAllowedValues(filter.kind, filter.values, ['current', 'shadowed', 'log-only'])
       return document => filter.values.includes(document.surface)
+    case 'ownership':
+      assertAllowedValues(filter.kind, filter.values, ['own', 'inherited'])
+      return document => filter.values.includes(document.seq < inheritedEventCount ? 'inherited' : 'own')
     case 'text': {
       const pattern = compileSessionTextFilter(filter.text)
       return document => pattern.test(document.text)

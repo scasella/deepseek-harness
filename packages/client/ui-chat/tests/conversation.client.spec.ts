@@ -9,6 +9,14 @@ import {
 } from '../src/client/conversation-nodes/event-projection.ts'
 
 describe('toAssistantBlock', () => {
+  it('carries captured probabilities on text blocks at their assembled positions', () => {
+    const logprobs = { tokens: ['answer'], logprobs: [-0.1], top: [[]] }
+    const content: ContentBlock[] = [{ type: 'reasoning', text: 'thought' }, { type: 'text', text: 'answer' }]
+    expect(toAssistantBlocks(content, [undefined, logprobs])).toEqual([
+      { kind: 'reasoning', text: 'thought' }, { kind: 'text', text: 'answer', logprobs },
+    ])
+    expect(toAssistantBlock(content[0] as ContentBlock, logprobs)).toEqual({ kind: 'reasoning', text: 'thought' })
+  })
   it('classifies the four block shapes', () => {
     const attachment = {
       attachmentId: AttachmentId(`sha256:${'a'.repeat(64)}`),

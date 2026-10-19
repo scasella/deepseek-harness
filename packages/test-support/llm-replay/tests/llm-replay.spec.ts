@@ -1417,6 +1417,8 @@ describe('installLlmReplay (through the real LlmRuntime)', () => {
               defaultReasoningEffort: 'max',
               systemPromptUpdate: 'in-history',
               toolUpdate: 'addition-only',
+              tokenLogprobs: { maxTopLogprobs: 5 },
+              assistantPrefill: 'tool-free',
             },
             { id: 'pro', name: 'Pro', description: 'Larger model', reasoningEfforts: ['high'] },
           ],
@@ -1444,6 +1446,8 @@ describe('installLlmReplay (through the real LlmRuntime)', () => {
       },
       systemPromptUpdate: 'in-history',
       toolUpdate: 'addition-only',
+      tokenLogprobs: { maxTopLogprobs: 5 },
+      assistantPrefill: 'tool-free',
     })
     await expect(ctx.llm.resolveModelInfo('deepseek', 'pro')).resolves.not.toHaveProperty('systemPromptUpdate')
     await expect(ctx.llm.resolveModelInfo('deepseek', 'pro')).resolves.not.toHaveProperty('toolUpdate')
@@ -2496,5 +2500,50 @@ describe('apply (the plugin entry)', () => {
     await ctx.plugin(LlmRuntime)
     apply(ctx)
     expect(await drain(ctx.llm.stream({ provider: 'm', model: 'm', messages: [] }))).toEqual(TEXT_CHUNKS)
+  })
+})
+
+describe('Loom auxiliary replay', () => {
+  function node(seq: number, requestSeq: unknown, index: unknown, stream: unknown = []) {
+    const header = { type: 'session', version: 4, id: 'auxiliary', createdAt: 0, cwd: '/tmp', isSeeded: false, delegationDepth: 0 }
+    const event = { type: 'plugin:loom/weave-node', ignorable: true, data: { requestSeq, index, stream } }
+    return { ...parseSessionLog(`${JSON.stringify(header)}\n${JSON.stringify(event)}\n`)[0]!, seq: SessionSeq(seq) }
+  }
+
+  it('sorts parallel weave settlements by request sequence and sibling index while preserving ordinary calls', () => {
+    const first = streamEvent(0, 1, 1, TEXT_CHUNKS)
+    const a = [{ type: 'finish', reason: { kind: 'stop' } }] satisfies StreamChunk[]
+    const b = [{ type: 'finish', reason: { kind: 'max-tokens' } }] satisfies StreamChunk[]
+    const raw = (chunks: StreamChunk[]) => chunks.map(chunk => ({ type: 'chunk', time: 0, chunk }))
+    const events = [first, node(5, 1, 1, raw(b)), node(6, 2, 0, raw(b)), node(7, 1, 0, raw(a))]
+    expect(deriveReplayScript(events)).toEqual([
+      { kind: 'chunks', chunks: TEXT_CHUNKS },
+      { kind: 'chunks', chunks: a },
+      { kind: 'chunks', chunks: b },
+      { kind: 'chunks', chunks: b },
+    ])
+  })
+
+  it('rejects malformed durable node references and streams', () => {
+    for (const event of [node(1, -1, 0), node(1, 0, -1), node(1, '0', 0), node(1, 0, '0'), node(1, 0, 0, null)]) {
+      expect(() => deriveReplayScript([event])).toThrow('invalid plugin:loom/weave-node')
+    }
+    expect(() => deriveReplayScript([node(1, 0, 0, [{ type: 'chunk', time: 0, chunk: { type: 'text-delta', index: 0, text: 'a' } }])]))
+      .toThrow('without a finish chunk')
+    expect(deriveReplayScript([node(1, 0, 0)])).toEqual([])
+  })
+
+  it('rejects invalid configured probability and prefix capabilities before replay activation', async () => {
+    writeFileSync(file, replaySessionJsonl([TEXT_CHUNKS]), 'utf8')
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    try {
+      for (const maxTopLogprobs of [-1, 21, 0.5]) {
+        expect(() => { apply(ctx, { file, providers: [{ id: 'm', models: [{ id: 'm', tokenLogprobs: { maxTopLogprobs } }] }] }) }).toThrow('maxTopLogprobs')
+      }
+      expect(() => { apply(ctx, { file, providers: [{ id: 'm', models: [{ id: 'm', assistantPrefill: 'other' as never }] }] }) }).toThrow('assistantPrefill')
+    } finally {
+      await ctx.fiber.dispose()
+    }
   })
 })

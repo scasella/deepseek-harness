@@ -362,13 +362,17 @@ export class ClientSessions implements ISessions {
    * request-local; the list snapshot remains the metadata authority.
    * @param query - non-blank literal phrase.
    * @param signal - cancellation for a superseded search.
+   * @param scope - optional own or fork-inherited message restriction; omission searches both.
+   * @param sessionIds - target subset applied before ranking; empty matches nothing, omission searches the visible corpus.
    * @returns bounded results or a business/transport error.
    */
   search(
     query: string,
     signal: AbortSignal,
+    scope?: 'own' | 'inherited',
+    sessionIds?: readonly SessionId[],
   ): Promise<RemoteResult<{ items: SessionSearchResultItem[]; hasMore: boolean }>> {
-    return this.manager.search(query, signal)
+    return this.manager.search(query, signal, scope, sessionIds)
   }
 
   /**

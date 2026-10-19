@@ -77,6 +77,8 @@ Explicit selections update every consumer immediately; accepted Host settings re
 
 Preference menus restore focus to their trigger without scrolling before publishing a new selection.
 
+Tool-result surface replacements update the existing tool card with the replacement content and seq while preserving its call identity and position. Model-context replacements of user and assistant prose remain outside Chat business nodes.
+
 <a id="completed-turn-footer"></a>
 ## Completed-turn footer
 

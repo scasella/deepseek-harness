@@ -1,6 +1,6 @@
 /** Chat-owned conversion from durable Session events to Chat view data. */
 
-import type { ContentBlock, StreamChunk } from '@deepseek-ai/dsh-llm/types'
+import type { BlockTokenLogprobs, ContentBlock, StreamChunk } from '@deepseek-ai/dsh-llm/types'
 import type {
   AssistantBlock, ContextProducerView, KnownContextForm,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -100,20 +100,25 @@ export function skillInvocationName(source: unknown): string | null {
 /**
  * Classify finalized Assistant content for Chat rendering.
  * @param content - Core content blocks.
+ * @param logprobs - optional generation-time probabilities in assembled content order.
  * @returns Chat blocks in source order.
  */
-export function toAssistantBlocks(content: readonly ContentBlock[]): AssistantBlock[] {
-  return content.map(toAssistantBlock)
+export function toAssistantBlocks(
+  content: readonly ContentBlock[],
+  logprobs?: readonly (BlockTokenLogprobs | undefined)[],
+): AssistantBlock[] {
+  return content.map((block, index) => toAssistantBlock(block, logprobs?.[index]))
 }
 
 /**
  * Classify one finalized Assistant block for Chat rendering.
  * @param block - Core content block.
+ * @param logprobs - optional generation-time probabilities for a text block.
  * @returns Chat block.
  */
-export function toAssistantBlock(block: ContentBlock): AssistantBlock {
+export function toAssistantBlock(block: ContentBlock, logprobs?: BlockTokenLogprobs): AssistantBlock {
   switch (block.type) {
-    case 'text': return { kind: 'text', text: block.text }
+    case 'text': return { kind: 'text', text: block.text, ...logprobs === undefined ? {} : { logprobs } }
     case 'reasoning': return { kind: 'reasoning', text: block.text }
     case 'image': return { kind: 'image', attachment: block.attachment }
     case 'tool-call': return { kind: 'tool-call', callId: String(block.id), name: block.name, argsRaw: block.arguments }

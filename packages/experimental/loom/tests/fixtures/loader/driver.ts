@@ -2,7 +2,7 @@
 /**
  * Loom Loader driver: boot the shipped Web profile with the Loom bundle patch
  * and the test patch, prompt a root Session, fork it, prompt the child, and
- * write `loom.requestAt` views of the child's requests to `loom-report.json`.
+ * write request views and scoped content-search results to `loom-report.json`.
  */
 import { writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
@@ -62,6 +62,15 @@ try {
   const views = await Promise.all(settlements.map(seq => ctx.loom.requestAt({ sessionId: childId, seq }, signal)))
   const outOfRange = await ctx.loom.requestAt({ sessionId: childId, seq: SessionSeq(child.events.length) }, signal)
     .then(() => undefined, (error: unknown) => remoteErrorOf(error)?.code)
+  const searchIds = async (query: string, scope: 'own' | 'inherited') => (
+    await ctx.sessionController.search({ query, scope, sessionIds: [childId] }, signal)
+  ).items.map(item => item.sessionId)
+  const search = {
+    own: await searchIds('second prompt', 'own'),
+    inherited: await searchIds('first prompt', 'inherited'),
+    excludedInherited: await searchIds('first prompt', 'own'),
+    excludedOwn: await searchIds('second prompt', 'inherited'),
+  }
   await writeFile(REPORT, JSON.stringify({
     entries,
     clientRoster: ctx.clientModules.graph().entries.map(entry => entry.id),
@@ -71,6 +80,7 @@ try {
     settlements,
     views,
     outOfRange,
+    search,
   }))
 } finally {
   await ctx.fiber.dispose()

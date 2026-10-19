@@ -7,7 +7,7 @@
 import { useMemo, useState } from 'react'
 import {
   DisclosureRow, IconBranchOutlineRegular, IconChevronDownOutlineRegular, IconChevronRightOutlineRegular,
-  IconThinkOutlineRegular, MarkdownText,
+  IconThinkOutlineRegular, MarkdownText, Tag,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { LoomFamily } from '@deepseek-ai/dsh-experimental-loom/types'
@@ -16,12 +16,13 @@ import type { TurnOutlineEntry } from '@deepseek-ai/dsh-session-turn-outline/cli
 import { ClippedText } from './clipped.tsx'
 import { cutReading, exactCount, plainPreview, plural, type LoomTranslate } from './format.ts'
 import {
-  forkCutOf, inheritedCounts, inheritedSplitOf, lastInheritedTurnOf, ownCounts, projectionValuesOf, sessionTitle, variantsOf,
-  type LoomCounts, type LoomSplit,
+  branchOf, forkCutOf, inheritedCounts, inheritedSplitOf, lastInheritedTurnOf, ownCounts, projectionValuesOf, sessionTitle,
+  variantsOf, type LoomCounts, type LoomSplit,
 } from './lineage.ts'
 import type { LoomViewProps } from './LoomView.tsx'
 import type { LoomReaderTurn, LoomTurnUsage } from './reader.ts'
 import { loomRequestKey } from './requests.ts'
+import { TokenText } from './TokenText.tsx'
 import css from './ReadingPane.module.css'
 
 /** Props the view hands its reading pane. */
@@ -81,6 +82,7 @@ export function ReadingPane(props: ReadingPaneProps) {
     <article className={css.document} data-loom-reader={sessionId}>
       <header className={css.head}>
         <h2 className={css.title}>{title}</h2>
+        {branchOf(values)?.adopted === true && <Tag tone="success">{t('read.adopted')}</Tag>}
         {sessionId !== currentSessionId && (
           <button
             type="button"
@@ -245,6 +247,9 @@ function OwnTurnCard({ turn, counts, sessionId, useLoomRequest, renderFactorySlo
       {turn.reply === ''
         ? <p className={css.status}>{t(turn.closed ? 'read.noReply' : 'read.running')}</p>
         : <div className={css.reply}><MarkdownText text={turn.reply} labels={labels} /></div>}
+      {turn.capturedReply !== undefined && <details><summary>{t('token.inspector')}</summary><p>{t('token.legend')}</p>
+        {turn.capturedReply.map((block, index) => <p key={index}><TokenText {...block} t={t} /></p>)}
+      </details>}
     </section>
   )
 }

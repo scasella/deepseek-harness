@@ -1260,7 +1260,7 @@ describe('WorkspaceBrowser', () => {
     expect(unarchiveSession).toHaveBeenCalledWith(sid('gone'))
   })
 
-  it('renders a fork child as a top-level row without a session twist', () => {
+  it('renders a fork child beneath its source with a distinct title', () => {
     const parent = summary('parent-s', 2)
     const child = { ...summary('child-s', 1), parentId: parent.id }
     mount({
@@ -1268,9 +1268,28 @@ describe('WorkspaceBrowser', () => {
       useWorkspaces: hook(workspaceState([workspace('alpha', ['parent-s', 'child-s'])])),
     })
     fireEvent.click(screen.getByText('alpha'))
-    expect(screen.getByText('child-s')).toBeTruthy()
+    expect(screen.getByText('child-s · 分支 child-s')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /展开|收起/ })).toBeNull()
-    expect(screen.getByText('child-s').closest('[role="treeitem"]')?.getAttribute('draggable')).toBe('true')
+    expect(screen.getByText('child-s · 分支 child-s').closest('[role="treeitem"]')?.getAttribute('draggable')).toBe('false')
+    const source = screen.getByText('parent-s').closest('[role="treeitem"]')!
+    fireEvent.dragStart(source, { dataTransfer: dragData() })
+    fireEvent.dragEnd(source)
+  })
+
+  it('keeps a visible fork family complete when it crosses the row watermark', () => {
+    const source = summary('family-source', 1)
+    const children = Array.from({ length: 6 }, (_, index) => ({
+      ...summary(`fork-${String(index)}`, 2 + index), parentId: source.id,
+    }))
+    const items = [source, ...children, summary('hidden-root', 0)]
+    mount({
+      useSessions: hook(sessionState(items)),
+      useWorkspaces: hook(workspaceState([workspace('alpha', items.map(item => item.id))])),
+    })
+    fireEvent.click(screen.getByText('alpha'))
+    for (const child of children) expect(screen.getByText(`${child.title} · 分支 ${child.id}`)).toBeTruthy()
+    expect(screen.queryByText('hidden-root')).toBeNull()
+    expect(screen.getByRole('button', { name: '展开其余 1 个会话' })).toBeTruthy()
   })
 
   it('expands the target group before starting a session from its ＋', () => {

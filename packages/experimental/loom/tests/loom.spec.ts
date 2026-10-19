@@ -1,13 +1,14 @@
 /** The Loom service owns the `loomBranch` and `loomMark` units, telemetry redaction, and the fork-family Remote for its plugin lifetime. */
 import { Context } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
+import LlmRuntime from '@deepseek-ai/dsh-llm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SessionProjectionHints, SessionSummary } from '@deepseek-ai/dsh-api-session-controller'
 import SessionStore, { appendPluginRecord, SessionId, SessionSeq, type Session } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import type { SessionTelemetryRecord } from '@deepseek-ai/dsh-session-telemetry'
 import type { RemoteAccessResource } from '@deepseek-ai/dsh-typert-protocol'
-import Loom from '../src/index.ts'
+import Loom, { DEFAULT_TEST_SUMMARY } from '../src/index.ts'
 import { loomBranchProjection, loomMarkProjection } from '../src/projection.ts'
 import type { LoomBranchRecord, LoomSetId } from '../src/types.ts'
 
@@ -53,6 +54,10 @@ async function fixture(items: readonly SessionSummary[] = []): Promise<Fixture> 
   ctx.provide('sessionController', { list } as never)
   ctx.provide('remoteAccess', { allows: (resource: RemoteAccessResource) => !('id' in resource && hidden.has(resource.id)) } as never)
   ctx.provide('typert', {} as never)
+  // Loom reads the filesystem and archives Sessions only in operations these specs never call.
+  ctx.provide('fs', {} as never)
+  ctx.provide('workspaceRegistry', {} as never)
+  await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
   await ctx.plugin(SessionProjectionRegistry)
   return { ctx, list, hidden }
@@ -89,9 +94,14 @@ describe('Loom service', () => {
   })
 
   it('validates its admission limits at load', async () => {
-    expect(Loom.Config({})).toEqual({ maxBranchesPerRequest: 8, maxConcurrentBranches: 4, concurrentWritableBranches: false })
+    expect(Loom.Config({})).toMatchObject({
+      maxBranchesPerRequest: 8, maxConcurrentBranches: 4, retainedBranchSets: 256, pricing: [], concurrentWritableBranches: false,
+    })
     expect(() => Loom.Config({ maxConcurrentBranches: 0 })).toThrow()
     expect(() => Loom.Config({ maxBranchesPerRequest: 1.5 })).toThrow()
+    expect(() => Loom.Config({ retainedBranchSets: 0 })).toThrow()
+    expect(() => Loom.Config({ retainedBranchSets: 1.5 })).toThrow()
+    expect(() => Loom.Config({ pricing: [{ provider: 'p', model: 'm', inputMissPerMTok: -1, inputHitPerMTok: 0, outputPerMTok: 0 }] })).toThrow()
     const { ctx } = await fixture()
     await expect(ctx.plugin(Loom, { maxBranchesPerRequest: 0 })).rejects.toThrow()
   })
@@ -135,6 +145,61 @@ describe('loomBranch projection', () => {
     expect(loomBranchProjection.stateSchema.safeParse({ inheritedEventCount: 2, branch: { ...view, extra: 1 } }).success).toBe(false)
     expect(loomBranchProjection.stateSchema.parse({ inheritedEventCount: 2, branch: view }))
       .toEqual({ inheritedEventCount: 2, branch: view })
+  })
+})
+
+describe('workspace configuration', () => {
+  it('defaults to shared folders, the loom/ prefix, the four test runners, and bounded diffs and patches', () => {
+    expect(Loom.Config({})).toMatchObject({
+      defaultIsolation: 'shared',
+      worktreeBranchPrefix: 'loom/',
+      outcomes: { commandTools: [{ name: 'bash', commandArgument: 'command' }], testSummary: [...DEFAULT_TEST_SUMMARY] },
+      diff: { maxBytes: 262_144 },
+      apply: { maxPatchBytes: 33_554_432 },
+    })
+    expect(DEFAULT_TEST_SUMMARY.map(pattern => pattern.name)).toEqual(['unittest', 'pytest', 'vitest', 'jest'])
+    expect(() => Loom.Config({ defaultIsolation: 'copy' as never })).toThrow()
+    expect(() => Loom.Config({ diff: { maxBytes: 0 } })).toThrow()
+    expect(() => Loom.Config({ outcomes: { testSummary: [{ name: 'p' } as never] } })).toThrow()
+  })
+
+  it.each([
+    [{ worktreeBranchPrefix: '-x' }, 'loom: worktreeBranchPrefix must start a relative Git branch name'],
+    [{ worktreeBranchPrefix: 'a/../b/' }, 'loom: worktreeBranchPrefix must start a relative Git branch name'],
+    [{ outcomes: { testSummary: [{ name: 'broken', summary: '(' }] } }, 'loom: outcomes.testSummary "broken" summary is not a valid regular expression'],
+  ])('fails to load with %j', async (config, message) => {
+    const { ctx } = await fixture()
+    await expect(ctx.plugin(Loom, config)).rejects.toThrow(message)
+    expect(ctx.get('loom')).toBeUndefined()
+  })
+})
+
+describe('loomBranch adoption', () => {
+  it('marks own membership adopted once by a valid own adopt record after it', async () => {
+    const { ctx, source } = await projected()
+    appendPluginRecord(source, 'plugin:loom/adopt', { version: 1 })
+    expect(ctx.sessionProjections.stateOf(source, 'loomBranch')?.branch).toBeNull()
+    appendPluginRecord(source, 'plugin:loom/branch', branch())
+    appendPluginRecord(source, 'plugin:loom/adopt', { version: 2 } as never)
+    appendPluginRecord(source, 'plugin:loom/test-other', { note: 'other' })
+    const member = ctx.sessionProjections.stateOf(source, 'loomBranch')
+    expect(member?.branch).not.toHaveProperty('adopted')
+    appendPluginRecord(source, 'plugin:loom/adopt', { version: 1, setId: brandString<LoomSetId>('set-1') })
+    const adopted = ctx.sessionProjections.stateOf(source, 'loomBranch')
+    expect(adopted?.branch).toMatchObject({ setId: 'set-1', adopted: true })
+    appendPluginRecord(source, 'plugin:loom/adopt', { version: 1 })
+    expect(ctx.sessionProjections.stateOf(source, 'loomBranch')).toBe(adopted)
+    expect(ctx.sessionProjections.snapshot(source, ['loomBranch']).values.loomBranch).toMatchObject({ adopted: true })
+    expect(loomBranchProjection.stateSchema.safeParse({ inheritedEventCount: 0, branch: { setId: 's', kind: 'edit', index: 0, createdAt: 1, adopted: false } }).success).toBe(false)
+  })
+
+  it('ignores an adoption a fork inherited', async () => {
+    const { ctx, source } = await projected()
+    appendPluginRecord(source, 'plugin:loom/branch', branch())
+    appendPluginRecord(source, 'plugin:loom/adopt', { version: 1 })
+    const child = ctx.sessions.fork(source)
+    appendPluginRecord(child, 'plugin:loom/branch', branch({ setId: brandString<LoomSetId>('set-2') }))
+    expect(ctx.sessionProjections.stateOf(child, 'loomBranch')?.branch).not.toHaveProperty('adopted')
   })
 })
 

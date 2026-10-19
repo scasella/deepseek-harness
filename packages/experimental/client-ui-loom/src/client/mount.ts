@@ -10,6 +10,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import { BranchCaret } from './BranchCaret.tsx'
 import { BranchForm } from './BranchForm.tsx'
 import { createLoomBranching, type LoomBranchingInputs } from './branching.ts'
@@ -22,6 +24,7 @@ import { LOOM_VIEW_ID, LoomView, type LoomViewInjected } from './LoomView.tsx'
 import { createLoomReaderSources, type LoomReaderInputs } from './reader.ts'
 import { MarkGroup } from './MarkGroup.tsx'
 import { RegenerateSplit } from './RegenerateSplit.tsx'
+import { createLoomReads, loomCompareKey, type LoomReadInputs } from './reads.ts'
 import { createLoomRequestSources, type LoomRequestInputs } from './requests.ts'
 import { createLoomRoutes } from './routes.ts'
 import { RunningStrip } from './RunningStrip.tsx'
@@ -29,6 +32,12 @@ import { registerLoomTreeKeys } from './shortcuts.ts'
 import { VariantChip } from './VariantChip.tsx'
 import { VariantPager } from './VariantPager.tsx'
 import { createLoomViewStore } from './view-store.ts'
+import { createLoomWorkspace, type LoomWorkspaceInputs } from './workspace.ts'
+import { createMultiverseSearch } from './multiverse.ts'
+import { MultiversePage, MultiverseIcon } from './MultiversePage.tsx'
+import { createLoomProseReads, type LoomProseCalls } from './prose.ts'
+import { CounterfactualAction } from './CounterfactualAction.tsx'
+import { AutoloomCard } from './AutoloomCard.tsx'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -54,17 +63,20 @@ const UI_SERVICES = ['remote.loom', 'sessions', 'locale', 'slots', 'uiConversati
 export type LoomRequestRead = LoomRequestInputs['read']
 
 /** The mounted `loom` Remote calls the slot entries use. */
-export interface LoomRemoteCalls extends Pick<LoomBranchingInputs, 'branch' | 'cancel' | 'setStatus' | 'mark'> {
+export interface LoomRemoteCalls
+  extends Pick<LoomBranchingInputs, 'branch' | 'cancel' | 'setStatus' | 'mark'>, LoomReadInputs,
+  Pick<LoomWorkspaceInputs, 'adopt' | 'apply' | 'discard'>, LoomProseCalls {
   /** `loom.requestAt`. */
   readonly requestAt: LoomRequestRead
 }
 
 /**
- * Register the Loom dictionaries, sources, branching state, fork band, header
- * chip, turn-tail actions, Edit & branch, dock entries, and view tab on the
- * calling fiber, and attach the route list while the `session` Remote is
- * mounted; disposing the fiber removes every registration, releases every
- * Session a reader retained, and drops the branching state.
+ * Register the Loom dictionaries, sources, branching state, workspace verbs,
+ * fork band, header chip, turn-tail actions, Edit & branch, dock entries, and
+ * view tab on the calling fiber, and attach the route list while the `session`
+ * Remote is mounted; disposing the fiber removes every registration, releases
+ * every Session a reader retained, closes the compare, diff, and estimate
+ * sources, and drops the branching state.
  * @param ctx - Client context carrying the Session list, locale, slots, Conversation assembly, and navigation.
  * @param calls - the `loom` Remote calls.
  * @returns family sources, for callers that read families outside a slot.
@@ -78,6 +90,8 @@ export function registerLoom(ctx: Context, calls: LoomRemoteCalls): LoomFamilySo
     chat: binding => ctx.uiConversation.binding(binding).target('chat'),
   }
   const readers = createLoomReaderSources(readerInputs)
+  const prose = createLoomProseReads(calls)
+  const multiverseSearch = createMultiverseSearch((...args) => ctx.sessions.search(...args))
   const requests = createLoomRequestSources({ read: calls.requestAt })
   const branching = createLoomBranching({
     branch: calls.branch,
@@ -88,7 +102,18 @@ export function registerLoom(ctx: Context, calls: LoomRemoteCalls): LoomFamilySo
     openSession: (sessionId) => { ctx.uiWorkspace.openSession(sessionId) },
   })
   const routes = createLoomRoutes()
+  const reads = createLoomReads({ compare: calls.compare, diff: calls.diff, estimate: calls.estimate })
+  const workspace = createLoomWorkspace({
+    adopt: calls.adopt,
+    apply: calls.apply,
+    discard: calls.discard,
+    refreshProjection: sessionId => ctx.sessions.refreshProjections(sessionId),
+  })
   ctx.effect(() => () => {
+    workspace.dispose()
+    prose.dispose()
+    multiverseSearch.dispose()
+    reads.dispose()
     branching.dispose()
     requests.dispose()
     readers.dispose()
@@ -110,6 +135,7 @@ export function registerLoom(ctx: Context, calls: LoomRemoteCalls): LoomFamilySo
   }
   const branchingFace: LoomBranchingInjected = {
     ...links,
+    keyedHooks: { loomFamily: key => families.source(key), loomEstimate: key => reads.estimate.source(key) },
     hooks: { loomBranching: branching.state, loomRoutes: routes.state },
     startBranches: (draft, options) => branching.start(draft, options),
     cancelBranches: (setId, indices) => branching.cancel(setId, indices),
@@ -126,10 +152,22 @@ export function registerLoom(ctx: Context, calls: LoomRemoteCalls): LoomFamilySo
   const view: LoomViewInjected = {
     ...branchingFace,
     keyedHooks: {
-      loomFamily: key => families.source(key),
+      ...branchingFace.keyedHooks,
       loomReader: key => readers.source(key),
       loomRequest: key => requests.source(key),
+      loomCompare: key => reads.compare.source(key),
+      loomDiff: key => reads.diff.source(key),
+      loomWeave: key => prose.source(key),
     },
+    weave: calls.weave,
+    choose: calls.choose,
+    probe: calls.probe,
+    exportLoom: calls.export,
+    refreshWeave: (sessionId) => { prose.refresh(sessionId) },
+    refreshCompare: (sessionId) => { reads.compare.refresh(loomCompareKey(sessionId)) },
+    adoptBranch: sessionId => workspace.adopt(sessionId),
+    applyBranch: sessionId => workspace.apply(sessionId),
+    discardBranch: sessionId => workspace.discard(sessionId),
     loadOlder: (sessionId: SessionId) => {
       ctx.sessions.binding(sessionId)?.session.loadOlder().catch((_error: unknown) => {
         // A failed page leaves the window unchanged; the pane keeps offering the action.
@@ -174,6 +212,15 @@ export function registerLoom(ctx: Context, calls: LoomRemoteCalls): LoomFamilySo
     locale: NS,
     inject: () => branchingFace,
   }, EditBranch))
+  ctx.slots.inject('tool.call.actions', () => ctx.slots.register({
+    name: 'tool.call.actions', id: 'loom-counterfactual', locale: NS,
+    inject: () => ({ counterfactual: calls.counterfactual, openSession: links.openSession }),
+  }, CounterfactualAction))
+  for (const key of ['loom_expand', 'loom_wait', 'loom_read', 'loom_cull', 'loom_keep']) {
+    ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
+      name: 'tool.call.toolview', key, locale: NS, inject: () => ({ openSession: links.openSession }),
+    }, AutoloomCard))
+  }
   // Between the Goal card (10) and the queue panel (20), which stays attached to the composer card.
   ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
     name: 'conversation.input.dock',
@@ -199,6 +246,19 @@ export function registerLoom(ctx: Context, calls: LoomRemoteCalls): LoomFamilySo
     store: createLoomViewStore(),
     inject: () => view,
   }, LoomView))
+  const multiversePanel = brandString<MainPanelId>('loom-multiverse')
+  ctx.slots.inject('main', () => ctx.slots.register({
+    name: 'main', key: multiversePanel, locale: NS,
+    inject: () => ({
+      keyedHooks: { loomFamilySearch: (key: string) => multiverseSearch.source(key) },
+      openSession: links.openSession,
+      retrySearch: (key: string) => { multiverseSearch.refresh(key) },
+    }),
+  }, MultiversePage))
+  ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+    name: 'sidebar.panellist', id: multiversePanel, order: 20, locale: NS,
+    label: () => t('multiverse.title'),
+  }, MultiverseIcon))
   return families
 }
 
@@ -221,6 +281,18 @@ export async function mountLoom(ctx: Context, contribution: TypertRemoteContribu
       cancel: request => loom.cancel(request),
       setStatus: request => loom.setStatus(request),
       mark: request => loom.mark(request),
+      compare: request => loom.compare(request),
+      diff: request => loom.diff(request),
+      estimate: request => loom.estimate(request),
+      adopt: request => loom.adopt(request),
+      apply: request => loom.apply(request),
+      discard: request => loom.discard(request),
+      weave: request => loom.weave(request),
+      weaveState: request => loom.weaveState(request),
+      choose: request => loom.choose(request),
+      probe: request => loom.probe(request),
+      export: request => loom.export(request),
+      counterfactual: request => loom.counterfactual(request),
     })
   })
   const keys = ctx.inject(['locale', 'shortcuts'], (inner) => { registerLoomTreeKeys(inner, inner.locale.bind(NS)) })

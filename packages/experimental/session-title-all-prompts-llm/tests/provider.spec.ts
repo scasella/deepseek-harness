@@ -168,7 +168,7 @@ describe('all-messages LLM title provider', () => {
     expect(foreignOptions.system).toBe(SYSTEM_WITH_TITLE)
   })
 
-  it('includes seeded history and the latest prompt while inheriting the logged request route', async () => {
+  it('uses own prompts while inheriting the logged request route', async () => {
     const seeded = Session.create(SessionId('seed-source'))
     seeded.append('turn/start', { turn: 1 })
     const inherited = seeded.append('user/message', createUserMessage({
@@ -198,13 +198,12 @@ describe('all-messages LLM title provider', () => {
     expect(adapter.requests[0]).toMatchObject({ provider: 'title-route', model: 'title-model' })
     const options = adapter.requests[0]!
     expect(textOf(options)).toBe(initialInput([
-      { seq: inherited.seq, text: 'inherited prompt' },
       { seq: latest.seq, text: 'latest prompt' },
     ]))
     expect(options.system).toBe(SYSTEM_BASE)
     expect(ctx.sessionTitle.get(session)).toMatchObject({
       title: 'All messages model title',
-      messageSeqs: [inherited.seq, latest.seq],
+      messageSeqs: [latest.seq],
       source: { kind: 'provider', provider: providerPlugin.name },
     })
   })

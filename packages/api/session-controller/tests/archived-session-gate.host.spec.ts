@@ -33,6 +33,7 @@ async function liveAgent(ctx: Context, session: Session): Promise<Agent> {
     status: 'idle',
     ctx,
     send: () => {},
+    continue: () => {},
     followup: () => {},
     steer: () => {},
     inject: () => {},

@@ -914,3 +914,51 @@ describe('loom.mark', () => {
     expect(await stored(third)).toBe(1)
   })
 })
+
+describe('finished branch set retention', () => {
+  it('keeps active sets and evicts the oldest finished set together with its retry result', async () => {
+    const h = await harness({ retainedBranchSets: 1, maxConcurrentBranches: 3, concurrentWritableBranches: true })
+    const from = await source(h, { mode: 'read-only' })
+    await run(from, 'hello')
+    h.adapter.gated = true
+    const firstRequest: LoomBranchRequest = { kind: 'regenerate', sessionId: from.id, requestId: requestId(), turn: 1, count: 1 }
+    const secondRequest = { ...firstRequest, requestId: requestId() }
+    const thirdRequest = { ...firstRequest, requestId: requestId() }
+    const first = await h.ctx.loom.branch(firstRequest)
+    const second = await h.ctx.loom.branch(secondRequest)
+    const third = await h.ctx.loom.branch(thirdRequest)
+    await vi.waitFor(() => { expect(h.adapter.held()).toHaveLength(3) })
+    h.adapter.open(started(second)[0]!)
+    await h.ctx.agents.get(started(second)[0]!)!.whenIdle()
+    expect(h.ctx.loom.setStatus({ setId: first.setId }).setId).toBe(first.setId)
+    h.adapter.open(started(third)[0]!)
+    await h.ctx.agents.get(started(third)[0]!)!.whenIdle()
+    expect(() => h.ctx.loom.setStatus({ setId: second.setId })).toThrow(expect.objectContaining({ code: 'loom/set-not-found' }))
+    expect(await h.ctx.loom.branch(thirdRequest)).toEqual(third)
+    h.adapter.release()
+    await h.ctx.agents.get(started(first)[0]!)!.whenIdle()
+    expect(() => h.ctx.loom.setStatus({ setId: first.setId })).toThrow(expect.objectContaining({ code: 'loom/set-not-found' }))
+    const retried = await h.ctx.loom.branch(firstRequest)
+    expect(retried.setId).not.toBe(first.setId)
+    await h.ctx.agents.get(started(retried)[0]!)!.whenIdle()
+  })
+
+  it('counts failed admissions and cancelled queued sets as finished without evicting running sets', async () => {
+    const h = await harness({ retainedBranchSets: 1, maxConcurrentBranches: 1 })
+    const from = await source(h, { mode: 'read-only' })
+    await run(from, 'hello')
+    const request = (): LoomBranchRequest => ({ kind: 'regenerate', sessionId: from.id, requestId: requestId(), turn: 1, count: 1 })
+    const fork = vi.spyOn(h.ctx.sessionController, 'fork').mockRejectedValueOnce(new Error('fork refused'))
+    const failed = await h.ctx.loom.branch(request())
+    expect(failed.children[0]?.state).toBe('failed')
+    fork.mockRestore()
+    h.adapter.gated = true
+    const active = await h.ctx.loom.branch(request())
+    const queued = await h.ctx.loom.branch(request())
+    expect(h.ctx.loom.cancel({ setId: queued.setId })).toEqual({ cancelled: [0] })
+    expect(() => h.ctx.loom.setStatus({ setId: failed.setId })).toThrow(expect.objectContaining({ code: 'loom/set-not-found' }))
+    expect(h.ctx.loom.setStatus({ setId: active.setId }).setId).toBe(active.setId)
+    h.adapter.release()
+    await h.ctx.agents.get(started(active)[0]!)!.whenIdle()
+  })
+})

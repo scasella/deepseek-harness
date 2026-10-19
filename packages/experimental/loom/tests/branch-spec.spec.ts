@@ -9,7 +9,7 @@ import type { LoomBranchRequest, LoomBranchRequestId } from '../src/types.ts'
 
 const SOURCE = SessionId('hand-written')
 const header = { id: SOURCE } as SessionHeader
-const POLICY: LoomBranchPolicy = { maxBranchesPerRequest: 8, defaultSandboxMode: undefined, redirect: true }
+const POLICY: LoomBranchPolicy = { maxBranchesPerRequest: 8, defaultSandboxMode: undefined, defaultIsolation: 'shared', redirect: true }
 
 function log(...events: readonly Pick<SessionEvent, 'type' | 'data'>[]): SessionEvent[] {
   return events.map((event, seq) => ({ ...event, seq: SessionSeq(seq), time: seq }) as SessionEvent)

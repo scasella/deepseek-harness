@@ -227,6 +227,21 @@ function toolResult(callId: string, text: string, isError = false) {
 }
 
 describe('built-in conversation node Definitions', () => {
+  it('retains generation-time probabilities through live completion and persisted Assistant settlement', () => {
+    const logprobs = { tokens: ['answer'], logprobs: [-0.1], top: [[]] }
+    const value = assembler([at(0, 'turn/start', { turn: 1 }), at(1, 'step/start', { turn: 1, step: 1 })])
+    const chunk: StreamChunk = { type: 'block-end', index: 0, block: { type: 'text', text: 'answer' }, logprobs }
+    value.append(at(2, 'assistant/live-chunk', { turn: 1, step: 1, chunk }))
+    value.flush()
+    expect((node(snapshot(value), 'assistant-step')?.data as AssistantChatData).blocks).toEqual([{ kind: 'text', text: 'answer', logprobs }])
+    value.append(at(3, 'assistant/message', {
+      turn: 1, step: 1, message: assistantMessage('probability-answer', 'answer'), stream: [{ type: 'chunk', time: 0, chunk }],
+    }, { surfaceOp: 'append' }))
+    value.flush()
+    const data = node(snapshot(value), 'assistant-step')?.data as AssistantChatData
+    expect(data.blocks).toEqual([{ kind: 'text', text: 'answer', logprobs }])
+    expect(data.finalNode?.blocks).toBe(data.blocks)
+  })
   it.each(['replay', 'live', 'prepend'] as const)('keeps developer tool changes visible while hiding ordinary Context (%s)', (mode) => {
     const entries = [
       at(0, 'request/header', { reason: 'initial', header: {
@@ -2482,7 +2497,7 @@ describe('built-in conversation node Definitions', () => {
     expect(after?.data).toMatchObject({ skillNames: ['demo-skill'] })
   })
 
-  it('keeps replacement copies out of Chat business nodes', () => {
+  it('keeps model-context replacements out of Chat prose while updating tool-result content', () => {
     const value = assembler([
       at(1, 'turn/start', { turn: 1 }),
       at(2, 'step/start', { turn: 1, step: 1 }),
@@ -2507,7 +2522,10 @@ describe('built-in conversation node Definitions', () => {
     expect(node(current, 'user')).toBeUndefined()
     expect(node(current, 'context')).toBeUndefined()
     expect(node(current, 'assistant-step')).toBeUndefined()
-    expect((node(current, 'tool-call')?.data as ToolChatData).root).not.toHaveProperty('kind')
+    expect((node(current, 'tool-call')?.data as ToolChatData).root).toMatchObject({
+      kind: 'tool-result', seq: 6, name: 'read', call: { name: 'read', argsRaw: '{}' },
+      content: [{ type: 'text', text: 'pruned result' }],
+    })
   })
 
   it('assembles retry chains and keeps manual and automatic compaction ownership separate', () => {

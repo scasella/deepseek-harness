@@ -1,0 +1,9 @@
+- dialog "Variants after turn 1":
+  - heading "Variants after turn 1" [level=2]
+  - button "Close variants"
+  - button "Branched from Write the opening line of"
+  - list:
+    - listitem:
+      - button "1 Northern path"
+    - listitem:
+      - button "2 Southern path"

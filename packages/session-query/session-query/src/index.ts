@@ -298,7 +298,7 @@ export abstract class SessionQueryEngine extends Service {
   ): Promise<SessionEventSearchDocument[]> {
     const loaded = await this._corpus.load(sessionId)
     const documents = buildSessionEventSearchDocuments(sessionId, loaded.events)
-    return filterSessionEventDocuments(documents, filters)
+    return filterSessionEventDocuments(documents, filters, loaded.inheritedEventCount)
   }
 
   /**

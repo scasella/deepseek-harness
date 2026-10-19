@@ -302,13 +302,32 @@ describe('Loom family outline', () => {
 describe('Loom view store', () => {
   it('selects a Session, toggles rows, and moves the tab stop', () => {
     const store = createLoomViewStore().create()
-    expect(store.getSnapshot()).toEqual({ selected: null, collapsed: [], active: null })
+    expect(store.getSnapshot()).toMatchObject({ mode: 'read', point: null, picked: null, selected: null, collapsed: [], active: null })
     store.actions.selected(A)
     store.actions.toggled('s:root')
     store.actions.toggled('p:root:10')
     store.actions.activated('s:a')
-    expect(store.getSnapshot()).toEqual({ selected: A, collapsed: ['s:root', 'p:root:10'], active: 's:a' })
+    expect(store.getSnapshot()).toMatchObject({
+      mode: 'read', point: null, picked: null, selected: A, collapsed: ['s:root', 'p:root:10'], active: 's:a',
+    })
     store.actions.toggled('s:root')
     expect(store.getSnapshot().collapsed).toEqual(['p:root:10'])
+  })
+
+  it('switches mode, picks a branch, and closes the pick when it moves to another branch point', () => {
+    const store = createLoomViewStore().create()
+    store.actions.mode('compare')
+    store.actions.picked(A)
+    expect(store.getSnapshot()).toMatchObject({ mode: 'compare', picked: A, point: null })
+    store.actions.pointed('p:root:10')
+    expect(store.getSnapshot()).toMatchObject({ point: 'p:root:10', picked: null })
+    store.actions.picked(A)
+    store.actions.picked(null)
+    expect(store.getSnapshot().picked).toBeNull()
+    // Selecting another Session in the reading pane moves Compare to that Session's branch point.
+    store.actions.pointed('p:root:10')
+    store.actions.picked(A)
+    store.actions.selected(B)
+    expect(store.getSnapshot()).toMatchObject({ selected: B, point: null, picked: null })
   })
 })

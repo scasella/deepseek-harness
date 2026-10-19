@@ -207,6 +207,16 @@ export function buildEventWhere(filters: readonly SessionEventMetadataFilter[]):
       case 'surface':
         addList(clauses, params, 'surface', filter.values)
         break
+      case 'ownership': {
+        const values = new Set(filter.values)
+        if (values.size === 0) clauses.push('0')
+        else if (values.size === 1) {
+          clauses.push(values.has('inherited')
+            ? 'seq < COALESCE(seed_length, 0)'
+            : 'seq >= COALESCE(seed_length, 0)')
+        }
+        break
+      }
       default:
         unknownFilter(filter)
     }
@@ -353,6 +363,7 @@ function materializeMetadataFilters(
       case 'time':
       case 'type':
       case 'surface':
+      case 'ownership':
         break
       case 'text':
         throw new SessionQueryError(

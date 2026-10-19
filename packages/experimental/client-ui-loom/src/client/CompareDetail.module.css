@@ -1,0 +1,163 @@
+/* The picked branch's detail: its actions beside its diff, stacked in a narrow tab. */
+.detail {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 12px 16px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.hint {
+  margin: 0 0 6px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.link {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.link:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.link:focus-visible {
+  border-radius: 4px;
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+}
+
+@media (hover: hover) {
+  .link:not(:disabled):hover {
+    color: var(--dsw-alias-label-primary);
+    text-decoration: underline;
+  }
+
+  .file:hover {
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+.diff {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.filePressed {
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+}
+
+.file:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+}
+
+.filePath {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.added {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.removed {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.status {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.confirm {
+  grid-column: 1 / -1;
+  padding: 8px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.confirmText {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+}
+
+.confirmFiles {
+  max-height: 96px;
+  margin: 6px 0 0;
+  padding-left: 18px;
+  overflow-y: auto;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.confirmButtons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.result,
+.error {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.result {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.error {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+@container (max-width: 720px) {
+  .detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A phone keeps every control a 44px target. */
+@media (max-width: 480px) {
+  .link,
+  .file {
+    min-height: 44px;
+  }
+}

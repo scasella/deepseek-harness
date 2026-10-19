@@ -58,8 +58,8 @@ const LINES = [`${MARKER} Answer in French.`, `${MARKER} Answer in German.`, `${
 /** The failure the stubbed fork reports for the second child. */
 const FORK_FAILURE = 'The fork cannot be created'
 
-/** Positions of the family's sidebar rows: the group row is first, then the Sessions newest first. */
-const ROWS = { C: 1, B: 2, A: 3, root: 4 } as const
+/** Stable identities of the family's sidebar rows. */
+const ROWS = { C: 'loom-guards-c', B: 'loom-guards-b', A: 'loom-guards-a', root: ROOT_ID } as const
 
 const answerOf = (letter: string): string => `${MARKER} Branch ${letter} answers turn 2.`
 const titleOf = (letter: string): string => `Branch ${letter}`
@@ -138,15 +138,14 @@ describe.skipIf(MODE === 'record')('web e2e: Loom branching guards', () => {
 
   /**
    * Open one listed Session and wait for text its Chat shows. The sidebar
-   * reads a seeded Session's title only once it is opened, so rows are picked
-   * by position: the group row, then the family newest first.
+   * reads a seeded Session's title only once it is opened; its identity is stable before that read.
    */
   async function openSession(target: Page, row: keyof typeof ROWS, text: string): Promise<void> {
     const rows = target.getByRole('tree').first().getByRole('treeitem')
     await rows.first().waitFor({ timeout: 15_000 })
     // A collapsed workspace group lists only itself.
     if (await rows.count() === 1) await rows.first().click()
-    await rows.nth(ROWS[row]).click()
+    await target.locator(`[data-row-key="session:${ROWS[row]}"]`).click()
     await target.getByText(text, { exact: false }).last().waitFor({ timeout: 15_000 })
   }
 

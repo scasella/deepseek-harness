@@ -291,6 +291,8 @@ Exact-name rules also mean that a recorded name such as `functions.read`, `mcp.r
 
 Preparing calls use their first named delta time; dispatched calls use their tool/call time. Both read detail from the block's lazy `args` view.
 
+Assistant text blocks preserve captured `block-end.logprobs` at live block completion. Settlement reads `assistantStreamBlockLogprobs()` once per message in assembled content order; final nodes reuse those classified blocks, so probability alignment follows max-token tool-call removal without adding model-visible content.
+
 The Tool Definition alone retains streamed argument fragments. Assistant blocks keep tool identity and timing without accumulating argument deltas; `block-end` and the durable message supply their complete text. A Tool reader compares its fragments directly against `block-end` and `tool/call` arguments, retaining its indexed fields only for an exact match. Final text replaces missing or conflicting deltas.
 
 TurnProcess and TurnTail retain tool-argument Matches as Location evidence when the Turn start is outside the loaded window, even when those fragments do not change their State.

@@ -1,8 +1,9 @@
 /** Locale-owned Loom number, cut, route, and failure readings shared by the Loom entries. */
 import type { ModelSelection } from '@deepseek-ai/dsh-api-session-controller/types'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
+import type { LoomIsolationUnavailableReason } from '@deepseek-ai/dsh-experimental-loom/types'
 import { LOOM_UNAVAILABLE, type LoomFailure } from './branching.ts'
-import type { NS } from './locales.ts'
+import type { LoomKey, NS } from './locales.ts'
 import type { LoomRouteOption } from './routes.ts'
 
 /** Translate seat of the `loom` namespace, including the common vocabulary. */
@@ -112,8 +113,17 @@ export function routeLabel(route: ModelSelection, options: readonly LoomRouteOpt
  * @returns the positions joined by the list separator, with the last joiner before the final one.
  */
 export function rowsText(rows: readonly number[], t: LoomTranslate): string {
-  const last = rows.at(-1)
-  return rows.length < 2 ? rows.join('') : `${rows.slice(0, -1).join(t('form.rowsSep'))}${t('form.rowsLast')}${String(last)}`
+  return listText(rows.map(String), t)
+}
+
+/**
+ * List items the way the dictionary joins them.
+ * @param items - the items, at least one.
+ * @param t - Loom translate seat.
+ * @returns the items joined by the list separator, with the last joiner before the final one.
+ */
+export function listText(items: readonly string[], t: LoomTranslate): string {
+  return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(t('form.rowsSep'))}${t('form.rowsLast')}${String(items.at(-1))}`
 }
 
 /**
@@ -136,6 +146,101 @@ export function cachePercent(cached: number, input: number): number | undefined 
   return input <= 0 ? undefined : Math.floor((cached / input) * 100)
 }
 
+/**
+ * Name a cut by the turn it falls in or after, as the tree's branch-point rows and the Compare point picker do.
+ * @param cutTurn - turn of the last inherited `turn/end`, or undefined when no turn ended before the cut.
+ * @param openedTurn - last turn opened before the cut, when known; a turn later than `cutTurn` was interrupted by the cut.
+ * @param t - Loom translate seat.
+ * @returns "During turn N", "After turn N", or the reading for a cut before any turn ended.
+ */
+export function pointReading(cutTurn: number | undefined, openedTurn: number | undefined, t: LoomTranslate): string {
+  if (openedTurn !== undefined && openedTurn > (cutTurn ?? 0)) return t('tree.pointDuring', { turn: openedTurn })
+  return cutTurn === undefined ? t('tree.pointStart') : t('tree.pointAfter', { turn: cutTurn })
+}
+
+/**
+ * Name a US-dollar amount: two decimals from one dollar up, three below, and a floor reading under a tenth of a cent.
+ * @param amount - non-negative dollars.
+ * @param t - Loom translate seat.
+ * @returns the amount.
+ */
+export function usdText(amount: number, t: LoomTranslate): string {
+  if (amount > 0 && amount < 0.001) return t('price.below')
+  const value = amount >= 1 ? amount.toFixed(2) : amount === 0 ? '0' : amount.toFixed(3)
+  return t('price.usd', { value })
+}
+
+/**
+ * Name a range once when its ends read the same.
+ * @param low - lower end.
+ * @param high - upper end.
+ * @param format - how one end reads.
+ * @param t - Loom translate seat.
+ * @returns "low–high", or the single reading.
+ */
+export function rangeText(low: number, high: number, format: (value: number) => string, t: LoomTranslate): string {
+  const first = format(low)
+  const last = format(high)
+  return first === last ? first : t('price.range', { low: first, high: last })
+}
+
+/**
+ * Name a wall-clock span in whole seconds, or minutes and seconds from one minute up.
+ * @param ms - non-negative milliseconds.
+ * @param t - Loom translate seat.
+ * @returns the span.
+ */
+export function durationText(ms: number, t: LoomTranslate): string {
+  const seconds = Math.round(ms / 1000)
+  return seconds < 60
+    ? t('time.seconds', { value: seconds })
+    : t('time.minutes', { minutes: Math.floor(seconds / 60), seconds: seconds % 60 })
+}
+
+/** Paths a failure names before the rest collapse into a count. */
+const PATHS_SHOWN = 3
+
+/**
+ * List the paths a failure names.
+ * @param paths - the paths.
+ * @param t - Loom translate seat.
+ * @returns the first few paths, and how many more there are.
+ */
+export function pathsText(paths: readonly string[], t: LoomTranslate): string {
+  const shown = paths.slice(0, PATHS_SHOWN).join(t('form.rowsSep'))
+  return paths.length > PATHS_SHOWN ? t('failure.pathsMore', { paths: shown, count: paths.length - PATHS_SHOWN }) : shown
+}
+
+/** Copy key of each reason the Host refuses worktree isolation. */
+const ISOLATION_REASONS: Readonly<Record<LoomIsolationUnavailableReason, LoomKey>> = {
+  'service-unavailable': 'isolation.reason.serviceUnavailable',
+  'read-only': 'isolation.reason.readOnly',
+  'no-repository': 'isolation.reason.noRepository',
+  'subdirectory': 'isolation.reason.subdirectory',
+  'linked-checkout': 'isolation.reason.linkedCheckout',
+}
+
+/** The reasons by their wire spelling, so a spelling this client does not know finds no entry. */
+const ISOLATION_REASON_KEYS: ReadonlyMap<string, LoomKey> = new Map(Object.entries(ISOLATION_REASONS))
+
+/**
+ * Name why worktree isolation is unavailable.
+ * @param reason - the Host's reason.
+ * @param t - Loom translate seat.
+ * @returns a localized reason; a reason a newer Host names appears verbatim.
+ */
+export function isolationReasonText(reason: LoomIsolationUnavailableReason, t: LoomTranslate): string {
+  const key = ISOLATION_REASON_KEYS.get(reason)
+  return key === undefined ? reason : t(key)
+}
+
+/** Copy key of each reason a branch has no worktree. */
+const WORKTREE_REASONS = {
+  shared: 'failure.worktree.shared',
+  removed: 'failure.worktree.removed',
+  missing: 'failure.worktree.missing',
+} as const satisfies Record<NonNullable<LoomFailure['worktreeReason']>, LoomKey>
+
 /** Copy key of each `loom/turn-unavailable` reason. */
 const TURN_REASONS = {
   'not-found': 'failure.turn.notFound',
@@ -157,6 +262,24 @@ export function failureText(failure: LoomFailure, t: LoomTranslate): string {
     case 'loom/empty-line': return t('failure.emptyLine', { index: (failure.line ?? 0) + 1 })
     case 'loom/too-many-branches': return t('failure.tooMany', { limit: failure.limit ?? 0 })
     case 'loom/set-not-found': return t('failure.setNotFound')
+    case 'loom/isolation-unavailable':
+      return failure.isolationReason === undefined
+        ? t('failure.other', { code: failure.code })
+        : t('failure.isolation', { reason: isolationReasonText(failure.isolationReason, t) })
+    case 'loom/not-a-fork': return t('failure.notFork')
+    case 'loom/apply-dirty': return t('failure.applyDirty', { paths: pathsText(failure.paths ?? [], t) })
+    case 'loom/apply-conflict':
+      return failure.paths === undefined || failure.paths.length === 0
+        ? t('failure.applyConflictNoPaths')
+        : t('failure.applyConflict', { paths: pathsText(failure.paths, t) })
+    case 'loom/apply-not-isolated': return t('failure.applyNotIsolated')
+    case 'loom/apply-too-large': return t('failure.applyTooLarge', { limit: failure.limit ?? 0 })
+    case 'loom/worktree-unavailable':
+      return failure.worktreeReason === undefined ? t('failure.other', { code: failure.code }) : t(WORKTREE_REASONS[failure.worktreeReason])
+    case 'loom/diff-unavailable': return t('failure.diffUnavailable')
+    case 'loom/worktree-cleanup-failed': return t('failure.cleanupFailed', { paths: pathsText(failure.paths ?? [], t) })
+    case 'loom/adopt-incomplete':
+      return t(`failure.adoptIncomplete.${plural(failure.remaining ?? 0)}`, { count: failure.remaining ?? 0 })
     case 'remote-access/denied': return t('failure.denied')
     case 'session/not-found': return t('saw.notFound')
     case 'session/fork-unavailable': return t('failure.forkUnavailable')

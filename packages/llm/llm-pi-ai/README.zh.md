@@ -109,6 +109,12 @@ kind: "package-reference"
 
 pi-ai 提供登录的提供方可以通过 harness 授权 seam 登录：流程提供 OAuth 或交互式密钥提示（密钥键入 pi-ai 自己的登录提示，而非设置表单），得到的凭据存储在 harness 凭据存储的 `llm-pi-ai/<provider id>` 记录中。存储的登录在其路由的 `apiKeyEnv` 覆盖之下完成认证，并在存储的跨进程锁下自行刷新；退出登录即删除存储记录。落在记录文法之外——小写连字符标识符——的手工声明路由键无法登录，因为对它的记录写入会以 `LlmError('UNSTORABLE_PROVIDER_ID')` 拒绝；这类路由改用 `apiKeyEnv` 或提供方 ambient 设置认证。
 
+### 捕获概率并续写 assistant 前缀
+
+`models` 条目或 `modelOverrides` 值可以用 `tokenLogprobs: { maxTopLogprobs: 5 }` 和 `assistantPrefill: trailing-message` 显式启用能力；两者都要求 `openai-completions`。这些是对端点能力的声明，没有默认值。`topLogprobs` 通过 pi-ai 的采样参数发送 `logprobs: true` 与 `top_logprobs`。原始提供方 hook 将每条文本 delta 与其概率配对；缺失、格式错误或未对齐的捕获会被省略并记录。推理块不携带概率。采样值 `-9999` 转为 null；具有该未知值的候选会被省略。按字节拆分且 token 字符串无法重建答案时，整块概率会被省略。
+
+`assistantPrefill: trailing-message` 将请求中精确的 `assistantPrefix` 追加为最后一条 assistant 消息，符合 OpenRouter 的接受方式。`deepseek-prefix` 还为该消息添加 `prefix: true` 并移除其 `reasoning_content`；必须配置兼容的 DeepSeek beta 端点。请求必须在提供方 I/O 之前满足 LLM 服务的无工具辅助前缀规则。前缀与概率控制必须包含在调用方记录的请求中。
+
 ### 解析模型目录
 
 profile 的 `models` 列表会替换而非扩展路由的已安装目录；每个条目从同 id 已安装模型取未设置字段的默认值，因此把路由收窄到两个模型、修正一个容量或添加比已安装目录更新的模型都是一行编辑。`modelOverrides` 无需该代价即可重塑个别已安装目录模型——修正一个模型，保留其余三十七个——当它与 `models` 列表并存、位于手工声明路由上、或点名目录未描述的模型时会被拒绝，因为静默不变的模型会成为别人日后寻找的拼写错误。

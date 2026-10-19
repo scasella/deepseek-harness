@@ -53,6 +53,7 @@ const ToolCall = memo(function ToolCall({
           entryKey: toolName,
           fallback: <GenericToolCard {...owner} t={t} />,
         })}
+      {renderSlot('tool.call.actions', owner)}
       {children}
     </div>
   )

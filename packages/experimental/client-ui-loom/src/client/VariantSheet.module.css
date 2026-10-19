@@ -1,0 +1,21 @@
+.source, .row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 12px 0;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.source { color: var(--dsw-alias-state-business-primary); }
+.source > span, .title { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.list { list-style: none; margin: 12px 0 0; padding: 0; }
+.row { border-top: 0.5px solid var(--dsw-alias-border-l2); }
+.row[aria-current] { color: var(--dsw-alias-state-business-primary); background: var(--dsw-alias-interactive-bg-hover); }
+.index { width: 20px; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
+.source:focus-visible, .row:focus-visible { outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color); }

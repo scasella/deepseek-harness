@@ -26,6 +26,7 @@ function agentIn(ctx: Context, rawId: string, presetScope?: ScopeKey): Agent {
     status: 'idle',
     ctx: agentCtx,
     send: () => {},
+    continue: () => {},
     followup: () => {},
     steer: () => {},
     inject: () => {},

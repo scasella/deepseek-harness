@@ -1530,7 +1530,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'loom',
     summary: 'Loom Host service.',
-    description: 'Loom Host service. It registers the `loomBranch` and `loomMark` projection units, the telemetry redaction rule for `plugin:loom/*` records, and the branch runner for its own lifetime, and exposes the `loom` Remote namespace.',
+    description: 'Loom Host service. It registers the `loomBranch` and `loomMark` projection units, the telemetry redaction rule for `plugin:loom/*` records, the branch runner, and the compare, diff, adopt, apply, and discard operations for its own lifetime, and exposes the `loom` Remote namespace.',
     methods: [
       {
         signature: '@Remote async family(request: LoomFamilyRequest, signal: AbortSignal): Promise<LoomFamily>',
@@ -1547,11 +1547,67 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         throws: ['RemoteError `session/not-found` when the Session does not exist.', 'RemoteError `loom/seq-out-of-range` when `seq` is not a seq of the log or precedes the first request settlement.', 'RemoteError `gateway/internal` when the log holds no `request/header` before the addressed request.'],
       },
       {
+        signature: '@Remote counterfactual(request: LoomCounterfactualRequest, signal: AbortSignal): Promise<LoomCounterfactualValue>',
+        description: 'Fork a current tool result, replace only its content, then continue the child. The original tool metadata and success/error classification are retained.',
+        parameters: [{ name: 'request', description: 'source Session, current result and replacement text.' }, { name: 'signal', description: 'cancellation before child continuation admission.' }],
+        returns: 'the new branch and its content replacement event.',
+      },
+      {
+        signature: '@Remote weave(request: LoomWeaveRequest, signal: AbortSignal): Promise<LoomWeaveValue>',
+        description: 'Generate prose siblings at a cursor without changing Chat history.',
+        parameters: [{ name: 'request', description: 'cursor, authored prefix, sibling count and generation controls.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'settled siblings in dispatch order, including failures.',
+      },
+      {
+        signature: '@Remote weaveState(request: LoomWeaveStateRequest, signal: AbortSignal): Promise<LoomWeaveState>',
+        description: 'Read a persisted prose document without activating an Agent.',
+        parameters: [{ name: 'request', description: 'Session whose prose records to read.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'generated nodes, current choices and curation totals.',
+      },
+      {
+        signature: '@Remote choose(request: LoomChooseRequest, signal: AbortSignal): Promise<LoomCurationValue>',
+        description: 'Select one completed prose continuation and retain its curation credit.',
+        parameters: [{ name: 'request', description: 'Session and chosen node.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'current curation bits and selected model-token count.',
+      },
+      {
+        signature: '@Remote probe(request: LoomProbeRequest, signal: AbortSignal): Promise<LoomProbeValue>',
+        description: 'Explore next-token alternatives within configured breadth and depth limits.',
+        parameters: [{ name: 'request', description: 'prose cursor and optional tighter controls.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'captured alternatives and request-budget status.',
+      },
+      {
+        signature: '@Remote export(request: LoomExportRequest, signal: AbortSignal): Promise<LoomExportValue>',
+        description: 'Prepare an owner-authenticated prose or agent-branch download.',
+        parameters: [{ name: 'request', description: 'path, sibling set or kept branches and optional output format.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'the immutable download URL and filename; the snapshot expires by configuration.',
+      },
+      {
         signature: '@Remote branch(request: LoomBranchRequest): Promise<LoomBranchValue>',
         description: 'Branch one Session into a set of fork children, each cut at the request\'s turn boundary and sent its own prompt. A regenerate or edit of the first turn a fork Session started itself forks that fork\'s parent at the fork\'s cut instead, so the children become further variants beside the fork. Without a `selection`, those children take the route the fork selected before that turn. When that parent no longer exists, the children are cut in the addressed fork instead, below it. Every request validation runs before any fork, except that the Session Controller validates `selection` in each child\'s fork, so an unavailable route fails each child with `session/model-unavailable` and not the request. A child is forked only when a concurrency slot admits it, so a queued child has no Session; the runner removes the next-turn prompts the child inherited from the cut, writes its `plugin:loom/branch` record, and then sends its prompt. A retry with the same `requestId` for the same Session returns the first result. The Gateway authorizes the addressed Session through its `sessionId` field; the method itself requires `loom/branch` on a fork parent it branches instead.',
         parameters: [{ name: 'request', description: 'addressed Session, cut, prompts, and optional route.' }],
         returns: 'the set and each child as it stood when the call returned; a child the service\'s unloading withdrew meanwhile reads `cancelled`.',
         throws: ['RemoteError `session/not-found` (the addressed Session), `remote-access/denied` (the fork parent, while it exists), `gateway/bad-request`, `loom/too-many-branches`, `loom/empty-line`, `loom/turn-unavailable`, or `gateway/cancelled` (the service unloaded before the set existed), each before any fork.'],
+      },
+      {
+        signature: 'branchFor(request: LoomBranchRequest, options: LoomHostBranchOptions): Promise<LoomBranchValue>',
+        description: 'Branch one Session for a Host caller acting for a model or a plugin: branch with every validation, admission rule, and retry identity, except that each child\'s prompt carries `options.source` and `options.prepare` runs on each child before its prompt. It is not a Remote method and authorizes nothing; the caller decides which Sessions it may branch.',
+        parameters: [{ name: 'request', description: 'addressed Session, cut, prompts, and optional route.' }, { name: 'options', description: 'the prompt source and the per-child preparation.' }],
+        returns: 'the set and each child as it stood when the call returned.',
+        throws: ['RemoteError as {@link branch} does, except `remote-access/denied`.'],
+      },
+      {
+        signature: 'ownUsd(session: Session): number | undefined',
+        description: 'Read the list-price cost of a live Session\'s own settled requests for a Host budget watcher. Each request uses its logged route; inherited work costs nothing. Reads are incremental and activate no Agent.',
+        parameters: [{ name: 'session', description: 'live Session to price.' }],
+        returns: 'USD, or undefined if an own request lacks prices or usage, or no priced route has been logged yet.',
+      },
+      {
+        signature: '@Remote estimate(request: LoomEstimateRequest, signal: AbortSignal): Promise<LoomEstimateValue>',
+        description: 'Preview branching from a repeated turn or visible fork family\'s own usage, or prose from its route\'s recorded own Weave input and output cap. Ranges are USD at configured list prices when priced, otherwise token counts. The read creates no forks and activates no Agent. The Gateway authorizes the addressed Session through its `sessionId`; family members are filtered by the caller\'s access.',
+        parameters: [{ name: 'request', description: 'Session, operation, sibling count, optional route, and turn or prose controls.' }, { name: 'signal', description: 'cancellation of Session and projection reads.' }],
+        returns: 'per-branch and total ranges, cache share, and the source of the token figures.',
+        throws: ['RemoteError `session/not-found`, `gateway/bad-request`, `loom/too-many-branches`, `loom/turn-unavailable`, `loom/prose-unavailable` for prose limits, or `gateway/internal` when required own usage projections are missing.'],
       },
       {
         signature: '@Remote setStatus(request: LoomSetStatusRequest): LoomSetStatus',
@@ -1566,6 +1622,41 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'request', description: 'the set and, optionally, the child indices to withdraw.' }],
         returns: 'the indices withdrawn by this call.',
         throws: ['RemoteError `loom/set-not-found` for a set this Host does not hold or whose addressed Session the caller cannot access.'],
+      },
+      {
+        signature: '@Remote compare(request: LoomCompareRequest, signal: AbortSignal): Promise<LoomCompareValue>',
+        description: 'Compare the siblings at one fork cut, or the members of one set, by outcome: test summaries from each branch\'s own command output, changed files, own usage, own wall time, marks, and adoption. Rows cover only Sessions the caller may reach. A worktree row\'s diff resumes its Session when it is cold. The Gateway authorizes the addressed Session through its `sessionId` field.',
+        parameters: [{ name: 'request', description: 'a fork, or a set\'s source or member with the set.' }, { name: 'signal', description: 'cancellation of the reads.' }],
+        returns: 'the parent, the cut, and one row per sibling.',
+        throws: ['RemoteError `session/not-found`, `loom/not-a-fork`, `loom/set-not-found`, or `gateway/internal` when a sibling\'s own usage projections are unavailable.'],
+      },
+      {
+        signature: '@Remote diff(request: LoomDiffRequest, signal: AbortSignal): Promise<LoomDiffValue>',
+        description: 'Unified diff of one branch: Git against its base commit for a worktree child, untracked files included, or the change summaries of its own turns for a child that shares the source folder. The Gateway authorizes the Session through its `sessionId` field.',
+        parameters: [{ name: 'request', description: 'the branch and an optional file.' }, { name: 'signal', description: 'cancellation of the reads.' }],
+        returns: 'the text and whether files were left out to stay within `diff.maxBytes`.',
+        throws: ['RemoteError `session/not-found`, `loom/worktree-unavailable`, or `loom/diff-unavailable`.'],
+      },
+      {
+        signature: '@Remote adopt(request: LoomAdoptRequest): Promise<LoomAdoptValue>',
+        description: 'Adopt one branch as the line to continue: record `plugin:loom/adopt` in it, then archive its siblings, the other members of its set or the other forks at its cut, through the Workspace registry, stopping their running work first. Nothing is deleted. The Gateway authorizes the branch through its `sessionId` field; the method requires `loom/adopt` on every sibling before any write.',
+        parameters: [{ name: 'request', description: 'the branch.' }],
+        returns: 'the branch and every sibling now archived.',
+        throws: ['RemoteError `session/not-found`, `loom/not-a-fork`, `remote-access/denied`, or `loom/adopt-incomplete`.'],
+      },
+      {
+        signature: '@Remote apply(request: LoomApplyRequest): Promise<LoomApplyValue>',
+        description: 'Copy an idle worktree branch\'s change into the source folder with `git apply`, then remove the worktree. Refused before any write when the source folder has tracked changes, the change does not apply, or it exceeds `apply.maxPatchBytes`. The Gateway authorizes the branch through its `sessionId` field.',
+        parameters: [{ name: 'request', description: 'the branch.' }],
+        returns: 'the paths written.',
+        throws: ['RemoteError `session/not-found`, `session/agent-busy`, `loom/apply-not-isolated`, `loom/worktree-unavailable`, `loom/isolation-unavailable`, `loom/apply-too-large`, `loom/apply-dirty`, `loom/apply-conflict`, or `loom/worktree-cleanup-failed`.'],
+      },
+      {
+        signature: '@Remote discard(request: LoomDiscardRequest): Promise<LoomDiscardValue>',
+        description: 'Remove the worktree Loom created for an idle branch, with its files and Git branch; no other worktree is touched. The Gateway authorizes the branch through its `sessionId` field.',
+        parameters: [{ name: 'request', description: 'the branch.' }],
+        returns: 'the removed worktree.',
+        throws: ['RemoteError `session/not-found`, `session/agent-busy`, `loom/worktree-unavailable`, or `loom/isolation-unavailable`.'],
       },
       {
         signature: '@Remote async mark(request: LoomMarkRequest): Promise<LoomMarkValue>',
@@ -2198,6 +2289,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Admit one prompt after explicitly resuming its Session.',
         parameters: [{ name: 'request', description: 'Session identity, prompt content, source metadata, and delivery mode.' }, { name: 'signal', description: 'caller cancellation before prompt admission begins.' }],
         returns: 'acknowledgement that the Agent accepted the prompt.',
+      },
+      {
+        signature: '@Remote(\'continue\') continue(request: SessionContinueRequest, signal: AbortSignal): Promise<SessionContinueValue>',
+        description: 'Request one turn over existing history without adding a user message.',
+        parameters: [{ name: 'request', description: 'Session identity and durable retry identity.' }, { name: 'signal', description: 'caller cancellation before continuation admission.' }],
+        returns: 'acknowledgement after the turn opens, or a typed admission failure.',
       },
       {
         signature: '@Remote(\'attachment\') attachment(request: SessionAttachmentRequest): Promise<SessionAttachmentValue>',
@@ -4031,14 +4128,34 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   },
   {
     key: 'worktrees',
-    summary: 'Creates retained Git worktrees under the mounted filesystem and sandbox providers.',
-    description: 'Creates retained Git worktrees under the mounted filesystem and sandbox providers.',
+    summary: 'Creates, enters, and removes Git worktrees under the mounted filesystem and sandbox providers.',
+    description: 'Creates, enters, and removes Git worktrees under the mounted filesystem and sandbox providers.',
     methods: [
       {
         signature: 'async create(agent: Agent, request: CreateWorktreeRequest = {}, signal?: AbortSignal): Promise<CreatedWorktree>',
-        description: 'Create a fresh branch and checkout at a pinned local revision, then enter it. Existing branches or checkout paths fail. Uncommitted files stay in the source checkout. Checkout disables configured clean, smudge, and process filters without changing Git config. Repository-local replacement refs still apply; baseCommit reports the resolved object name. The new checkout becomes current only after Git setup succeeds. Failures may retain newly allocated Git/filesystem artifacts; no branch or checkout is removed automatically.',
-        parameters: [{ name: 'agent', description: 'caller whose current directory selects the source repository and file policy.' }, { name: 'request', description: 'optional new name and local revision; defaults are generated name and HEAD.' }, { name: 'signal', description: 'cancellation of lookup, creation, and working-directory publication.' }],
+        description: 'Create a fresh branch and checkout at a pinned local revision, then enter it. Existing branches or checkout paths fail. Uncommitted files stay in the source checkout; `includeUncommitted` bases the checkout on a new commit that records the tracked ones. Checkout disables configured clean, smudge, and process filters without changing Git config. Repository-local replacement refs still apply; baseCommit reports the resolved object name. The new checkout becomes current only after Git setup succeeds. Failures may retain newly allocated Git/filesystem artifacts; no branch or checkout is removed automatically.',
+        parameters: [{ name: 'agent', description: 'caller whose current directory selects the source repository and file policy.' }, { name: 'request', description: 'optional new name, local revision or uncommitted-change base; defaults are generated name and HEAD.' }, { name: 'signal', description: 'cancellation of lookup, creation, and working-directory publication.' }],
         returns: 'canonical checkout path, branch name, pinned commit, and source repository root.',
+      },
+      {
+        signature: 'async locate(directory: string, signal?: AbortSignal): Promise<WorktreeRepository | undefined>',
+        description: 'Find the Git repository that contains a directory from the nearest `.git` entry at or above it, without running Git and without the caller\'s file policy.',
+        parameters: [{ name: 'directory', description: 'absolute directory in the filesystem provider\'s execution world.' }, { name: 'signal', description: 'cancellation of the filesystem reads.' }],
+        returns: 'the repository root and the kind of its `.git` entry, or undefined when the directory does not exist or no ancestor has one.',
+      },
+      {
+        signature: 'async remove(agent: Agent, checkout: WorktreeCheckout, signal?: AbortSignal): Promise<WorktreeRemoval>',
+        description: 'Remove one linked checkout and delete its branch, discarding the files it holds. The repository must register a linked checkout at `checkout.path` holding `checkout.branch`; otherwise nothing changes. When the caller\'s current directory is inside the checkout, the caller first moves to `checkout.repositoryRoot`.',
+        parameters: [{ name: 'agent', description: 'caller whose file policy governs the removal.' }, { name: 'checkout', description: 'checkout path, branch, and source repository root as creation reported them.' }, { name: 'signal', description: 'cancellation of the lookup, directory change, and removal.' }],
+        returns: '`removed`, or `missing` when the repository registers no such checkout.',
+        throws: ['when the branch is not a relative branch name or a Git command fails; a failure after the checkout\'s removal can leave its branch.'],
+      },
+      {
+        signature: 'async git(agent: Agent, request: WorktreeGitRequest, signal?: AbortSignal): Promise<WorktreeGitResult>',
+        description: 'Run one Git command with this service\'s executable and limits, hooks and the file-system monitor disabled, confined to the caller\'s file policy. Standard output beyond its cap resolves with `truncated` set.',
+        parameters: [{ name: 'agent', description: 'caller whose file policy governs the command.' }, { name: 'request', description: 'directory, arguments, allowed exit codes, standard input, output cap, and filter choice.' }, { name: 'signal', description: 'cancellation of the command.' }],
+        returns: 'the command\'s output and exit code.',
+        throws: ['when `maxOutputBytes` is not a positive integer, or the exit code is not allowed.'],
       },
     ],
   },
@@ -4121,10 +4238,10 @@ export const EVENT_API: readonly EventApiEntry[] = [
   {
     name: 'agent/pre-step',
     mode: 'waterfall',
-    signature: '\'agent/pre-step\'(this: Scoped<Agent>, payload: { agent: Agent; messages: UserMessage[]; turn: number; step: number; signal: AbortSignal }, next: () => Promise<PreStepDecision>): Promise<PreStepDecision>',
+    signature: '\'agent/pre-step\'(this: Scoped<Agent>, payload: { agent: Agent; messages: UserMessage[]; turn: number; step: number; signal: AbortSignal; continuation?: MessageSource }, next: () => Promise<PreStepDecision>): Promise<PreStepDecision>',
     summary: 'Reject a proposed step or replace the messages that enter it.',
     description: 'Reject a proposed step or replace the messages that enter it. Calling `next()` preserves the current messages.',
-    parameters: [{ name: 'payload', description: '.signal - the current turn\'s cancellation signal. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.' }],
+    parameters: [{ name: 'payload', description: '.continuation - initiator when this is the first step of a continuation turn. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.' }],
   },
   {
     name: 'agent/request',
@@ -5011,6 +5128,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface BashEnvVariableInfo extends BashEnvVariable {\n    contributor: string;\n    key: DshEnvironmentKey;\n}',
   },
   {
+    name: 'BlockTokenLogprobs',
+    declaration: 'export interface BlockTokenLogprobs {\n    readonly tokens: readonly string[];\n    readonly logprobs: readonly (number | null)[];\n    readonly top: readonly (readonly TokenAlternative[])[];\n}',
+  },
+  {
     name: 'BoxProps',
     declaration: 'export interface BoxProps {\n    readonly flexDirection?: \'row\' | \'column\' | undefined;\n    readonly paddingX?: number | undefined;\n    readonly paddingY?: number | undefined;\n    readonly padding?: number | undefined;\n    readonly gap?: number | undefined;\n    readonly border?: boolean | string | undefined;\n    readonly borderColor?: string | undefined;\n    readonly children?: UiNode | undefined;\n}',
   },
@@ -5085,10 +5206,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'CommandInvocation',
     declaration: 'export interface CommandInvocation {\n    readonly commandId: CommandId;\n    readonly agent: Agent;\n    readonly rawInput: string;\n    readonly attachments: readonly (ImageBlock | FileBlock)[];\n    readonly signal: AbortSignal;\n}',
-  },
-  {
-    name: 'CommandResult',
-    declaration: 'export type CommandResult = {\n    readonly kind: \'success\';\n    readonly text?: string;\n    readonly sourceEventSeq?: SessionSeq;\n} | {\n    readonly kind: \'error\';\n    readonly text: string;\n};',
   },
   {
     name: 'CommandRunInput',
@@ -5320,7 +5437,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'CreateWorktreeRequest',
-    declaration: 'export interface CreateWorktreeRequest {\n    name?: string;\n    from?: string;\n}',
+    declaration: 'export interface CreateWorktreeRequest {\n    name?: string;\n    from?: string;\n    includeUncommitted?: boolean;\n}',
   },
   {
     name: 'CredentialInfo',
@@ -5616,7 +5733,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'GenerateOptions',
-    declaration: 'export interface GenerateOptions {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: RequestMessage[];\n    system?: string;\n    tools?: ToolSchema[];\n    toolHistory?: ToolHistory;\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    cacheSessionId?: Branded<\'SessionId\'>;\n    purpose?: \'compaction\' | \'session-title\';\n}',
+    declaration: 'export interface GenerateOptions {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: RequestMessage[];\n    system?: string;\n    tools?: ToolSchema[];\n    toolHistory?: ToolHistory;\n    temperature?: number;\n    maxTokens?: number;\n    topLogprobs?: number;\n    assistantPrefix?: string;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    cacheSessionId?: Branded<\'SessionId\'>;\n    purpose?: \'compaction\' | \'session-title\';\n}',
   },
   {
     name: 'GenericCallView',
@@ -5964,7 +6081,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmCallControls',
-    declaration: 'export interface LlmCallControls {\n    reasoningEffort?: ReasoningEffortId;\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n}',
+    declaration: 'export interface LlmCallControls {\n    reasoningEffort?: ReasoningEffortId;\n    temperature?: number;\n    maxTokens?: number;\n    topLogprobs?: number;\n    stop?: string[];\n}',
   },
   {
     name: 'LlmConfigurableProvider',
@@ -6016,7 +6133,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmResolvedModelInfo',
-    declaration: 'export interface LlmResolvedModelInfo extends LlmModelInfo {\n    context?: LlmModelContext;\n    defaultMaxTokens?: number;\n    reasoning?: LlmModelReasoningInfo;\n    systemPromptUpdate?: SystemPromptUpdate;\n    toolUpdate?: ToolUpdate;\n}',
+    declaration: 'export interface LlmResolvedModelInfo extends LlmModelInfo {\n    tokenLogprobs?: {\n        readonly maxTopLogprobs: number;\n    };\n    assistantPrefill?: \'tool-free\';\n    context?: LlmModelContext;\n    defaultMaxTokens?: number;\n    reasoning?: LlmModelReasoningInfo;\n    systemPromptUpdate?: SystemPromptUpdate;\n    toolUpdate?: ToolUpdate;\n}',
   },
   {
     name: 'LlmRuntime',
@@ -6035,8 +6152,32 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type LogExporterOptions = Omit<OTLPExporterNodeConfigBase, \'selfObsMeterProvider\'> & {\n    url: string;\n};',
   },
   {
+    name: 'LoomAdoptRequest',
+    declaration: 'export interface LoomAdoptRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
+    name: 'LoomAdoptValue',
+    declaration: 'export interface LoomAdoptValue {\n    readonly adopted: SessionId;\n    readonly archived: readonly SessionId[];\n}',
+  },
+  {
+    name: 'LoomApplyRequest',
+    declaration: 'export interface LoomApplyRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
+    name: 'LoomApplyValue',
+    declaration: 'export interface LoomApplyValue {\n    readonly applied: readonly {\n        readonly path: string;\n    }[];\n}',
+  },
+  {
     name: 'LoomBranchChild',
     declaration: 'export type LoomBranchChild = {\n    readonly index: number;\n    readonly state: \'started\';\n    readonly sessionId: SessionId;\n} | {\n    readonly index: number;\n    readonly state: \'queued\';\n} | {\n    readonly index: number;\n    readonly state: \'cancelled\';\n} | {\n    readonly index: number;\n    readonly state: \'failed\';\n    readonly code: RemoteErrorCode;\n    readonly message: string;\n    readonly sessionId?: SessionId;\n};',
+  },
+  {
+    name: 'LoomBranchEstimateRequest',
+    declaration: 'export interface LoomBranchEstimateRequest extends LoomEstimateCommon {\n    readonly kind: LoomBranchKind;\n    readonly turn?: number;\n    readonly afterTurn?: number;\n}',
+  },
+  {
+    name: 'LoomBranchKind',
+    declaration: 'export type LoomBranchKind = \'regenerate\' | \'steer\' | \'edit\' | \'variants\';',
   },
   {
     name: 'LoomBranchRequest',
@@ -6044,7 +6185,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LoomBranchRequestBase',
-    declaration: 'export interface LoomBranchRequestBase {\n    readonly sessionId: SessionId;\n    readonly requestId: LoomBranchRequestId;\n    readonly selection?: ModelSelection;\n}',
+    declaration: 'export interface LoomBranchRequestBase {\n    readonly sessionId: SessionId;\n    readonly requestId: LoomBranchRequestId;\n    readonly selection?: ModelSelection;\n    readonly isolation?: LoomIsolation;\n}',
   },
   {
     name: 'LoomBranchRequestId',
@@ -6063,8 +6204,92 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface LoomCancelValue {\n    readonly cancelled: readonly number[];\n}',
   },
   {
+    name: 'LoomChoiceRecord',
+    declaration: 'export interface LoomChoiceRecord {\n    readonly version: 1;\n    readonly nodeId: LoomNodeId;\n    readonly requestSeq: SessionSeq;\n    readonly alternatives: number;\n}',
+  },
+  {
+    name: 'LoomChooseRequest',
+    declaration: 'export interface LoomChooseRequest {\n    readonly sessionId: SessionId;\n    readonly nodeId: LoomNodeId;\n}',
+  },
+  {
+    name: 'LoomCompareDiff',
+    declaration: 'export interface LoomCompareDiff {\n    readonly files: readonly LoomCompareDiffFile[];\n    readonly insertions: number;\n    readonly deletions: number;\n    readonly source: \'worktree\' | \'workspace-changes\';\n}',
+  },
+  {
+    name: 'LoomCompareDiffFile',
+    declaration: 'export interface LoomCompareDiffFile {\n    readonly path: string;\n    readonly insertions: number;\n    readonly deletions: number;\n}',
+  },
+  {
+    name: 'LoomCompareOwn',
+    declaration: 'export interface LoomCompareOwn {\n    readonly steps: number;\n    readonly inputTokens: number;\n    readonly cachedTokens: number;\n    readonly outputTokens: number;\n    readonly usd?: {\n        readonly amount: number;\n        readonly label: \'list price\';\n    };\n}',
+  },
+  {
+    name: 'LoomCompareRequest',
+    declaration: 'export interface LoomCompareRequest {\n    readonly sessionId: SessionId;\n    readonly setId?: LoomSetId;\n}',
+  },
+  {
+    name: 'LoomCompareRow',
+    declaration: 'export interface LoomCompareRow {\n    readonly sessionId: SessionId;\n    readonly title: string;\n    readonly prompt: string;\n    readonly kind: LoomBranchKind | \'fork\';\n    readonly isolation: LoomIsolation;\n    readonly worktreeEnded?: boolean;\n    readonly running: boolean;\n    readonly tests?: LoomCompareTests;\n    readonly diff?: LoomCompareDiff;\n    readonly own: LoomCompareOwn;\n    readonly wallMs?: number;\n    readonly mark?: LoomMark;\n    readonly adopted: boolean;\n}',
+  },
+  {
+    name: 'LoomCompareTests',
+    declaration: 'export interface LoomCompareTests {\n    readonly passed: number;\n    readonly failed: number;\n    readonly total: number;\n    readonly ok: boolean;\n    readonly command: string;\n}',
+  },
+  {
+    name: 'LoomCompareValue',
+    declaration: 'export interface LoomCompareValue {\n    readonly parent: SessionId;\n    readonly cutSeq: SessionSeq;\n    readonly cutTurn?: number;\n    readonly rows: readonly LoomCompareRow[];\n}',
+  },
+  {
+    name: 'LoomCounterfactualRequest',
+    declaration: 'export interface LoomCounterfactualRequest {\n    readonly sessionId: SessionId;\n    readonly resultSeq: SessionSeq;\n    readonly content: readonly TextBlock[];\n}',
+  },
+  {
+    name: 'LoomCounterfactualValue',
+    declaration: 'export interface LoomCounterfactualValue {\n    readonly sessionId: SessionId;\n    readonly replacementSeq: SessionSeq;\n}',
+  },
+  {
+    name: 'LoomCurationValue',
+    declaration: 'export interface LoomCurationValue {\n    readonly curationBits: number;\n    readonly modelTokens: number;\n}',
+  },
+  {
+    name: 'LoomDiffRequest',
+    declaration: 'export interface LoomDiffRequest {\n    readonly sessionId: SessionId;\n    readonly path?: string;\n}',
+  },
+  {
+    name: 'LoomDiffValue',
+    declaration: 'export interface LoomDiffValue {\n    readonly unified: string;\n    readonly truncated: boolean;\n}',
+  },
+  {
+    name: 'LoomDiscardRequest',
+    declaration: 'export interface LoomDiscardRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
+    name: 'LoomDiscardValue',
+    declaration: 'export interface LoomDiscardValue {\n    readonly worktreePath: string;\n    readonly branchName: string;\n}',
+  },
+  {
     name: 'LoomEditRequest',
     declaration: 'export interface LoomEditRequest extends LoomBranchRequestBase {\n    readonly kind: \'edit\';\n    readonly turn: number;\n    readonly text: string;\n}',
+  },
+  {
+    name: 'LoomEstimateRange',
+    declaration: 'export interface LoomEstimateRange {\n    readonly low: number;\n    readonly high: number;\n}',
+  },
+  {
+    name: 'LoomEstimateRequest',
+    declaration: 'export type LoomEstimateRequest = LoomBranchEstimateRequest | LoomWeaveEstimateRequest;',
+  },
+  {
+    name: 'LoomEstimateValue',
+    declaration: 'export interface LoomEstimateValue {\n    readonly priced: boolean;\n    readonly perBranch?: LoomEstimateRange;\n    readonly total?: LoomEstimateRange;\n    readonly cacheShare: number;\n    readonly basis: \'own-turn\' | \'family\' | \'weave-history\';\n    readonly outputCap?: number;\n    readonly historicalInput?: {\n        readonly requestSeq: SessionSeq;\n        readonly samples: number;\n        readonly provider: string;\n        readonly model: string;\n        readonly prefixMatches: boolean;\n    };\n}',
+  },
+  {
+    name: 'LoomExportRequest',
+    declaration: 'export interface LoomExportRequest {\n    readonly sessionId: SessionId;\n    readonly mode: \'path\' | \'siblings\' | \'kept\';\n    readonly nodeId?: LoomNodeId;\n    readonly format?: \'html\' | \'text\' | \'json\';\n}',
+  },
+  {
+    name: 'LoomExportValue',
+    declaration: 'export interface LoomExportValue {\n    readonly url: string;\n    readonly filename: string;\n    readonly mimeType: string;\n}',
   },
   {
     name: 'LoomFamily',
@@ -6077,6 +6302,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'LoomFamilyRequest',
     declaration: 'export interface LoomFamilyRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
+    name: 'LoomHostBranchOptions',
+    declaration: 'export interface LoomHostBranchOptions {\n    readonly source: MessageSource;\n    readonly prepare?: (agent: Agent, child: {\n        readonly setId: LoomSetId;\n        readonly index: number;\n    }) => void;\n}',
+  },
+  {
+    name: 'LoomIsolation',
+    declaration: 'export type LoomIsolation = \'shared\' | \'worktree\';',
   },
   {
     name: 'LoomMark',
@@ -6093,6 +6326,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'LoomNodeId',
     declaration: 'export type LoomNodeId = Branded<\'LoomNodeId\'>;',
+  },
+  {
+    name: 'LoomPrefixSpan',
+    declaration: 'export interface LoomPrefixSpan {\n    readonly text: string;\n    readonly author: \'user\' | \'model\' | \'alternative\';\n    readonly node?: LoomNodeId;\n    readonly tokenIndex?: number;\n}',
+  },
+  {
+    name: 'LoomProbeNode',
+    declaration: 'export interface LoomProbeNode {\n    readonly id: Branded<\'LoomProbeNodeId\'>;\n    readonly parent: Branded<\'LoomProbeNodeId\'> | null;\n    readonly token: string;\n    readonly sourceNodeId: LoomNodeId;\n    readonly tokenIndex: number;\n    readonly probability: number;\n    readonly cumulativeProbability: number;\n    readonly depth: number;\n}',
+  },
+  {
+    name: 'LoomProbeRequest',
+    declaration: 'export interface LoomProbeRequest {\n    readonly sessionId: SessionId;\n    readonly parent: LoomNodeId | null;\n    readonly prefix: readonly LoomPrefixSpan[];\n    readonly route?: ModelSelection;\n    readonly depth?: number;\n    readonly cutoff?: number;\n}',
+  },
+  {
+    name: 'LoomProbeValue',
+    declaration: 'export interface LoomProbeValue {\n    readonly nodes: readonly LoomProbeNode[];\n    readonly requests: number;\n    readonly truncated: boolean;\n    readonly positions?: readonly {\n        readonly parent: LoomProbeNode[\'id\'] | null;\n        readonly sourceNodeId: LoomNodeId;\n    }[];\n}',
   },
   {
     name: 'LoomRegenerateRequest',
@@ -6149,6 +6398,34 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'LoomVariantsRequest',
     declaration: 'export interface LoomVariantsRequest extends LoomBranchRequestBase {\n    readonly kind: \'variants\';\n    readonly afterTurn: number;\n    readonly lines: readonly string[];\n    readonly samples: number;\n}',
+  },
+  {
+    name: 'LoomWeaveControls',
+    declaration: 'export interface LoomWeaveControls {\n    readonly maxTokens?: number;\n    readonly temperature?: number;\n    readonly topLogprobs?: number;\n    readonly stop?: readonly string[];\n}',
+  },
+  {
+    name: 'LoomWeaveEstimateRequest',
+    declaration: 'export interface LoomWeaveEstimateRequest extends LoomEstimateCommon {\n    readonly kind: \'weave\';\n    readonly maxTokens?: number;\n    readonly prefix?: readonly LoomPrefixSpan[];\n}',
+  },
+  {
+    name: 'LoomWeaveNode',
+    declaration: 'export interface LoomWeaveNode {\n    readonly id: LoomNodeId;\n    readonly parent: LoomNodeId | null;\n    readonly requestSeq: SessionSeq;\n    readonly index: number;\n    readonly kind: \'weave\' | \'probe\';\n    readonly prefix: readonly LoomPrefixSpan[];\n    readonly text: string;\n    readonly status: \'completed\' | \'failed\' | \'cancelled\';\n    readonly usage?: TokenUsage;\n    readonly logprobs?: BlockTokenLogprobs;\n    readonly error?: string;\n    readonly failureCode?: string;\n}',
+  },
+  {
+    name: 'LoomWeaveRequest',
+    declaration: 'export interface LoomWeaveRequest {\n    readonly sessionId: SessionId;\n    readonly parent: LoomNodeId | null;\n    readonly prefix: readonly LoomPrefixSpan[];\n    readonly n: number;\n    readonly controls?: LoomWeaveControls;\n    readonly route?: ModelSelection;\n}',
+  },
+  {
+    name: 'LoomWeaveState',
+    declaration: 'export interface LoomWeaveState extends LoomCurationValue {\n    readonly nodes: readonly LoomWeaveNode[];\n    readonly choices: readonly LoomChoiceRecord[];\n}',
+  },
+  {
+    name: 'LoomWeaveStateRequest',
+    declaration: 'export interface LoomWeaveStateRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
+    name: 'LoomWeaveValue',
+    declaration: 'export interface LoomWeaveValue {\n    readonly requestSeq: SessionSeq;\n    readonly schedule: \'lead-then-burst\' | \'burst\';\n    readonly nodes: readonly LoomWeaveNode[];\n}',
   },
   {
     name: 'LspHover',
@@ -6373,6 +6650,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'MessageRoleMap',
     declaration: 'export interface MessageRoleMap {\n    system: SystemMessage;\n    developer: DeveloperMessage;\n    user: UserMessage;\n    assistant: AssistantMessage;\n    tool: ToolResultMessage;\n}',
+  },
+  {
+    name: 'MessageSource',
+    declaration: 'export type MessageSource = MessageSourceMap[keyof MessageSourceMap];',
   },
   {
     name: 'MessageSourceMap',
@@ -6628,7 +6909,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'PreparedLlmCall',
-    declaration: 'export interface PreparedLlmCall {\n    readonly config: LlmCallConfig;\n    readonly retryPolicy: ResolvedRetryPolicy;\n    readonly context?: LlmModelContext;\n    readonly inputModalities?: readonly ModelModality[];\n    readonly systemPromptUpdate?: SystemPromptUpdate;\n    readonly toolUpdate?: ToolUpdate;\n    readonly adapterDefaults: LlmCallConfigAdapterDefaults;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
+    declaration: 'export interface PreparedLlmCall {\n    readonly tokenLogprobs?: LlmResolvedModelInfo[\'tokenLogprobs\'];\n    readonly assistantPrefill?: \'tool-free\';\n    readonly config: LlmCallConfig;\n    readonly retryPolicy: ResolvedRetryPolicy;\n    readonly context?: LlmModelContext;\n    readonly inputModalities?: readonly ModelModality[];\n    readonly systemPromptUpdate?: SystemPromptUpdate;\n    readonly toolUpdate?: ToolUpdate;\n    readonly adapterDefaults: LlmCallConfigAdapterDefaults;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
   },
   {
     name: 'PreparedReferencedMessage',
@@ -7223,6 +7504,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionCancelValue {\n    readonly accepted: true;\n}',
   },
   {
+    name: 'SessionContinueRequest',
+    declaration: 'export interface SessionContinueRequest {\n    readonly sessionId: SessionId;\n    readonly requestId: SessionRequestId;\n}',
+  },
+  {
+    name: 'SessionContinueValue',
+    declaration: 'export interface SessionContinueValue {\n    readonly accepted: true;\n}',
+  },
+  {
     name: 'SessionControlBaseline',
     declaration: 'export interface SessionControlBaseline {\n    readonly projections: Readonly<Record<SessionId, SessionProjectionBaseline>>;\n}',
   },
@@ -7256,11 +7545,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionEventMap',
-    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'developer/message\': {\n        turn: number;\n        step: number;\n        message: DeveloperMessage;\n        headerSeq?: SessionSeq;\n    };\n    \'system/message\': {\n        turn: number;\n        step: number;\n        message: SystemMessage;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        stream: AssistantStreamRecord[];\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'assistant/attempt\': {\n        turn: number;\n        step: number;\n        stream: AssistantStreamRecord[];\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: ToolCallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n            reason?: string;\n        };\n        meta?: JsonValue;\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n        startsSeries?: true;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': {\n   /* …truncated — full shape in source */',
+    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n        continuation?: MessageSource;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'developer/message\': {\n        turn: number;\n        step: number;\n        message: DeveloperMessage;\n        headerSeq?: SessionSeq;\n    };\n    \'system/message\': {\n        turn: number;\n        step: number;\n        message: SystemMessage;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        stream: AssistantStreamRecord[];\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'assistant/attempt\': {\n        turn: number;\n        step: number;\n        stream: AssistantStreamRecord[];\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: ToolCallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n            reason?: string;\n        };\n        meta?: JsonValue;\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n        startsSeries?: true;\n    };\n    \'request/context\': Reques /* …truncated — full shape in source */',
   },
   {
     name: 'SessionEventMetadataFilter',
     declaration: 'export type SessionEventMetadataFilter = Exclude<SessionEventResultFilter, {\n    kind: \'text\';\n}>;',
+  },
+  {
+    name: 'SessionEventOwnership',
+    declaration: 'export type SessionEventOwnership = \'own\' | \'inherited\';',
   },
   {
     name: 'SessionEventReadRequest',
@@ -7272,7 +7565,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionEventResultFilter',
-    declaration: 'export type SessionEventResultFilter = ({\n    kind: \'seq\';\n} & SessionResultRange) | ({\n    kind: \'time\';\n} & SessionResultRange) | {\n    kind: \'type\';\n    values: readonly SessionEventType[];\n} | {\n    kind: \'surface\';\n    values: readonly SessionEventSurface[];\n} | {\n    kind: \'text\';\n    text: string;\n};',
+    declaration: 'export type SessionEventResultFilter = ({\n    kind: \'seq\';\n} & SessionResultRange) | ({\n    kind: \'time\';\n} & SessionResultRange) | {\n    kind: \'type\';\n    values: readonly SessionEventType[];\n} | {\n    kind: \'surface\';\n    values: readonly SessionEventSurface[];\n} | {\n    kind: \'ownership\';\n    values: readonly SessionEventOwnership[];\n} | {\n    kind: \'text\';\n    text: string;\n};',
   },
   {
     name: 'SessionEventSearchDocument',
@@ -7980,7 +8273,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'StreamChunk',
-    declaration: 'export type StreamChunk = {\n    type: \'block-start\';\n    index: number;\n    blockType: ContentBlockType;\n} | {\n    type: \'text-delta\';\n    index: number;\n    text: string;\n} | {\n    type: \'reasoning-delta\';\n    index: number;\n    text: string;\n} | {\n    type: \'tool-call-delta\';\n    index: number;\n    id: ToolCallId;\n    name?: string;\n    argumentsDelta: string;\n} | {\n    type: \'block-end\';\n    index: number;\n    block: ContentBlock;\n} | {\n    type: \'usage\';\n    usage: TokenUsage;\n} | {\n    type: \'finish\';\n    reason: FinishReason;\n    replayState?: ReplayEnvelope;\n};',
+    declaration: 'export type StreamChunk = {\n    type: \'block-start\';\n    index: number;\n    blockType: ContentBlockType;\n} | {\n    type: \'text-delta\';\n    index: number;\n    text: string;\n} | {\n    type: \'reasoning-delta\';\n    index: number;\n    text: string;\n} | {\n    type: \'tool-call-delta\';\n    index: number;\n    id: ToolCallId;\n    name?: string;\n    argumentsDelta: string;\n} | {\n    type: \'block-end\';\n    index: number;\n    block: ContentBlock;\n    logprobs?: BlockTokenLogprobs;\n} | {\n    type: \'usage\';\n    usage: TokenUsage;\n} | {\n    type: \'finish\';\n    reason: FinishReason;\n    replayState?: ReplayEnvelope;\n};',
   },
   {
     name: 'SubagentActivation',
@@ -8337,6 +8630,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ToastOptions',
     declaration: 'export interface ToastOptions {\n    timeoutMs?: number;\n}',
+  },
+  {
+    name: 'TokenAlternative',
+    declaration: 'export interface TokenAlternative {\n    readonly token: string;\n    readonly logprob: number;\n}',
   },
   {
     name: 'TokenMeasurement',
@@ -9033,6 +9330,26 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WorkspaceView',
     declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
+  },
+  {
+    name: 'WorktreeCheckout',
+    declaration: 'export interface WorktreeCheckout {\n    path: string;\n    branch: string;\n    repositoryRoot: string;\n}',
+  },
+  {
+    name: 'WorktreeGitRequest',
+    declaration: 'export interface WorktreeGitRequest {\n    cwd: string;\n    args: readonly string[];\n    allowedExitCodes?: readonly number[];\n    stdin?: string;\n    disableFilters?: boolean;\n    maxOutputBytes?: number;\n}',
+  },
+  {
+    name: 'WorktreeGitResult',
+    declaration: 'export interface WorktreeGitResult {\n    stdout: string;\n    stderr: string;\n    exitCode: number;\n    truncated: boolean;\n}',
+  },
+  {
+    name: 'WorktreeRemoval',
+    declaration: 'export type WorktreeRemoval = {\n    kind: \'removed\';\n} | {\n    kind: \'missing\';\n};',
+  },
+  {
+    name: 'WorktreeRepository',
+    declaration: 'export interface WorktreeRepository {\n    root: string;\n    administration: \'directory\' | \'file\';\n}',
   },
 ]
 

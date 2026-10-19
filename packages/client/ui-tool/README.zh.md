@@ -45,6 +45,8 @@ ctx.slots.inject('tool.call.toolview', () =>
 
 owner 载荷为 `ToolCallOwnerProps`：`callId`、`toolName`、`phase` 判别字段及对应阶段的 `block`、可选 `cwd` 与 `home`、会话授权的 `loadImage` loader（供结果携带持久图像的视图使用），以及普通的 `openFile`/`inspect` 回调。PTC dispatch 块保留事件的 `parentCallId`；根会话调用没有该字段，因此后代调用都走同一条按 key 分发路径：已注册视图的调用（如 `read_image`）也会在嵌套处渲染对应卡片，未注册的后代调用则保持通用压平形式。路径摘要先相对会话 cwd 缩短，再把剩余的 POSIX Host home 写成 `~`；`filePath` 与 Host 打开优先使用操作发生时记录的绝对结果路径，显示标签仍保留原始参数。成功的旧根调用结果继续回退到原参数；运行中的相对路径等待结果。注册项会收到常规的会话 slot 运行时共享数据，但不会收到 React 节点或运行时服务。
 
+`tool.call.actions` 列表插槽在每张原子卡片旁接收相同的 `ToolCallOwnerProps`。可选客户端插件可为其支持的阶段与工具贡献操作；注册必须通过插槽运行时返回，以便卸载时移除操作。没有贡献者时，卡片不增加控件。
+
 ### 内置视图
 
 每个注册视图都接收[工具 slot 类型](src/client/contract/slots.ts)声明的显式 `preparing`、`start` 和 `result` props。所有块都提供 `name` 和懒计算的 `args` 读器，原有 `argsRaw` 和 result 的 `call` 字段仍可使用。行模型统一选择标题，并组合通用工具名前缀与已有参数摘要，不按生命周期阶段改变前缀；专用标题不附带英文名。write/edit 和 Bash 在各阶段共用组件。自定义 renderer 可保留独立准备态分支；依赖参数的组件接收 `StartedToolCallViewProps`。

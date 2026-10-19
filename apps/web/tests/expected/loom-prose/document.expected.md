@@ -1,0 +1,35 @@
+- region "Weave prose":
+  - heading "Weave prose" [level=2]
+  - button "Export path"
+  - paragraph: "Dotted underline: under 30%; tint and heavier underline: under 5%. Select a captured token to inspect its probability."
+  - text: Human text The Chosen alternative token sea Model text
+  - button "Show alternatives"
+  - 'button "waited.: probability 60%"': waited.
+  - text: Edit the prose and place the cursor where generation should continue
+  - textbox "Edit the prose and place the cursor where generation should continue": The sea waited.
+  - text: Continuations
+  - spinbutton "Continuations": "4"
+  - text: Maximum tokens each
+  - spinbutton "Maximum tokens each": "70"
+  - text: Temperature
+  - spinbutton "Temperature"
+  - button "Weave"
+  - term: Model
+  - definition:
+    - text: DeepSeek-V4-Flash
+    - button "Change"
+    - text: Same as this branch
+  - term: Thinking
+  - definition: Off for auxiliary prose calls
+  - term: Cost
+  - definition: ≈ 110 tokens per branch · no list price for this route ≈ 440 tokens for 4
+  - term: Estimate basis
+  - definition: "Historical input · continuations: 1 · output cap 70 tokens · different cursor text; cost may differ"
+  - text: Retained requests
+  - combobox "Retained requests":
+    - option "Current cursor" [disabled] [selected]
+    - 'option "Request 1 · continuations: 2 · …The"'
+    - 'option "Request 2 · continuations: 1 · …The sea"'
+  - group: Token multiverse at the cursor
+  - paragraph: "Outside editor controls: ↑/↓ preview · 1–9 choose · g Weave"
+  - paragraph: "Choices: 2 · 1.0 bits · model tokens: 2 · 0.500 bits/token"

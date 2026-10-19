@@ -28,6 +28,7 @@ import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import WorkingDirectory from '@deepseek-ai/dsh-working-directory'
 import * as ToolWorkingDirectory from '@deepseek-ai/dsh-tool-working-directory'
 import * as ToolWorktree from '@deepseek-ai/dsh-experimental-tool-worktree'
+import * as ToolLoom from '@deepseek-ai/dsh-experimental-tool-loom'
 import { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentLimits, ImageAttachmentRef, SaveImageAttachment, StoredImageAttachment } from '@deepseek-ai/dsh-attachment'
 import UserQuestionService from '@deepseek-ai/dsh-user-questions'
@@ -632,6 +633,22 @@ const TOOL_PACKAGES: ToolPackage[] = [
       await ctx.plugin(ToolWorkingDirectory)
     },
     note: 'Reads or changes the calling Session directory. Existing shells and processes retain their own directories; origin metadata and permission roots stay fixed.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-experimental-tool-loom',
+    dir: 'tool-loom',
+    source: 'packages/experimental/tool-loom/src/tools.ts',
+    requires: ['ctx.tools', 'ctx.loom', 'ctx.sessionController', 'ctx.sessionQuery', 'ctx.sessionProjections', 'ctx.tokenMeter', 'ctx.permissionPresets', 'ctx.workspaceRegistry', 'a calling Agent'],
+    writes: ['tool/call', 'forked child Sessions (plugin:loom/branch, permission/preset, a loom-sourced user/message)', 'plugin:loom/mark', 'Workspace archive set', 'tool/result'],
+    async mount(ctx) {
+      const unavailable = (): never => { throw new Error('gen-tool-catalog: autoloom services are unavailable during schema harvest') }
+      await ctx.plugin(AgentRegistry)
+      for (const name of ['loom', 'permissionPresets', 'sessionController', 'sessionQuery', 'tokenMeter', 'workspaceRegistry']) {
+        ctx.provide(name, new Proxy({}, { get: unavailable }) as never)
+      }
+      await ctx.plugin(ToolLoom)
+    },
+    note: 'Explicit experimental composition only, beside the experimental Loom service. Every Session sees the five tools; a Session whose first own prompt came from a weaver is refused. Wait and read bounds in the schema text follow the plugin Config.',
   },
   {
     pkg: '@deepseek-ai/dsh-experimental-tool-worktree',

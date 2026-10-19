@@ -181,7 +181,7 @@ describe('Session ordering', () => {
       .toEqual(['source', 'orphan', 'self'])
   })
 
-  it.each(['workspace', 'ungrouped', 'flat'] as const)('keeps forks of pinned sources in the ordinary %s section', (mode) => {
+  it.each(['workspace', 'ungrouped', 'flat'] as const)('keeps forks adjacent to pinned sources without inheriting pins in %s', (mode) => {
     const sessions = list(
       summary('source', 1), summary('other-pin', 2), summary('ordinary', 3),
       { ...summary('fork', 4), parentId: sid('source') },
@@ -194,7 +194,8 @@ describe('Session ordering', () => {
         sessions, mode === 'workspace' ? [workspace('alpha', order)] : [], state, noAttention,
         view([mode === 'workspace' ? 'alpha' : UNGROUPED_KEY], order),
       )[0]!.sessions
-    expect(rows.map(row => row.id)).toEqual(['source', 'other-pin', 'fork', 'ordinary'])
+    expect(rows.map(row => row.id)).toEqual(['source', 'fork', 'other-pin', 'ordinary'])
+    expect(rows.find(row => row.id === sid('fork'))?.pinned).toBe(false)
   })
 
   it('keeps archive filtering out of complete flat membership', () => {
@@ -393,7 +394,7 @@ describe('deriveGroups', () => {
     expect(counts(statuses)).toEqual([0, 0, 0])
   })
 
-  it('ignores fork lineage and sorts every ungrouped session as a top-level row', () => {
+  it('nests fork families while preserving orphan and cyclic entries', () => {
     const parent = summary('parent', 1)
     const oldChild = { ...summary('old-child', 10), parentId: parent.id }
     const newChild = { ...summary('new-child', 20), parentId: parent.id }
@@ -413,9 +414,10 @@ describe('deriveGroups', () => {
 
     expect(groups).toHaveLength(1)
     expect(groups[0]!.sessions.map(node => node.id)).toEqual([
-      newChild.id, tieA.id, tieB.id, oldChild.id,
-      cycleB.id, cycleA.id, orphan.id, self.id, parent.id,
+      orphan.id, self.id, parent.id, newChild.id, oldChild.id, tieA.id, tieB.id,
+      cycleB.id, cycleA.id,
     ])
+    expect(groups[0]!.sessions.map(node => node.depth)).toEqual([0, 0, 0, 1, 1, 1, 1, 0, 1])
 
     // Equal timestamps use ids as a deterministic tiebreak in either input order.
     expect(deriveGroups(
@@ -522,13 +524,34 @@ describe('deriveGroups', () => {
 })
 
 describe('deriveFlat', () => {
-  it('renders ordinary forks in the supplied order regardless of timestamps', () => {
+  it('uses projected fork creation order and preserves nested family identity', () => {
+    const root = summary('root', 1)
+    const first = {
+      ...summary('session-12345678-first', 10),
+      projectionValues: { forkLineage: { parentSession: root.id, createdAt: 2 } },
+    }
+    const second = summary('session-12345678-second', 20)
+    const grandchild = { ...summary('grandchild', 30), parentId: first.id }
+    const state: SessionListState = {
+      ...list(root, first, second, grandchild),
+      projectionsBySession: {
+        [second.id]: { state: 'ready', error: null, values: { forkLineage: { parentSession: root.id, createdAt: 1 } } },
+      },
+    }
+    const rows = deriveFlat(state, state.ids, noRows, noAttention)
+    expect(rows.map(row => [row.id, row.depth])).toEqual([
+      [root.id, 0], [second.id, 1], [first.id, 1], [grandchild.id, 2],
+    ])
+    expect(rows.map(row => row.forkId)).toEqual([undefined, second.id, first.id, 'grandchi'])
+  })
+
+  it('keeps ordinary forks adjacent to their source in either display order', () => {
     const parent = summary('parent', 10)
     const child = { ...summary('child', 30), parentId: parent.id }
     const tieB = summary('tie-b', 20)
     const tieA = summary('tie-a', 20)
     const rows = deriveFlat(list(parent, child, tieB, tieA), [parent.id, tieA.id, child.id, tieB.id], noRows, noAttention)
-    expect(rows.map(row => row.id)).toEqual([parent.id, tieA.id, child.id, tieB.id])
+    expect(rows.map(row => row.id)).toEqual([parent.id, child.id, tieA.id, tieB.id])
   })
 
   it('hides subagent-origin rows but keeps ordinary forks', () => {

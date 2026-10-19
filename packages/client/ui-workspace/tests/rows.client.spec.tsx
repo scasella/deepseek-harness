@@ -25,6 +25,21 @@ const tEn = makeTranslate(en, commonEn) as never
 const sid = (id: string) => id as SessionId
 const wid = (id: string) => id as WorkspaceId
 
+it('renders fork identity and nesting while renaming the stored title', () => {
+  const rename = vi.fn()
+  const node: SessionNode = {
+    id: sid('fork'), title: 'Shared title', blank: false, running: false,
+    runningSubagentCount: 0, completed: false, updatedAt: 0, pinned: false, archived: false,
+    depth: 2, forkId: '12345678',
+  }
+  render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
+    onRenameRequest={rename} drag={dragProps()} t={tEn} />)
+  expect(screen.getByRole('treeitem').getAttribute('aria-level')).toBe('3')
+  expect(screen.getByRole('treeitem').getAttribute('draggable')).toBe('false')
+  fireEvent.doubleClick(screen.getByText('Shared title · Fork 12345678'))
+  expect(rename).toHaveBeenCalledWith(node.id, 'Shared title')
+})
+
 /** The row lists and child seats a Session row renders. */
 type RowSlotName =
   | 'sidebar.workspaces.session.menu.item'

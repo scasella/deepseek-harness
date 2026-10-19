@@ -52,7 +52,7 @@ it.skipIf(MODE === 'record')('replays a regenerate set and a steer set as four f
   // Children claim their recorded scripts in creation order. They share one writable folder, so the
   // runner forks them one at a time and that order is the request order.
   const scaffold = await launchWebScaffold({
-    extraOverlayPath: OVERLAY,
+    extraOverlayPath: [OVERLAY, join(DIR, 'cordis.snapshot.yml')],
     extraInstallAnchors: INSTALL_ANCHORS,
     replayFixture: paths[0]!,
     replayChildFixtures: paths.slice(1),

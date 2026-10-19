@@ -15,7 +15,7 @@ import type { PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { LoomFamily, LoomMark } from '@deepseek-ai/dsh-experimental-loom/types'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
-import { compactTokens, failureText, plural, type LoomTranslate } from './format.ts'
+import { compactTokens, failureText, plural, pointReading, type LoomTranslate } from './format.ts'
 import { KeepGlyph, SetAsideGlyph } from './glyphs.tsx'
 import { projectionValuesOf } from './lineage.ts'
 import { useRefreshOnce } from './refresh.ts'
@@ -54,9 +54,7 @@ function dotState(status: LoomRowStatus): StateDotState {
 
 /** Point label naming the cut by the turn it falls in or after. */
 function pointLabel(row: Extract<LoomTreeRow, { kind: 'point' }>, t: LoomTranslate): string {
-  if (row.cutSeq === undefined) return t('tree.pointUnknown')
-  if (row.openedTurn !== undefined && row.openedTurn > (row.cutTurn ?? 0)) return t('tree.pointDuring', { turn: row.openedTurn })
-  return row.cutTurn === undefined ? t('tree.pointStart') : t('tree.pointAfter', { turn: row.cutTurn })
+  return row.cutSeq === undefined ? t('tree.pointUnknown') : pointReading(row.cutTurn, row.openedTurn, t)
 }
 
 /**
@@ -103,6 +101,7 @@ function rowText(row: LoomTreeRow, t: LoomTranslate): { label: string; summary: 
     metric === undefined ? undefined : t('tree.ownTokens', { value: metric }),
     t(`tree.status.${row.status}`),
     row.mark === null ? undefined : t(MARK_NAMES[row.mark]),
+    row.adopted ? t('tree.adopted') : undefined,
   ].filter(part => part !== undefined).join(sep)
   return { label: row.title, summary, metric, name }
 }
@@ -257,6 +256,7 @@ export function LoomTree({
                   {row.mark === 'keep' ? <KeepGlyph size={12} /> : <SetAsideGlyph size={12} />}
                 </span>
               )}
+              {row.kind === 'session' && row.adopted && <span className={css.badge} aria-hidden="true">{t('tree.adopted')}</span>}
               {row.kind === 'point' && row.running > 0 && (
                 <span className={css.badge} aria-hidden="true">{t('tree.running', { count: row.running })}</span>
               )}

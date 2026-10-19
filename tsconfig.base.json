@@ -68,6 +68,7 @@
       "@deepseek-ai/dsh-experimental-client-ui-loom": ["./packages/experimental/client-ui-loom/src/index.ts"],
       "@deepseek-ai/dsh-experimental-client-ui-loom/client": ["./packages/experimental/client-ui-loom/src/client/index.ts"],
       "@deepseek-ai/dsh-experimental-loom-bundle": ["./packages/experimental/loom-bundle/src/index.ts"],
+      "@deepseek-ai/dsh-experimental-tool-loom": ["./packages/experimental/tool-loom/src/index.ts"],
       "@deepseek-ai/dsh-experimental-client-ui-claude-code-mods": ["./packages/experimental/client-ui-claude-code-mods/src/index.ts"],
       "@deepseek-ai/dsh-experimental-client-ui-claude-code-mods/client": ["./packages/experimental/client-ui-claude-code-mods/src/client/index.ts"],
 

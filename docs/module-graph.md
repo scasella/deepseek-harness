@@ -280,6 +280,7 @@ flowchart TD
     pkg_experimental_speech_to_text_sensevoice["experimental-speech-to-text-sensevoice"]
     pkg_experimental_terminal_bundle["experimental-terminal-bundle"]
     pkg_experimental_tool_agent_team["experimental-tool-agent-team"]
+    pkg_experimental_tool_loom["experimental-tool-loom"]
     pkg_experimental_tool_worktree["experimental-tool-worktree"]
     pkg_experimental_translator["experimental-translator"]
     pkg_experimental_voice_input_bundle["experimental-voice-input-bundle"]
@@ -1374,13 +1375,22 @@ flowchart TD
   pkg_experimental_loom --> pkg_agent
   pkg_experimental_loom --> pkg_api_remote_access
   pkg_experimental_loom --> pkg_api_session_controller
+  pkg_experimental_loom --> pkg_client_connection
+  pkg_experimental_loom --> pkg_experimental_worktree
+  pkg_experimental_loom --> pkg_fs
   pkg_experimental_loom --> pkg_llm
   pkg_experimental_loom --> pkg_sandbox_policy
   pkg_experimental_loom --> pkg_session
   pkg_experimental_loom --> pkg_session_projection
+  pkg_experimental_loom --> pkg_session_stats
   pkg_experimental_loom --> pkg_session_telemetry
+  pkg_experimental_loom --> pkg_session_title
+  pkg_experimental_loom --> pkg_token_meter
   pkg_experimental_loom --> pkg_typert_protocol
   pkg_experimental_loom --> pkg_util_values
+  pkg_experimental_loom --> pkg_working_directory
+  pkg_experimental_loom --> pkg_workspace
+  pkg_experimental_loom --> pkg_workspace_changes
   pkg_experimental_tool_agent_team --> pkg_agent
   pkg_experimental_tool_agent_team --> pkg_experimental_agent_team
   pkg_experimental_tool_agent_team --> pkg_session
@@ -1435,6 +1445,20 @@ flowchart TD
   pkg_subagent_dsh_sdk --> pkg_session
   pkg_subagent_dsh_sdk --> pkg_subagent
   pkg_subagent_dsh_sdk --> pkg_subprocess
+  pkg_experimental_tool_loom --> pkg_agent
+  pkg_experimental_tool_loom --> pkg_api_session_controller
+  pkg_experimental_tool_loom --> pkg_experimental_loom
+  pkg_experimental_tool_loom --> pkg_llm
+  pkg_experimental_tool_loom --> pkg_permission_presets
+  pkg_experimental_tool_loom --> pkg_session
+  pkg_experimental_tool_loom --> pkg_session_projection
+  pkg_experimental_tool_loom --> pkg_session_query
+  pkg_experimental_tool_loom --> pkg_subagent
+  pkg_experimental_tool_loom --> pkg_timeout
+  pkg_experimental_tool_loom --> pkg_token_meter
+  pkg_experimental_tool_loom --> pkg_tools
+  pkg_experimental_tool_loom --> pkg_typert_protocol
+  pkg_experimental_tool_loom --> pkg_workspace
   pkg_tool_schedule --> pkg_llm
   pkg_tool_schedule --> pkg_schedule
   pkg_tool_schedule --> pkg_subagent
@@ -1781,12 +1805,13 @@ flowchart TD
 | [`tool-ralph`](../packages/experimental/tool-ralph) | `experimental` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`subagent`](../packages/subagent/subagent), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools), [`workflow`](../packages/workflow/workflow) |
 | [`sdk-protocol`](../packages/sdk/protocol) | `sdk` | [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent) |
 | [`workflow-ptc`](../packages/workflow/workflow-ptc) | `workflow` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`ptc-runtime`](../packages/ptc-runtime/ptc-runtime), [`sandbox`](../packages/sandbox/sandbox), [`sandbox-policy`](../packages/sandbox/sandbox-policy), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`tools`](../packages/core/tools), [`workflow`](../packages/workflow/workflow), [`working-directory`](../packages/session/working-directory) |
-| [`experimental-loom`](../packages/experimental/loom) | `experimental` | [`agent`](../packages/core/agent), [`api-remote-access`](../packages/api/remote-access), [`api-session-controller`](../packages/api/session-controller), [`llm`](../packages/llm/llm), [`sandbox-policy`](../packages/sandbox/sandbox-policy), [`session`](../packages/core/session), [`session-projection`](../packages/session/session-projection), [`session-telemetry`](../packages/session/session-telemetry), [`typert-protocol`](../packages/typert/protocol), [`util-values`](../packages/util/values) |
+| [`experimental-loom`](../packages/experimental/loom) | `experimental` | [`agent`](../packages/core/agent), [`api-remote-access`](../packages/api/remote-access), [`api-session-controller`](../packages/api/session-controller), [`client-connection`](../packages/client/connection), [`experimental-worktree`](../packages/experimental/worktree), [`fs`](../packages/fs/fs), [`llm`](../packages/llm/llm), [`sandbox-policy`](../packages/sandbox/sandbox-policy), [`session`](../packages/core/session), [`session-projection`](../packages/session/session-projection), [`session-stats`](../packages/session/session-stats), [`session-telemetry`](../packages/session/session-telemetry), [`session-title`](../packages/session/session-title), [`token-meter`](../packages/llm/token-meter), [`typert-protocol`](../packages/typert/protocol), [`util-values`](../packages/util/values), [`working-directory`](../packages/session/working-directory), [`workspace`](../packages/workspace/workspace), [`workspace-changes`](../packages/deliverables/workspace-changes) |
 | [`experimental-tool-agent-team`](../packages/experimental/tool-agent-team) | `experimental` | [`agent`](../packages/core/agent), [`experimental-agent-team`](../packages/experimental/agent-team), [`session`](../packages/core/session), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`schedule`](../packages/schedule/schedule) | `schedule` | [`agent`](../packages/core/agent), [`api-session-controller`](../packages/api/session-controller), [`brand`](../packages/util/brand), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`session-projection`](../packages/session/session-projection), [`storage-domain`](../packages/storage/storage-domain), [`subagent`](../packages/subagent/subagent), [`tools`](../packages/core/tools), [`typert-protocol`](../packages/typert/protocol), [`workspace`](../packages/workspace/workspace) |
 | [`sdk-client`](../packages/sdk/client) | `sdk` | [`llm`](../packages/llm/llm), [`sdk-protocol`](../packages/sdk/protocol), [`session`](../packages/core/session) |
 | [`sdk-jsonrpc-server`](../packages/sdk/server) | `sdk` | [`agent`](../packages/core/agent), [`attachment`](../packages/attachment/attachment), [`llm`](../packages/llm/llm), [`llm-deepseek-api-key`](../packages/llm/llm-deepseek-api-key), [`scope`](../packages/core/scope), [`sdk-protocol`](../packages/sdk/protocol), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`working-directory`](../packages/session/working-directory) |
 | [`client-test-runtime`](../packages/test-support/client-runtime) | `test-support` | [`api-gateway`](../packages/api/gateway), [`api-session-controller`](../packages/api/session-controller), [`api-workspace-controller`](../packages/api/workspace-controller), [`attachment`](../packages/attachment/attachment), [`client-connection`](../packages/client/connection), [`client-hmr`](../packages/client/hmr), [`client-modules`](../packages/client/modules), [`client-store`](../packages/client/store), [`client-ui-chat`](../packages/client/ui-chat), [`client-ui-conversation`](../packages/client/ui-conversation), [`client-ui-renderer`](../packages/client/ui-renderer), [`client-ui-session`](../packages/client/ui-session), [`client-ui-settings`](../packages/client/ui-settings), [`client-ui-slots`](../packages/client/ui-slots), [`client-web`](../packages/client/web), [`remote-mock`](../packages/test-support/remote-mock), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`typert-protocol`](../packages/typert/protocol) |
 | [`subagent-dsh-sdk`](../packages/subagent/subagent-dsh-sdk) | `subagent` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`sdk-client`](../packages/sdk/client), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`subprocess`](../packages/subprocess/subprocess) |
+| [`experimental-tool-loom`](../packages/experimental/tool-loom) | `experimental` | [`agent`](../packages/core/agent), [`api-session-controller`](../packages/api/session-controller), [`experimental-loom`](../packages/experimental/loom), [`llm`](../packages/llm/llm), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-projection`](../packages/session/session-projection), [`session-query`](../packages/session-query/session-query), [`subagent`](../packages/subagent/subagent), [`timeout`](../packages/util/timeout), [`token-meter`](../packages/llm/token-meter), [`tools`](../packages/core/tools), [`typert-protocol`](../packages/typert/protocol), [`workspace`](../packages/workspace/workspace) |
 | [`tool-schedule`](../packages/schedule/tool-schedule) | `schedule` | [`llm`](../packages/llm/llm), [`schedule`](../packages/schedule/schedule), [`subagent`](../packages/subagent/subagent), [`tools`](../packages/core/tools) |
 <!-- END GENERATED module-graph:packages -->

@@ -1,0 +1,88 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/experimental/tool-loom/README.md
+/:
+  en: a173b042ab280d3a
+  zh: d66b568c97f77dd5
+/deepseek-ai-dsh-experimental-tool-loom:
+  en: b77585bce091d9d6
+  zh: aa767171fa14c1c6
+/deepseek-ai-dsh-experimental-tool-loom/summary:
+  en: f47e0bddb5345c2b
+  zh: 03dd2d5dd9389a76
+/deepseek-ai-dsh-experimental-tool-loom/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 09388d293f9be9cb
+/deepseek-ai-dsh-experimental-tool-loom/use-this-package:
+  en: 8da0d31afa14dbc2
+  zh: 4f5eeb68050b66c9
+/deepseek-ai-dsh-experimental-tool-loom/use-this-package/when-to-choose-it:
+  en: 88011b6227532240
+  zh: 70bd1cc8bcb2c655
+/deepseek-ai-dsh-experimental-tool-loom/use-this-package/smallest-working-example:
+  en: 8c6a4b2e0142a6bf
+  zh: 2ea46804c29818de
+/deepseek-ai-dsh-experimental-tool-loom/use-this-package/what-the-model-can-do:
+  en: c5b0a6b092979177
+  zh: 56392c081976f4dd
+/deepseek-ai-dsh-experimental-tool-loom/use-this-package/what-success-and-failure-look-like:
+  en: 94a780cc66115278
+  zh: b41a61576f323e2a
+/deepseek-ai-dsh-experimental-tool-loom/understand-the-implementation:
+  en: cdc51982f6508796
+  zh: 10fa4d224e4fb209
+/deepseek-ai-dsh-experimental-tool-loom/understand-the-implementation/design-philosophy:
+  en: 8bf272da58093f5d
+  zh: e3788f3f438c883d
+/deepseek-ai-dsh-experimental-tool-loom/understand-the-implementation/source-map:
+  en: c4024e875b8088ee
+  zh: f3eb86a80ce08652
+/deepseek-ai-dsh-experimental-tool-loom/understand-the-implementation/runs-and-budgets:
+  en: b19fe80ed97f1dc8
+  zh: 19b9ba827c859aa2
+/deepseek-ai-dsh-experimental-tool-loom/understand-the-implementation/child-preparation:
+  en: 373f80e87b4467f4
+  zh: 15335e69ef955ac0
+/deepseek-ai-dsh-experimental-tool-loom/understand-the-implementation/own-token-watcher:
+  en: 1311888108adf935
+  zh: 48cd56e0cedc22e2
+/deepseek-ai-dsh-experimental-tool-loom/understand-the-implementation/autoloom-children:
+  en: b9de4d29a341253a
+  zh: 0034627da0c4c666
+/deepseek-ai-dsh-experimental-tool-loom/further-exploration:
+  en: 9ad3c246ca892023
+  zh: 5cf4d21c3b2b8a43
+/deepseek-ai-dsh-experimental-tool-loom/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-experimental-tool-loom/model-experience/autoloom-tool-schemas:
+  en: 2ff517b4cf699487
+  zh: b5919690a3709cec
+/deepseek-ai-dsh-experimental-tool-loom/model-experience/autoloom-tool-schemas/what-the-model-sees:
+  en: 21bbbbfa5e03aff9
+  zh: 73c26fa897e287a2
+/deepseek-ai-dsh-experimental-tool-loom/model-experience/autoloom-tool-schemas/token-effect:
+  en: c772239d3bfb5dcb
+  zh: 272a88b71ce92e1e
+/deepseek-ai-dsh-experimental-tool-loom/model-experience/autoloom-tool-schemas/kv-cache-effect:
+  en: 8da9ec8cac19b6db
+  zh: af196e17e49dfb15
+/deepseek-ai-dsh-experimental-tool-loom/model-experience/autoloom-child-prompt:
+  en: 1f9f2dd76b009e2b
+  zh: f4cad4b0898abbbe
+/deepseek-ai-dsh-experimental-tool-loom/model-experience/autoloom-child-prompt/what-the-model-sees:
+  en: af4c28a1f2608888
+  zh: ee06ea54ad33e275
+/deepseek-ai-dsh-experimental-tool-loom/model-experience/autoloom-child-prompt/token-effect:
+  en: b2a001527e54f973
+  zh: 83a179303d5be08c
+/deepseek-ai-dsh-experimental-tool-loom/model-experience/autoloom-child-prompt/kv-cache-effect:
+  en: 5b095804843faee8
+  zh: 6976b8c409fc9214
+/deepseek-ai-dsh-experimental-tool-loom/known-limitations-and-deferred-work:
+  en: 09fe756d19097224
+  zh: 337391f06abc2ef1
+/deepseek-ai-dsh-experimental-tool-loom/known-limitations-and-deferred-work/dev-note:
+  en: e67f633dc6fe7773
+  zh: 7a3bbb28b46dce8b

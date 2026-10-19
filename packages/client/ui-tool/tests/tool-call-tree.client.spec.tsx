@@ -30,10 +30,11 @@ function props(
 ): ToolTreeProps {
   const snapshot = {} as SessionSnapshot
   const useSession = ((selector: (value: SessionSnapshot) => unknown) => selector(snapshot)) as ToolTreeProps['useSession']
-  const renderSlot = ((_key: string, owner: ToolCallOwnerProps, options?: { fallback?: React.ReactNode }) => {
-    owners?.push(owner)
+  const capturedOwners: unknown[] | undefined = owners
+  const renderSlot: ToolTreeProps['renderSlot'] = (key, owner, options) => {
+    if (key === 'tool.call.toolview') capturedOwners?.push(owner)
     return options?.fallback ?? null
-  }) as unknown as ToolTreeProps['renderSlot']
+  }
   const fixture: Partial<ToolTreeProps> = {
     useDisclosure,
     useTurnData: () => undefined,
@@ -194,10 +195,11 @@ describe('ToolCallTree', () => {
         reason: 'not authorized',
       },
     }
-    const renderSlot = vi.fn(() => <div data-testid="keyed-skill" />)
+    const renderSlot = vi.fn((key: string) => key === 'tool.call.toolview' ? <div data-testid="keyed-skill" /> : null)
     const view = render(<ToolCallTree {...props(block)} renderSlot={renderSlot as ToolTreeProps['renderSlot']} />)
 
-    expect(renderSlot).not.toHaveBeenCalled()
+    expect(renderSlot).toHaveBeenCalledOnce()
+    expect(renderSlot.mock.calls[0]?.[0]).toBe('tool.call.actions')
     expect(view.queryByTestId('keyed-skill')).toBeNull()
     expect(view.getByText('Auto review 已拒绝')).toBeTruthy()
   })

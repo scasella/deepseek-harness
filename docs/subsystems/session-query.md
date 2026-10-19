@@ -133,6 +133,7 @@ type SessionEventResultFilter =
   | ({ kind: 'time' } & SessionResultRange)
   | { kind: 'type'; values: readonly SessionEventType[] }
   | { kind: 'surface'; values: readonly SessionEventSurface[] }
+  | { kind: 'ownership'; values: readonly SessionEventOwnership[] }
   | { kind: 'text'; text: string }
 ```
 

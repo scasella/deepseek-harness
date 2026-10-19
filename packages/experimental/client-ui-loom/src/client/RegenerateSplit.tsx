@@ -2,8 +2,10 @@
  * Regenerate split button on a completed Turn opened by a user prompt. The
  * main part regenerates the Turn once as a new branch of this Session; the
  * caret opens a panel to regenerate it ×1, ×2, or ×4, showing the prompt it
- * resends, the route with an optional override, the shared folder, and this
- * Turn's own tokens and cache share. Both parts start a `regenerate` branch set.
+ * resends, the route with an optional override, where the branches keep their
+ * files, and what they would cost. The main part leaves the folder choice to
+ * the Host's default; the panel sends its choice. Both parts start a
+ * `regenerate` branch set.
  */
 import { useState } from 'react'
 import type { ModelSelection } from '@deepseek-ai/dsh-api-session-controller/types'
@@ -13,12 +15,16 @@ import {
 import type { LoomFailure } from './branching.ts'
 import { classes } from './classes.ts'
 import { ClippedText } from './clipped.tsx'
+import { CostRow } from './CostRow.tsx'
 import { CountChoice } from './CountChoice.tsx'
 import { cachePercent, compactTokens, failureText } from './format.ts'
 import { useHoverCapable } from './hover.ts'
+import { IsolationRow } from './IsolationRow.tsx'
 import { LoomPanel, useAnchoredPanel } from './panel.tsx'
+import { loomEstimateKey } from './reads.ts'
 import { RouteRow } from './RouteRow.tsx'
 import type { LoomTailProps } from './tail.ts'
+import type { LoomIsolation, LoomIsolationUnavailableReason } from '@deepseek-ai/dsh-experimental-loom/types'
 import panelCss from './panel.module.css'
 import css from './TailActions.module.css'
 
@@ -26,12 +32,59 @@ import css from './TailActions.module.css'
 const COUNTS = [1, 2, 4] as const
 
 /**
+ * Render the panel's Cost row, or the turn's own usage when no estimate can be read. A separate component, so the
+ * estimate is read only while the panel is open and only when the turn or the variant count changes.
+ * @param props - the Session, turn, count, own usage, route override, hook, and copy.
+ * @returns the `dt`/`dd` pair.
+ */
+function RegenerateCost({ sessionId, turn, count, usage, selection, useLoomEstimate, t }: {
+  sessionId: LoomTailProps['sessionId']
+  turn: number
+  count: number
+  usage: ReturnType<typeof ownUsage>
+  selection: ModelSelection | null
+  useLoomEstimate: LoomTailProps['useLoomEstimate']
+  t: LoomTailProps['t']
+}) {
+  const state = useLoomEstimate(loomEstimateKey({ sessionId, kind: 'regenerate', turn, count,
+    ...selection === null ? {} : { selection } }))
+  if (state?.status !== 'failed') return <CostRow state={state} count={count} t={t} />
+  if (usage === undefined) return null
+  return (
+    <>
+      <dt>{t('usage.title')}</dt>
+      <dd>
+        {usage.percent === undefined
+          ? t('usage.tokens', { tokens: compactTokens(usage.total, t) })
+          : t('usage.tokensCached', { tokens: compactTokens(usage.total, t), percent: usage.percent })}
+        <span className={panelCss.second}>{t('usage.note')}</span>
+      </dd>
+    </>
+  )
+}
+
+/**
+ * Read the turn's own usage for the fallback row.
+ * @param usage - the Turn tail's token usage.
+ * @returns the total tokens and the cache-hit percent, or undefined without usage.
+ */
+function ownUsage(usage: { totalTokens: number; outputTokens: number; cacheReadTokens?: number } | undefined) {
+  if (usage === undefined) return undefined
+  return {
+    total: usage.totalTokens,
+    percent: usage.cacheReadTokens === undefined ? undefined : cachePercent(usage.cacheReadTokens, usage.totalTokens - usage.outputTokens),
+  }
+}
+
+/**
  * Render the split button and its panel.
  * @param props - the Turn, Chat, projections, branching verbs, routes, and copy.
  * @returns the split button, or null for a Turn that cannot be regenerated.
  */
 export function RegenerateSplit(props: LoomTailProps) {
-  const { sessionId, turn, turnEndSeq, useAccess, useChat, useProjection, useLoomRoutes, startBranches, loadRoutes, t } = props
+  const {
+    sessionId, turn, turnEndSeq, useAccess, useChat, useProjection, useLoomRoutes, useLoomEstimate, startBranches, loadRoutes, t,
+  } = props
   const allowed = useAccess('loom/branch')
   const opening = useChat(snapshot => snapshot.nodes.turnDataSource(turn.turn, 'user').getSnapshot()[0])
   const usage = useChat(snapshot => snapshot.nodes.turnDataSource(turn.turn, 'turn-tail').getSnapshot().at(-1)?.tokenUsage)
@@ -42,6 +95,8 @@ export function RegenerateSplit(props: LoomTailProps) {
   const panel = useAnchoredPanel('top')
   const [count, setCount] = useState<number>(1)
   const [selection, setSelection] = useState<ModelSelection | null>(null)
+  const [isolation, setIsolation] = useState<LoomIsolation>('shared')
+  const [refused, setRefused] = useState<LoomIsolationUnavailableReason | null>(null)
   const [pending, setPending] = useState(false)
   const [failure, setFailure] = useState<LoomFailure | null>(null)
   if (!allowed || turnEndSeq === undefined || opening === undefined) return null
@@ -49,22 +104,31 @@ export function RegenerateSplit(props: LoomTailProps) {
   const prompt = opening.content.flatMap(block => block.type === 'text' ? [block.text] : []).join(' ')
   // The children inherit the route the turn's first request used; only the latest turn can fall back to the Session's last route.
   const route = usage?.routes?.[0] ?? (latest ? lastUsed : undefined)
-  // A start from the panel returns focus to the caret; one from the main part leaves focus where it is.
+  // A start from the panel returns focus to the caret; one from the main part leaves focus where it is
+  // and takes the Host's default folder choice.
   const regenerate = (times: number, fromPanel: boolean): void => {
     setPending(true)
     setFailure(null)
     void startBranches({
-      kind: 'regenerate', sessionId, turn: turn.turn, count: times, ...selection === null ? {} : { selection },
+      kind: 'regenerate',
+      sessionId,
+      turn: turn.turn,
+      count: times,
+      ...fromPanel ? { isolation } : {},
+      ...selection === null ? {} : { selection },
     }, { ownerSessionId: sessionId }).then((outcome) => {
       setPending(false)
-      if (!outcome.ok) setFailure(outcome.failure)
-      else if (fromPanel) panel.close()
+      if (!outcome.ok) {
+        setFailure(outcome.failure)
+        // A refused isolation is a fact of this Session's folder, so the panel falls back to the shared folder.
+        if (outcome.failure.isolationReason !== undefined) {
+          setRefused(outcome.failure.isolationReason)
+          setIsolation('shared')
+        }
+      } else if (fromPanel) panel.close()
       else panel.setOpen(false)
     })
   }
-  const percent = usage?.cacheReadTokens === undefined
-    ? undefined
-    : cachePercent(usage.cacheReadTokens, usage.totalTokens - usage.outputTokens)
   return (
     <>
       <span ref={panel.anchorRef} className={css.split} data-loom-regenerate="">
@@ -90,6 +154,8 @@ export function RegenerateSplit(props: LoomTailProps) {
             aria-expanded={panel.open}
             onClick={() => {
               setFailure(null)
+              // Each opening tries worktrees again, because the folder may have changed since a refusal.
+              if (!panel.open) setRefused(null)
               panel.setOpen(!panel.open)
             }}
           >
@@ -124,19 +190,16 @@ export function RegenerateSplit(props: LoomTailProps) {
             onSelect={setSelection}
             t={t}
           />
-          <dt>{t('workspace.title')}</dt>
-          <dd>{t('workspace.shared')}</dd>
-          {usage !== undefined && (
-            <>
-              <dt>{t('usage.title')}</dt>
-              <dd>
-                {percent === undefined
-                  ? t('usage.tokens', { tokens: compactTokens(usage.totalTokens, t) })
-                  : t('usage.tokensCached', { tokens: compactTokens(usage.totalTokens, t), percent })}
-                <span className={panelCss.second}>{t('usage.note')}</span>
-              </dd>
-            </>
-          )}
+          <IsolationRow value={isolation} unavailable={refused} disabled={pending} onChange={setIsolation} t={t} />
+          <RegenerateCost
+            sessionId={sessionId}
+            turn={turn.turn}
+            count={count}
+            usage={ownUsage(usage)}
+            selection={selection}
+            useLoomEstimate={useLoomEstimate}
+            t={t}
+          />
         </dl>
         {failure !== null && <p className={panelCss.error} role="alert">{failureText(failure, t)}</p>}
         <div className={panelCss.footer}>

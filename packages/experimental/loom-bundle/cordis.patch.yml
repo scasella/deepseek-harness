@@ -1,5 +1,37 @@
+- id: permission
+  config:
+    presets:
+      read-only:
+        sandbox: read-only
+        approval: ask
+      workspace-write:
+        sandbox: workspace-write
+        approval: ask
+      danger-full-access:
+        sandbox: danger-full-access
+        approval: never
+      loom-child:
+        sandbox: read-only
+        approval: never
+- id: session-query-sqlite
+  config:
+    path: ':memory:'
+    openAt: first-search
 - insert:
-    - id: loom
-      name: '@deepseek-ai/dsh-experimental-loom'
+    - id: loom-runtime
+      name: cordis:group
+      group: true
+      isolate:
+        worktrees: true
+      config:
+        - id: loom
+          name: '@deepseek-ai/dsh-experimental-loom'
+        - id: loom-worktree
+          name: '@deepseek-ai/dsh-experimental-worktree'
+        - id: tool-loom
+          name: '@deepseek-ai/dsh-experimental-tool-loom'
+          config:
+            autoloom:
+              childPermissionPreset: loom-child
     - id: ui-loom
       name: '@deepseek-ai/dsh-experimental-client-ui-loom'

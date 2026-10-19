@@ -1,0 +1,377 @@
+/* The Compare table: a CSS grid of ARIA table roles, so its semantics do not depend on `display`.
+   Wide, one row per branch with a column per metric; in a narrow tab, each row stacks into a card.
+   The Loom tab's root is the size container. */
+.compare {
+  box-sizing: border-box;
+  padding: 0 12px 12px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 16px;
+  min-height: 40px;
+}
+
+.pointText {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pointButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pointButton:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+}
+
+/* The menu lists whole branch-point names, so it grows to its widest row instead of the anchor's width. */
+.pointMenu {
+  width: max-content;
+  min-width: 280px;
+  max-width: min(520px, calc(100vw - 24px));
+}
+
+.runNote {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.status {
+  margin: 12px 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.table {
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  overflow: hidden;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 28px minmax(200px, 1fr) 124px 124px 56px 92px 60px 72px;
+  align-items: center;
+  gap: 0 12px;
+  padding: 8px 12px;
+  box-shadow: inset 0 0.5px 0 var(--dsw-alias-border-l2);
+}
+
+.head {
+  box-shadow: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.picked {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.pick {
+  display: flex;
+  justify-content: center;
+}
+
+.radio {
+  box-sizing: border-box;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: 50%;
+  corner-shape: round;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.radio:checked {
+  border: 5px solid var(--dsw-alias-label-primary);
+}
+
+.radio:focus-visible,
+.mark:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.branch {
+  min-width: 0;
+}
+
+.branchLabel {
+  display: block;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.title,
+.prompt {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+
+.prompt {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.tags:empty {
+  display: none;
+}
+
+.tests,
+.diff,
+.steps,
+.cost,
+.wall,
+.marks {
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.steps,
+.cost,
+.wall {
+  text-align: right;
+}
+
+.row:not(.head) .tests {
+  color: var(--dsw-alias-label-primary);
+}
+
+.testResult {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.same {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.muted {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.lines {
+  display: flex;
+  gap: 6px;
+}
+
+.files {
+  display: block;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.added {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.removed {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.cellLabel {
+  display: none;
+}
+
+.cellValue {
+  display: block;
+}
+
+.marks {
+  display: flex;
+  gap: 2px;
+  justify-content: flex-end;
+}
+
+.mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.markOn {
+  color: var(--dsw-alias-label-primary);
+}
+
+/* The mark's name shows only where the table stacks into cards: a phone has no tooltip to name the glyph. */
+.markLabel {
+  display: none;
+}
+
+@media (hover: hover) {
+  .mark:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+.detailRow {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.detailCell {
+  padding: 0 12px 12px 52px;
+}
+
+.note {
+  margin: 8px 4px 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A narrow tab stacks each row into a card: branch, tests, diff, then the three numbers, then the marks. */
+@container (max-width: 720px) {
+  .head {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .row {
+    grid-template-columns: 28px repeat(3, minmax(0, 1fr));
+    grid-template-areas:
+      'pick branch branch branch'
+      '. tests tests tests'
+      '. diff diff diff'
+      '. steps cost wall'
+      '. marks marks marks';
+    gap: 4px 12px;
+  }
+
+  .pick { grid-area: pick; }
+  .branch { grid-area: branch; }
+  .tests { grid-area: tests; }
+  .diff { grid-area: diff; }
+  .steps { grid-area: steps; }
+  .cost { grid-area: cost; }
+  .wall { grid-area: wall; }
+  .marks { grid-area: marks; justify-content: flex-start; }
+
+  .mark {
+    width: auto;
+    padding: 0 10px;
+    gap: 6px;
+  }
+
+  .markLabel {
+    display: inline;
+    font-size: 12px;
+  }
+
+  .steps,
+  .cost,
+  .wall {
+    text-align: left;
+  }
+
+  .cellLabel {
+    display: block;
+    color: var(--dsw-alias-label-tertiary);
+    font-size: 12px;
+  }
+
+  .tests > .cellLabel,
+  .diff > .cellLabel {
+    display: inline;
+    margin-right: 6px;
+  }
+
+  .tests > .cellValue,
+  .diff > .cellValue {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0 8px;
+  }
+
+  .detailCell {
+    padding: 0 12px 12px;
+  }
+}
+
+/* A phone keeps every control a 44px target. */
+@media (max-width: 480px) {
+  .row {
+    min-height: 44px;
+  }
+
+  .pick {
+    min-height: 44px;
+  }
+
+  .radio {
+    width: 24px;
+    height: 24px;
+  }
+
+  .mark {
+    min-width: 44px;
+    height: 44px;
+  }
+
+  .pointButton {
+    min-height: 44px;
+  }
+}

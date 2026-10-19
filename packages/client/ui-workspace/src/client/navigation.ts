@@ -311,7 +311,6 @@ class UiWorkspaceService extends Service implements UiWorkspace {
   ): Promise<SessionId> {
     return this.sessions.fork({
       sessionId,
-      increaseTitle: true,
       ...onCreated === undefined ? {} : { onCreated },
       ...options?.allowMigration === undefined ? {} : { allowMigration: options.allowMigration },
     })

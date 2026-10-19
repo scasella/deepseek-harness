@@ -10,9 +10,12 @@ import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { resolveSlotLabel, type StoredEntry } from '@deepseek-ai/dsh-client-ui-slots'
 import type { LoomRequestView } from '@deepseek-ai/dsh-experimental-loom/types'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import type { LoomSetId } from '@deepseek-ai/dsh-experimental-loom/types'
+import type { LoomNodeId, LoomSetId } from '@deepseek-ai/dsh-experimental-loom/types'
 import { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type { TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
+import { MultiversePage, MultiverseIcon } from '../src/client/MultiversePage.tsx'
+import { CounterfactualAction } from '../src/client/CounterfactualAction.tsx'
+import { AutoloomCard } from '../src/client/AutoloomCard.tsx'
 import { ForkBand } from '../src/client/ForkBand.tsx'
 import type { LoomLinkInjected } from '../src/client/links.ts'
 import { LoomView, type LoomViewInjected } from '../src/client/LoomView.tsx'
@@ -22,6 +25,7 @@ import { EditBranch } from '../src/client/EditBranch.tsx'
 import type { LoomBranchingInjected } from '../src/client/links.ts'
 import { MarkGroup } from '../src/client/MarkGroup.tsx'
 import { inject, mountLoom, registerLoom, type LoomRemoteCalls } from '../src/client/mount.ts'
+import { loomCompareKey, loomDiffKey, loomEstimateKey } from '../src/client/reads.ts'
 import { RegenerateSplit } from '../src/client/RegenerateSplit.tsx'
 import { RunningStrip } from '../src/client/RunningStrip.tsx'
 import { VariantPager } from '../src/client/VariantPager.tsx'
@@ -34,6 +38,7 @@ const CHILD = SessionId('child')
 const SLOTS = [
   'conversation.chat.fork-cut', 'conversation.session.header.actions', 'conversation.view',
   'conversation.chat.assistant-actions.after', 'conversation.chat.user-actions', 'conversation.input.dock',
+  'main', 'sidebar.panellist', 'tool.call.actions', 'tool.call.toolview',
 ] as const
 
 const VIEW: LoomRequestView = {
@@ -63,6 +68,18 @@ async function fixture(options: { shortcuts?: boolean; sessionRemote?: boolean }
   const cancel = vi.fn(async () => ({ ok: true as const, value: { cancelled: [] } }))
   const setStatus = vi.fn(async () => ({ ok: true as const, value: { setId: SET, sourceSessionId: ROOT, children: [] } }))
   const mark = vi.fn(async () => ({ ok: true as const, value: { mark: 'keep' as const } }))
+  const compare = vi.fn(async () => ({ ok: true as const, value: { parent: ROOT, cutSeq: SessionSeq(1), rows: [] } }))
+  const diff = vi.fn(async () => ({ ok: true as const, value: { unified: '', truncated: false } }))
+  const estimate = vi.fn(async () => ({ ok: true as const, value: { priced: false, cacheShare: 0, basis: 'family' as const } }))
+  const adopt = vi.fn(async () => ({ ok: true as const, value: { adopted: CHILD, archived: [] } }))
+  const apply = vi.fn(async () => ({ ok: true as const, value: { applied: [] } }))
+  const discard = vi.fn(async () => ({ ok: true as const, value: { worktreePath: '/w', branchName: 'loom/a' } }))
+  const weave = vi.fn(async () => ({ ok: true as const, value: { requestSeq: SessionSeq(1), schedule: 'burst' as const, nodes: [] } }))
+  const weaveState = vi.fn(async () => ({ ok: true as const, value: { nodes: [], choices: [], curationBits: 0, modelTokens: 0 } }))
+  const choose = vi.fn(async () => ({ ok: true as const, value: { curationBits: 0, modelTokens: 0 } }))
+  const probe = vi.fn(async () => ({ ok: true as const, value: { nodes: [], requests: 0, truncated: false } }))
+  const exportLoom = vi.fn(async () => ({ ok: true as const, value: { url: '/export', filename: 'path.json', mimeType: 'application/json' } }))
+  const counterfactual = vi.fn(async () => ({ ok: true as const, value: { sessionId: CHILD, replacementSeq: SessionSeq(5) } }))
   const modelCatalog = vi.fn(async () => ({
     ok: true as const,
     value: { default: { provider: 'p', model: 'm' }, routableProviders: ['p'], groups: [{ id: 'p', name: 'P', models: [{ id: 'm', name: 'M' }] }], failures: [] },
@@ -72,7 +89,7 @@ async function fixture(options: { shortcuts?: boolean; sessionRemote?: boolean }
     // Like the Gateway, the mounted namespace lives on a fiber outside the caller's ancestry.
     async $mount(value: TypertRemoteContribution) {
       mounted.push(value)
-      const namespace = ctx.plugin({ apply: (inner) => { inner.provide('remote.loom', { requestAt, branch, cancel, setStatus, mark }) } })
+      const namespace = ctx.plugin({ apply: (inner) => { inner.provide('remote.loom', { requestAt, branch, cancel, setStatus, mark, compare, diff, estimate, adopt, apply, discard, weave, weaveState, choose, probe, export: exportLoom, counterfactual }) } })
       await namespace
       return async () => {
         await namespace.dispose()
@@ -92,7 +109,8 @@ async function fixture(options: { shortcuts?: boolean; sessionRemote?: boolean }
   const reference: SessionReference = { sessionId: CHILD, binding, ready: Promise.resolve(binding), release, [Symbol.dispose]: release }
   const retain = vi.fn(() => reference)
   const refreshProjections = vi.fn(() => Promise.reject(new Error('read failed')))
-  ctx.provide('sessions', { list, retain, refreshProjections, binding: (id: SessionId) => id === CHILD ? binding : undefined } as never)
+  const search = vi.fn(async () => ({ ok: true as const, value: { items: [], hasMore: false } }))
+  ctx.provide('sessions', { list, retain, refreshProjections, search, binding: (id: SessionId) => id === CHILD ? binding : undefined } as never)
   const chat = createSnapshotStore<ChatSnapshot | undefined>(undefined)
   const conversationBinding = vi.fn(() => ({ target: () => chat }))
   ctx.provide('uiConversation', { binding: conversationBinding } as never)
@@ -110,20 +128,26 @@ async function fixture(options: { shortcuts?: boolean; sessionRemote?: boolean }
   await ctx.plugin(SlotRegistry).await()
   const declare = (): (() => void) => ctx.slots.register({
     name: 'root',
-    children: Object.fromEntries(SLOTS.map(name => [name, { kind: 'list', scope: 'session' }])),
+    children: Object.fromEntries(SLOTS.map(name => [name, { kind: name === 'main' || name === 'tool.call.toolview' ? 'keyed' : 'list', scope: name === 'main' || name === 'sidebar.panellist' ? 'root' : 'session' }])),
   } as never, () => null)
   const collapse = declare()
   const entry = (name: typeof SLOTS[number], component: unknown): StoredEntry | undefined =>
     ctx.slots.entries(name).find(candidate => candidate.component === component)
   return {
-    ctx, unmount, mounted, list, requestAt, branch, cancel, setStatus, mark, modelCatalog, retain, release, loadOlder,
+    ctx, unmount, mounted, list, requestAt, branch, cancel, setStatus, mark, compare, diff, estimate, adopt, apply, discard,
+    weave, weaveState, choose, probe, exportLoom, counterfactual, search,
+    modelCatalog, retain, release, loadOlder,
     refreshProjections, conversationBinding, openSession, fixed, unregister, declare, collapse, entry, chat, SET,
   }
 }
 
 /** The fixture's Remote calls as `registerLoom` takes them. */
 function calls(b: Awaited<ReturnType<typeof fixture>>): LoomRemoteCalls {
-  return { requestAt: b.requestAt, branch: b.branch, cancel: b.cancel, setStatus: b.setStatus, mark: b.mark }
+  return {
+    requestAt: b.requestAt, branch: b.branch, cancel: b.cancel, setStatus: b.setStatus, mark: b.mark,
+    compare: b.compare, diff: b.diff, estimate: b.estimate, adopt: b.adopt, apply: b.apply, discard: b.discard,
+    weave: b.weave, weaveState: b.weaveState, choose: b.choose, probe: b.probe, export: b.exportLoom, counterfactual: b.counterfactual,
+  }
 }
 
 /** Narrow an entry's injected face to the branching verbs it must carry. */
@@ -164,6 +188,10 @@ describe('Loom browser plugin', () => {
       expect(b.entry('conversation.session.header.actions', VariantChip)).toMatchObject({ options: { id: 'loom-variant', order: -30 }, locale: 'loom' })
       const view = b.entry('conversation.view', LoomView)
       expect(view).toMatchObject({ options: { id: 'loom', order: 20 }, locale: 'loom' })
+      expect(b.entry('main', MultiversePage)).toBeDefined()
+      expect(b.entry('sidebar.panellist', MultiverseIcon)).toBeDefined()
+      expect(b.entry('tool.call.actions', CounterfactualAction)).toBeDefined()
+      expect(b.ctx.slots.entries('tool.call.toolview').filter(entry => entry.component === AutoloomCard)).toHaveLength(5)
       expect(view?.store).toBeDefined()
       expect(resolveSlotLabel(view?.options.label)).toBe('Loom')
       expect(b.fixed.map(command => [command.id, command.group, command.keys, command.label()])).toEqual([
@@ -277,6 +305,78 @@ describe('Loom browser plugin', () => {
       })
       await fiber.dispose()
       expect(face.hooks.loomRoutes.getSnapshot()).toEqual({ status: 'unavailable' })
+    } finally { await b.ctx.fiber.dispose() }
+  })
+
+  it('wires the compare, diff, and estimate reads and the workspace verbs to the loom Remote, and releases them with the plugin', async () => {
+    const b = await fixture()
+    try {
+      const fiber = b.ctx.plugin({ inject: [...inject], apply: ctx => mountLoom(ctx, CONTRIBUTION) })
+      await fiber
+      const face = injectedOf(b.entry('conversation.input.dock', BranchForm), isBranching)
+      const view = injectedOf(b.entry('conversation.view', LoomView), isView)
+      // The tail and dock entries read estimates; the view carries the same source beside its own.
+      const request = { sessionId: ROOT, kind: 'regenerate' as const, turn: 1, count: 2 }
+      face.keyedHooks.loomEstimate(loomEstimateKey(request)).subscribe(() => {})
+      expect(b.estimate).toHaveBeenCalledWith(request)
+      expect(view.keyedHooks.loomEstimate(loomEstimateKey(request))).toBe(face.keyedHooks.loomEstimate(loomEstimateKey(request)))
+      view.keyedHooks.loomCompare(loomCompareKey(ROOT)).subscribe(() => {})
+      expect(b.compare).toHaveBeenCalledWith({ sessionId: ROOT })
+      view.keyedHooks.loomDiff(loomDiffKey(CHILD, 'a.py', '1:0:1')).subscribe(() => {})
+      expect(b.diff).toHaveBeenCalledWith({ sessionId: CHILD, path: 'a.py' })
+      for (let tick = 0; tick < 5; tick += 1) await Promise.resolve()
+      view.refreshCompare(ROOT)
+      expect(b.compare).toHaveBeenCalledTimes(2)
+      await expect(view.adoptBranch(CHILD)).resolves.toEqual({ ok: true, value: { adopted: CHILD, archived: [] } })
+      expect(b.adopt).toHaveBeenCalledWith({ sessionId: CHILD })
+      expect(b.refreshProjections).toHaveBeenCalledWith(CHILD)
+      await expect(view.applyBranch(CHILD)).resolves.toMatchObject({ ok: true })
+      expect(b.apply).toHaveBeenCalledWith({ sessionId: CHILD })
+      await expect(view.discardBranch(CHILD)).resolves.toMatchObject({ ok: true })
+      expect(b.discard).toHaveBeenCalledWith({ sessionId: CHILD })
+      await fiber.dispose()
+      // Disposal closes the reads and stops the follow-up projection read.
+      for (let tick = 0; tick < 5; tick += 1) await Promise.resolve()
+      view.refreshCompare(ROOT)
+      expect(b.compare).toHaveBeenCalledTimes(2)
+      b.refreshProjections.mockClear()
+      await view.adoptBranch(CHILD)
+      expect(b.refreshProjections).not.toHaveBeenCalled()
+    } finally { await b.ctx.fiber.dispose() }
+  })
+
+  it('connects prose, result editing, tool cards, and scoped catalog search to their mounted operations', async () => {
+    const b = await fixture()
+    try {
+      const fiber = b.ctx.plugin({ inject: [...inject], apply: ctx => mountLoom(ctx, CONTRIBUTION) })
+      await fiber
+      const view = injectedOf(b.entry('conversation.view', LoomView), isView)
+      const stop = view.keyedHooks.loomWeave(ROOT).subscribe(() => {})
+      for (let tick = 0; tick < 5; tick += 1) await Promise.resolve()
+      view.refreshWeave(ROOT)
+      await view.weave({ sessionId: ROOT, parent: null, prefix: [], n: 1 })
+      await view.choose({ sessionId: ROOT, nodeId: brandString<LoomNodeId>('node') })
+      await view.probe({ sessionId: ROOT, parent: null, prefix: [] })
+      await view.exportLoom({ sessionId: ROOT, mode: 'path' })
+      const result = b.entry('tool.call.actions', CounterfactualAction)!.inject!() as { counterfactual: LoomRemoteCalls['counterfactual'] }
+      await result.counterfactual({ sessionId: ROOT, resultSeq: SessionSeq(4), content: [] })
+      for (const entry of b.ctx.slots.entries('tool.call.toolview')) expect(entry.inject!()).toHaveProperty('openSession')
+      const catalog = b.entry('main', MultiversePage)!.inject!() as { keyedHooks: { loomFamilySearch: (key: string) => { subscribe: (listener: () => void) => () => void } }; retrySearch: (key: string) => void }
+      const key = JSON.stringify({ query: 'q', scope: 'own', sessionIds: [ROOT] })
+      const stopSearch = catalog.keyedHooks.loomFamilySearch(key).subscribe(() => {})
+      for (let tick = 0; tick < 5; tick += 1) await Promise.resolve()
+      catalog.retrySearch(key)
+      expect(b.search).toHaveBeenCalledWith('q', expect.any(AbortSignal), 'own', [ROOT])
+      expect(b.ctx.slots.entries('sidebar.panellist')[0]!.options.label).toBeTypeOf('function')
+      resolveSlotLabel(b.ctx.slots.entries('sidebar.panellist')[0]!.options.label)
+      expect(b.weave).toHaveBeenCalledOnce()
+      expect(b.choose).toHaveBeenCalledOnce()
+      expect(b.probe).toHaveBeenCalledOnce()
+      expect(b.exportLoom).toHaveBeenCalledOnce()
+      expect(b.counterfactual).toHaveBeenCalledOnce()
+      stop(); stopSearch(); await fiber.dispose()
+      expect(b.entry('main', MultiversePage)).toBeUndefined()
+      expect(b.entry('tool.call.actions', CounterfactualAction)).toBeUndefined()
     } finally { await b.ctx.fiber.dispose() }
   })
 

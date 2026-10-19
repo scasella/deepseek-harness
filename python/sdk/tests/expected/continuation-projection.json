@@ -1,0 +1,15 @@
+{
+  "finalResponse": "CONTINUED",
+  "turnStart": {
+    "type": "turn/start",
+    "seq": 1,
+    "time": 0,
+    "data": {
+      "turn": 0,
+      "continuation": {
+        "kind": "user",
+        "rpcId": "continuation-1"
+      }
+    }
+  }
+}

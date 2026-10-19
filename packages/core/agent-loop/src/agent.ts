@@ -15,8 +15,8 @@ import type {
   PreStepDecision,
   RequestErrorAction,
 } from '@deepseek-ai/dsh-agent'
-import { agentEvents, assembleContextFor } from '@deepseek-ai/dsh-agent'
-import type { GenerateOptions, LlmCallConfig, Message, PreparedLlmCall } from '@deepseek-ai/dsh-llm'
+import { AgentContinuationError, agentEvents, assembleContextFor } from '@deepseek-ai/dsh-agent'
+import type { GenerateOptions, LlmCallConfig, Message, MessageSource, PreparedLlmCall } from '@deepseek-ai/dsh-llm'
 import {
   LlmError,
   createAssistantMessage,
@@ -47,7 +47,7 @@ type Phase =
     lastTurn: number
     wakeRequested: boolean
   }
-  | { kind: 'running'; abort: AbortController; turn: number; step: number; wakeRequested: boolean }
+  | { kind: 'running'; abort: AbortController; turn: number; step: number; wakeRequested: boolean; continuation?: MessageSource }
 
 type StepEndReason = Extract<TurnEndReason, { kind: 'completed' | 'max-tokens' }>
 
@@ -164,6 +164,24 @@ export class ReactLoopAgent implements Agent {
     this.send(input, 'next-turn', true)
   }
 
+  continue(source: MessageSource = { kind: 'user' }): void {
+    if (this.phase.kind !== 'idle') throw new AgentContinuationError('busy')
+    if (this.inbox.hasPending) throw new AgentContinuationError('pending-input')
+    const messages = this.session.deriveMessages()
+    const pendingTools = new Set<string>()
+    for (const message of messages) {
+      if (message.role === 'assistant') {
+        for (const block of message.content) if (block.type === 'tool-call') pendingTools.add(block.id)
+      } else if (message.role === 'tool') pendingTools.delete(message.source.callId)
+    }
+    if (pendingTools.size > 0) throw new AgentContinuationError('pending-tools')
+    const tail = messages.findLast(message => message.role === 'user'
+      || message.role === 'tool' || message.role === 'assistant')
+    if (tail === undefined) throw new AgentContinuationError('empty-history')
+    if (tail.role === 'assistant') throw new AgentContinuationError('assistant-tail')
+    this.wakeDriver(false, source)
+  }
+
   steer(input: UserMessage): void {
     this.send(input, 'next-step', true)
   }
@@ -210,8 +228,9 @@ export class ReactLoopAgent implements Agent {
    * the queue no longer holds the wake.
    * @param wakeAfterAbort - the {@link send} classification, captured before
    *   the inbox insertion so a reentrant cancel cannot reclassify it.
+   * @param continuation - initiator when opening a turn over existing history.
    */
-  private wakeDriver(wakeAfterAbort = false): void {
+  private wakeDriver(wakeAfterAbort = false, continuation?: MessageSource): void {
     if (this.phase.kind !== 'idle') {
       // Maintenance and aborted drivers cannot deliver the wake: latch it for
       // replay at convergence. Live drivers claim queued work themselves;
@@ -230,6 +249,7 @@ export class ReactLoopAgent implements Agent {
       turn: this.phase.lastTurn,
       step: 0,
       wakeRequested: false,
+      ...continuation === undefined ? {} : { continuation },
     })
     this.loopCtx.agents.withInitiator(this, () => this.kick()).then(driver.resolve, driver.reject)
   }
@@ -264,7 +284,11 @@ export class ReactLoopAgent implements Agent {
     }
   }
 
-  private async preStep(target: InboxTarget, position: { turn: number; step: number }): Promise<PreparedStep> {
+  private async preStep(
+    target: InboxTarget,
+    position: { turn: number; step: number },
+    continuation?: MessageSource,
+  ): Promise<PreparedStep> {
     /* v8 ignore next -- private callers establish the running phase before proposing a step */
     if (this.phase.kind !== 'running') throw new Error(`agent "${this.id}": pre-step outside running phase`)
     const signal = this.phase.abort.signal
@@ -272,7 +296,7 @@ export class ReactLoopAgent implements Agent {
     const assembly = await this.loopCtx.systemPrompt.assemble(assembleContextFor(this, signal))
     signal.throwIfAborted()
     const decision = await this.dispatch.waterfall(
-      'agent/pre-step', { messages: claimed, ...position, signal },
+      'agent/pre-step', { messages: claimed, ...position, signal, ...continuation === undefined ? {} : { continuation } },
       (): Promise<PreStepDecision> => {
         const sections = renderContextSections(assembly)
         const context = this.runtimeContext.project(joinContextSections(sections), sections)
@@ -301,10 +325,15 @@ export class ReactLoopAgent implements Agent {
     }
     const phase = this.phase
     const { signal } = phase.abort
-    signal.throwIfAborted()
+    // A continuation has no inbox receipt: its accepted intent must survive
+    // cancellation from the running-status notification.
+    if (phase.continuation === undefined) signal.throwIfAborted()
     const turn = phase.turn + 1
     try {
-      this.session.append('turn/start', { turn })
+      this.session.append('turn/start', {
+        turn,
+        ...phase.continuation === undefined ? {} : { continuation: phase.continuation },
+      })
     } catch (error: unknown) {
       this.throwError(error)
     }
@@ -315,7 +344,8 @@ export class ReactLoopAgent implements Agent {
       while (true) {
         signal.throwIfAborted()
         const step = phase.step + 1
-        const decision = await this.preStep(target, { turn, step })
+        const continuation = step === 1 ? phase.continuation : undefined
+        const decision = await this.preStep(target, { turn, step }, continuation)
         if (decision.kind === 'reject') {
           turnEnds = { kind: 'blocked' }
           return false
@@ -323,7 +353,7 @@ export class ReactLoopAgent implements Agent {
         if (turnEnds && decision.messages.length === 0) break
         // A removed waking message or an enter decision rewritten to empty
         // still owns the initial turn boundary, but it spends no model call.
-        if (phase.step === 0 && decision.messages.length === 0) {
+        if (phase.step === 0 && decision.messages.length === 0 && continuation === undefined) {
           turnEnds = { kind: 'completed' }
           return false
         }
@@ -394,6 +424,7 @@ export class ReactLoopAgent implements Agent {
     // A fresh controller makes a latch set on the old one stale: the live driver claims the queue itself.
     phase.wakeRequested = false
     phase.step = 0
+    delete phase.continuation
     return true
   }
 

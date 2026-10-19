@@ -53,8 +53,11 @@ function parseArguments(raw: string): ToolCall['arguments'] {
   return {}
 }
 
-/** Construct the zero usage value required by historical pi-ai messages. */
-function emptyPiUsage(): PiUsage {
+/**
+ * Construct the zero usage value required by historical pi-ai messages.
+ * @returns zero usage for a synthetic assistant prefix or foreign history message.
+ */
+export function emptyPiUsage(): PiUsage {
   return {
     input: 0,
     output: 0,

@@ -1,0 +1,10 @@
+version: 1
+scenario: loom-autoloom
+profile: web
+composition: web-loom
+recording: authored
+header:
+  class: web-loom
+  pin: true
+replay:
+  override: true

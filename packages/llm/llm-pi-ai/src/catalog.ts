@@ -601,6 +601,13 @@ function assertOfferedCompatFields(
 
 /** One configured model entry: an id plus the catalog fields it overrides. */
 export interface PiAiModelProfile {
+  /** Opt in to provider-returned probabilities on openai-completions routes; maximum 0–20 alternatives. */
+  tokenLogprobs?: {
+    /** Maximum number of alternative tokens to request at each answer position. */
+    readonly maxTopLogprobs: number
+  }
+  /** Opt in to tool-free assistant prefixes; direct DeepSeek beta requires its native prefix marker. */
+  assistantPrefill?: 'trailing-message' | 'deepseek-prefix'
   /** Model id sent to the provider and accepted by {@link GenerateOptions.model}. */
   id: string
   /** Display name for selectors; defaults to the catalog name, then the id. */

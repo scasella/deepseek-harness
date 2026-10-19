@@ -36,6 +36,7 @@ async function agent(ctx: Context): Promise<Agent> {
   const value: Agent = {
     id, options: {}, session, inbox: unsupportedInbox(),
     status: 'idle', ctx: scope.ctx,
+    continue: () => {},
     followup: () => {}, steer: () => {}, inject: () => {}, send: () => {}, cancel() {},
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),

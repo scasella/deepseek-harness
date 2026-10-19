@@ -61,6 +61,7 @@ function stubAgent(rawId: string, supplied?: Session, suppliedCtx?: Context): St
     get status() { return status },
     ctx: agentCtx,
     send: () => {},
+    continue: () => {},
     followup: () => {},
     steer: () => ({ outcome: Promise.resolve({ status: 'rejected' as const }) }),
     inject(input) {

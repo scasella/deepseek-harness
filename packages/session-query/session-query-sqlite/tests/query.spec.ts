@@ -24,6 +24,20 @@ function expectCode(code: SessionQueryErrorCode): Error {
 }
 
 describe('SQLite search request normalization', () => {
+  it('compiles own and inherited filters against the stored seed length', () => {
+    expect(buildEventWhere([{ kind: 'ownership', values: ['own'] }])).toEqual({
+      sql: 'seq >= COALESCE(seed_length, 0)', params: [], predicateCount: 1,
+    })
+    expect(buildEventWhere([{ kind: 'ownership', values: ['inherited'] }])).toEqual({
+      sql: 'seq < COALESCE(seed_length, 0)', params: [], predicateCount: 1,
+    })
+    expect(buildEventWhere([{ kind: 'ownership', values: [] }])).toEqual({
+      sql: '0', params: [], predicateCount: 1,
+    })
+    expect(buildEventWhere([{ kind: 'ownership', values: ['own', 'inherited'] }])).toEqual({
+      sql: '', params: [], predicateCount: 0,
+    })
+  })
   it('normalizes both scopes, defaults arrays and limits, and preserves cursors', () => {
     expect(normalizeSessionRequest({ query: '  alpha\n beta  ' }, limits)).toEqual({
       query: 'alpha beta',

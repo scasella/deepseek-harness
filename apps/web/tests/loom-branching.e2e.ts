@@ -136,7 +136,7 @@ describe.skipIf(MODE === 'record')('web e2e: Loom branching', () => {
     const groupRow = sessions.getByRole('treeitem').first()
     await groupRow.waitFor({ timeout: 15_000 })
     await groupRow.click()
-    await expect.poll(() => sessions.getByRole('treeitem').count(), { timeout: 15_000 }).toBe(count + 1)
+    await expect.poll(() => sessions.getByRole('treeitem').count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(count + 1)
     return sessions.getByRole('treeitem')
   }
 
@@ -155,8 +155,9 @@ describe.skipIf(MODE === 'record')('web e2e: Loom branching', () => {
 
   it('regenerates a fork\'s first own turn into variants beside it while the strip follows the set', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-loom-branching-regenerate'))
-    // Rows sort by recency: branch B, branch A, then the root.
-    await (await sessionRows(page, 3)).nth(2).click()
+    // The sidebar keeps each fork below its source.
+    await sessionRows(page, 3)
+    await page.locator(`[data-row-key="session:${BRANCH_A}"]`).click()
     await page.getByText(ANSWER_A, { exact: false }).last().waitFor({ timeout: 15_000 })
     await pager(1, 2).waitFor({ timeout: 15_000 })
 
@@ -174,6 +175,8 @@ describe.skipIf(MODE === 'record')('web e2e: Loom branching', () => {
     expect(await focusedName(page)).toBe('×2')
     await page.keyboard.press('Tab')
     expect(await focusedName(page)).toBe('Change')
+    await page.keyboard.press('Tab')
+    expect(await focusedName(page)).toContain('Run one at a time in the shared folder')
     await page.keyboard.press('Tab')
     expect(await focusedName(page)).toBe('Regenerate ×2')
     await page.keyboard.press('Enter')

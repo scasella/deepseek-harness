@@ -31,7 +31,11 @@ interface SessionEventMap {
    * step; otherwise the following identified `user/message` event or batch
    * records the messages entering the step.
    */
-  'turn/start': { turn: number }
+  'turn/start': {
+    turn: number
+    /** Initiator of a request over existing history, without a new user message. */
+    continuation?: MessageSource
+  }
   /**
    * Closes turn `turn` with the {@link TurnEndReason} that ended it. A turn
    * with no entered step has no `step/start` or `step/end`. The loop does not await a
@@ -940,6 +944,14 @@ workspaceDesktop(): { name: string; available: boolean; fileManager: 'finder' | 
  * @returns acknowledgement that the Agent accepted the prompt.
  */
 @Remote('prompt') async prompt(request: SessionPromptRequest, signal: AbortSignal): Promise<SessionPromptValue>
+
+/**
+ * Request one turn over existing history without adding a user message.
+ * @param request - Session identity and durable retry identity.
+ * @param signal - caller cancellation before continuation admission.
+ * @returns acknowledgement after the turn opens, or a typed admission failure.
+ */
+@Remote('continue') continue(request: SessionContinueRequest, signal: AbortSignal): Promise<SessionContinueValue>
 
 /**
  * Read one image proven reachable from the addressed Session log.

@@ -8,7 +8,7 @@ import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/c
 import type { LoomFamily, LoomFamilyNode, LoomMark } from '@deepseek-ai/dsh-experimental-loom/types'
 import type { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type { LoomMarkOverride } from './branching.ts'
-import { forkCutOf, markOf, openedTurnAt, ownCounts, ownTokens, projectionValuesOf, sessionTitle } from './lineage.ts'
+import { branchOf, forkCutOf, markOf, openedTurnAt, ownCounts, ownTokens, projectionValuesOf, sessionTitle } from './lineage.ts'
 
 /** Activity of one Session row: running, ended with own turns, or without own turns yet. */
 export type LoomRowStatus = 'running' | 'done' | 'blank'
@@ -55,6 +55,8 @@ export interface LoomSessionRow extends LoomRowBase {
   readonly current: boolean
   /** Private mark the Session shows, or null. */
   readonly mark: LoomMark | null
+  /** Whether the user adopted this branch as the main line. */
+  readonly adopted: boolean
   /** Last turn the Session opened, from its outline; absent before the outline arrives or without turns. */
   readonly lastTurn?: number
 }
@@ -211,6 +213,7 @@ export function buildLoomTree(input: LoomTreeInput): LoomTree {
       status: live ? 'running' : node.blank || counts?.turns === 0 ? 'blank' : 'done',
       current: node.sessionId === currentSessionId,
       mark: markOf(values?.loomMark, marks[node.sessionId]),
+      adopted: branchOf(values)?.adopted === true,
       ...lastTurn === undefined ? {} : { lastTurn },
     })
     if (!expanded) return

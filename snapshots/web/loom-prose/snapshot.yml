@@ -1,0 +1,7 @@
+version: 1
+scenario: loom-prose
+profile: web
+composition: web-loom
+recording: authored
+header:
+  class: web-loom

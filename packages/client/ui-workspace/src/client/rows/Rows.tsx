@@ -11,7 +11,7 @@
  * session and workspace hover cards are suppressed while a menu is open.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { RefObject } from 'react'
+import type { CSSProperties, RefObject } from 'react'
 import clsx from 'clsx'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import {
@@ -46,7 +46,9 @@ type RowRenderSlots = PropsRenderSlots<
 
 /** Row display title: blank rows show the localized New Session label. */
 function displayTitle(node: SessionNode, t: RowTranslate): string {
-  return node.blank ? t('session.new') : (node.title || t('session.untitled'))
+  if (node.blank) return t('session.new')
+  const title = node.title || t('session.untitled')
+  return node.forkId === undefined ? title : t('session.forkTitle', { title, id: node.forkId })
 }
 
 /* Overflow this small hides no meaningful tail; scrolling for it reads as an
@@ -571,7 +573,7 @@ export function SessionNodeItem({
   // Archived rows hold their in-place grayed slot, so manual reorder cannot
   // move them. Pinned rows drag within the pinned block: the browser gates
   // their drop targets to fellow pinned rows.
-  const draggable = drag !== undefined && !row.blank && !row.archived
+  const draggable = drag !== undefined && !row.blank && !row.archived && (row.depth ?? 0) === 0
   const [menuOpen, setMenuOpen] = useState(false)
   // The menu's open state, bound into the row entries' `useMenuOpenState` hook.
   const menuOpenState = useMemo((): MenuOpenState => [menuOpen, setMenuOpen], [menuOpen])
@@ -596,6 +598,8 @@ export function SessionNodeItem({
       role="treeitem"
       aria-selected={selected}
       aria-description={row.archived ? t('toast.archivedNotOpenable') : undefined}
+      aria-level={(node.depth ?? 0) + 1}
+      style={{ '--dsh-session-indent': `${Math.min(node.depth ?? 0, 6) * 12}px` } as CSSProperties}
       onClick={() => { onOpen(node.id) }}
       onPointerEnter={marquee.enter}
       onPointerLeave={marquee.leave}

@@ -39,11 +39,19 @@ export interface TestWorkspace {
   attachSession(sessionId: SessionId): Promise<void>
 }
 
+/** One archive request the Workspace registry stand-in received. */
+export interface TestArchive {
+  readonly sessionId: SessionId
+  readonly stopActivity: boolean
+}
+
 /** The mounted composition. */
 export interface BranchHost {
   readonly agents: AgentLoopTestHarness
   /** Workspaces the Session Controller's fork reads; edits apply to the next fork. */
   readonly workspaces: TestWorkspace[]
+  /** Archive requests in call order; `fail` rejects the next request for that Session. */
+  readonly archives: { readonly calls: TestArchive[]; readonly archived: SessionId[]; fail?: SessionId }
   /** The Loom plugin fiber. */
   readonly loom: ReturnType<Context['plugin']>
 }
@@ -56,22 +64,34 @@ export interface BranchHost {
  * @param config - Loom configuration.
  * @param persistenceRoot - directory of a JSONL Session store to mount before the agent loop, so that Sessions
  *   outlive their Agents; without it, Sessions live in memory only.
- * @returns the agent driver, the Workspace list, and the Loom fiber.
+ * @param filesystem - `local` mounts the local filesystem and the working-directory service, which worktrees
+ *   need; `stub` provides an empty filesystem that only the Session Controller's injection reads.
+ * @returns the agent driver, the Workspace list, the archive requests, and the Loom fiber.
  */
 export async function mountBranchHost(
   ctx: Context,
   defaultModel: ModelSelection,
   config: Config = {},
   persistenceRoot?: string,
+  filesystem: 'stub' | 'local' = 'stub',
 ): Promise<BranchHost> {
-  await mountAgentLoopTestDependencies(ctx)
+  await mountAgentLoopTestDependencies(ctx, { workingDirectory: filesystem === 'local' })
   // The store mounts before the loop so that teardown drains live Agents into still-open handles.
   if (persistenceRoot !== undefined) await ctx.plugin(JsonlSessionPersistence, { root: persistenceRoot, compression: 'none' })
   await ctx.plugin(TypertRegistry)
   await ctx.plugin(PointSessionQuery, {})
   const agents = await mountAgentLoopTestHarness(ctx)
   const workspaces: TestWorkspace[] = []
-  ctx.provide('workspaceRegistry', { list: () => workspaces, archivedSessionIds: [] } as never)
+  const archives: BranchHost['archives'] = { calls: [], archived: [] }
+  ctx.provide('workspaceRegistry', {
+    list: () => workspaces,
+    get archivedSessionIds() { return archives.archived },
+    archiveSession: async (sessionId: SessionId, options: { readonly stopActivity?: boolean } = {}) => {
+      archives.calls.push({ sessionId, stopActivity: options.stopActivity === true })
+      if (archives.fail === sessionId) throw new Error(`archive of ${sessionId} failed`)
+      if (!archives.archived.includes(sessionId)) archives.archived.push(sessionId)
+    },
+  } as never)
   ctx.provide('agentDefaultModel', { currentSelection: () => defaultModel, saveSelection: async () => {} } as never)
   ctx.provide('attachments', {
     imageLimits: IMAGE_LIMITS,
@@ -82,10 +102,10 @@ export async function mountBranchHost(
     resolve: () => undefined,
     bindPrompt: () => ({ commit: () => {}, [Symbol.dispose]: () => {} }),
   } as never)
-  ctx.provide('fs', {} as never)
+  if (filesystem === 'stub') ctx.provide('fs', {} as never)
   await ctx.plugin(RemoteAccessService)
   await ctx.plugin(SessionController, { nativeOpen: false })
   const loom = ctx.plugin(Loom, config)
   await loom
-  return { agents, workspaces, loom }
+  return { agents, workspaces, archives, loom }
 }

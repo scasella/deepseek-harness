@@ -539,13 +539,13 @@ describe('UiWorkspaceService', () => {
     expect(b.sessions.create).not.toHaveBeenCalled()
   })
 
-  it('forks with title increment without selecting or retaining the child, and rejects failure', async () => {
+  it('forks without pinning an inherited title or selecting and retaining the child', async () => {
     const b = bench()
     b.uiWorkspace.openSession(sid('source'))
     b.sessions.retain.mockClear()
     b.selectPanel.mockClear()
     await b.uiWorkspace.forkSession(sid('source'))
-    expect(b.sessions.fork).toHaveBeenCalledWith({ sessionId: sid('source'), increaseTitle: true })
+    expect(b.sessions.fork).toHaveBeenCalledWith({ sessionId: sid('source') })
     expect(b.sessions.retain).not.toHaveBeenCalled()
     b.sessions.fork.mockRejectedValueOnce(new Error('fork failed'))
     await expect(b.uiWorkspace.forkSession(sid('source'))).rejects.toThrow('fork failed')
@@ -566,7 +566,7 @@ describe('UiWorkspaceService', () => {
     await expect(b.uiWorkspace.forkSession(sid('source'), onCreated, options)).resolves.toBe(sid('forked'))
 
     expect(b.sessions.fork).toHaveBeenCalledExactlyOnceWith({
-      sessionId: sid('source'), increaseTitle: true, onCreated,
+      sessionId: sid('source'), onCreated,
       ...allowMigration === undefined ? {} : { allowMigration },
     })
     expect(onCreated).toHaveBeenCalledExactlyOnceWith(sid('forked'))

@@ -72,7 +72,7 @@ const ROWS = [
 ]
 
 const OWN_TURN: LoomReaderTurn = {
-  turn: 2, startSeq: 15, prompt: 'Go with C.', reply: '**Done.** Option C is in.', reasoning: 'Weigh the options.',
+  turn: 2, startSeq: 15, prompt: 'Go with C.', reply: '**Done.** Option C is in.', capturedReply: [{ text: 'Done.', logprobs: { tokens: ['Done.'], logprobs: [-1], top: [[]] } }], reasoning: 'Weigh the options.',
   reasoningTokens: 1234, usage: { inputTokens: 24_432, cachedTokens: 151_808, outputTokens: 4_629 }, closingSeq: 40, closed: true,
 }
 const { startSeq: _ownStart, ...UNSTARTED_OWN } = OWN_TURN
@@ -155,6 +155,9 @@ function bench(options: {
     useLoomFamily: keyed<LoomFamilyState>(key => families.source(key)),
     useLoomReader: readers.hook,
     useLoomRequest: requests.hook,
+    useLoomWeave: () => ({ status: 'loading' }),
+    useProjection: (_name: string, select: (value: undefined) => unknown) => select(undefined),
+    useLoomRoutes: (select: (value: { status: 'unavailable' }) => unknown) => select({ status: 'unavailable' }),
     useStore: bindSnapshotSelector(store),
     useLoomBranching: bindSnapshotSelector(branching),
     actions: store.actions,
@@ -174,6 +177,12 @@ function names(): (string | null)[] {
 }
 
 describe('Loom tab tree', () => {
+  it('switches to prose mode without requiring a fork family', () => {
+    bench()
+    fireEvent.click(screen.getByRole('tab', { name: 'Weave' }))
+    expect(screen.getByRole('status').getAttribute('aria-label')).toBe('Loading prose')
+  })
+
   it('outlines the family with branch points, APG positions, the current Session, and own figures', () => {
     bench()
     expect(screen.getByText('Family · 4 sessions · own token usage')).toBeTruthy()
@@ -427,7 +436,7 @@ describe('Loom reading pane', () => {
     expect(pane.textContent).toContain('Branched from Failing delay test after turn 1 · Variant 2 of 2')
     const turn = within(pane).getByRole('region', { name: 'Turn 2' })
     expect(within(turn).getByText('Go with C.')).toBeTruthy()
-    expect(within(turn).getByText('Done.').tagName).toBe('STRONG')
+    expect(within(turn).getByText('Done.', { selector: 'strong' }).tagName).toBe('STRONG')
     expect(within(turn).queryByRole('region', { name: 'Turn 1' })).toBeNull()
     expect(turn.textContent).toContain('1234 tokens this turn')
     expect(injected.renderFactorySlot).not.toHaveBeenCalled()

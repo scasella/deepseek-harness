@@ -5,9 +5,9 @@
 - group "Variants after turn 1":
   - 'button "Variant 1 of 5: Branch A"': 1 Branch A
   - 'button "Variant 2 of 5: Loom branching"': 2 Loom branching
-  - 'button "Variant 3 of 5: Loom branching"': 3 Loom branching
-  - 'button "Variant 4 of 5: Loom branching"': 4 Loom branching
-  - 'button "Variant 5 of 5: Loom branching"': 5 Loom branching
+  - 'button "Variant 3 of 5: LOOM_BRANCHING Take the other approach"': 3 LOOM_BRANCHING Take the other approach
+  - 'button "Variant 4 of 5: LOOM_BRANCHING Take the other approach"': 4 LOOM_BRANCHING Take the other approach
+  - 'button "Variant 5 of 5: LOOM_BRANCHING Take the shortest approac"': 5 LOOM_BRANCHING Take the shortest approac
 - text: LOOM_BRANCHING Take the other approach from here. {{clock}}
 - button "Copy"
 - button "Edit and branch"

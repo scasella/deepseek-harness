@@ -43,9 +43,8 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
-/* The title row cannot hold the chip at phone width; the fork band carries the variants there. */
-@container (max-width: 480px) {
-  .root {
-    display: none;
-  }
+/* A narrow desktop header keeps the band as its chooser; phones use the compact sheet trigger. */
+@media (min-width: 481px) {
+  @container (max-width: 480px) { .root { display: none; } }
 }
+@media (max-width: 480px) { .chip { min-height: 44px; } }

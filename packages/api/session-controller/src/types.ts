@@ -7,7 +7,7 @@ import type {
 import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { LlmAttemptId, MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { TextBlock } from '@deepseek-ai/dsh-llm'
-import type { SessionId, SessionSeq, SessionSeqCursor } from '@deepseek-ai/dsh-session/types'
+import type { SessionId, SessionLogOffset, SessionSeq, SessionSeqCursor } from '@deepseek-ai/dsh-session/types'
 import type { SessionProjectionMap } from '@deepseek-ai/dsh-session-projection/types'
 import type { Principal } from '@deepseek-ai/dsh-typert-protocol'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
@@ -21,6 +21,8 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
     imageLimits: null
     /** Durable model selection already used by a request and still pending for a later request. */
     modelSelection: ModelSelectionProjectionState
+    /** Accepted continuation retry identities from this Session's own history. */
+    sessionContinuationRequests: SessionContinuationRequests
   }
   interface SessionProjectionMap {
     /** Persisted facts used to summarize a Session without activating it. */
@@ -46,7 +48,7 @@ declare module '@deepseek-ai/dsh-session/types' {
 export interface SessionListMetadata {
   /** Whether the folded prefix contains no turn. */
   readonly blank: boolean
-  /** Latest human-authored prompt time in the folded prefix. */
+  /** Latest human-authored prompt or continuation time in the folded prefix. */
   readonly lastPromptAt: number | null
 }
 
@@ -215,6 +217,10 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'session/projections-unavailable': Record<string, never>
     'session/writer-held': { readonly sessionId: SessionId }
     'session/agent-busy': { readonly reason: string }
+    'session/continue-unavailable': {
+      readonly sessionId: SessionId
+      readonly reason: 'busy' | 'pending-input' | 'pending-tools' | 'empty-history' | 'assistant-tail'
+    }
     'session/invalid-time-zone': { readonly value: string }
     'session/workspace-attach-failed': { readonly sessionId: SessionId; readonly workspaceId: string }
     'agent-preset/conflict': {
@@ -276,6 +282,10 @@ export interface SessionListValue {
 /** Session search request. */
 export interface SessionSearchRequest {
   readonly query: string
+  /** Restrict matches to own or fork-inherited events; omission searches both. */
+  readonly scope?: 'own' | 'inherited'
+  /** Search only these Sessions before ranking and the result cap; omission searches the visible corpus. */
+  readonly sessionIds?: readonly SessionId[]
 }
 
 /** Session search response value. */
@@ -362,6 +372,24 @@ export interface SessionPromptRequest {
 /** Receipt after one prompt enters the target Agent inbox. */
 export interface SessionPromptValue {
   readonly accepted: true
+}
+
+/** Request one model turn over existing history, without adding a prompt. */
+export interface SessionContinueRequest {
+  readonly sessionId: SessionId
+  /** Durable identity used to deduplicate retries in this Session's own history. */
+  readonly requestId: SessionRequestId
+}
+
+/** Receipt after the continuation turn has opened. */
+export interface SessionContinueValue {
+  readonly accepted: true
+}
+
+/** Host-only continuation retry state, reconstructed on resume. */
+export interface SessionContinuationRequests {
+  readonly inheritedEventCount: SessionLogOffset
+  readonly requestIds: readonly SessionRequestId[]
 }
 
 /** Durable image read request. */

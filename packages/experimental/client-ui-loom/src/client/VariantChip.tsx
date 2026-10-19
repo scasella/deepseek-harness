@@ -14,6 +14,8 @@ import { membersWithoutLineage, openedTurnAt, projectionValuesOf, sessionTitle, 
 import type { LoomLinkInjected } from './links.ts'
 import type { NS } from './locales.ts'
 import { useRefreshOnce } from './refresh.ts'
+import { useLoomMobile } from './mobile.ts'
+import { VariantSheet } from './VariantSheet.tsx'
 import css from './VariantChip.module.css'
 
 /** Full props of the header variant chip. */
@@ -38,11 +40,24 @@ export function VariantChip({ sessionId, useSessions, useLoomFamily, openSession
     return parent === undefined || projectionValuesOf(list, parent)?.turnOutline !== undefined ? ids : [...ids, parent]
   }, [family, list, variants])
   const [open, setOpen] = useState(false)
+  const mobile = useLoomMobile()
   useRefreshOnce(pending, refreshProjection)
   if (variants === undefined || variants.members.length < 2) return null
 
   const cutText = cutReading(variants.cutTurn, openedTurnAt(projectionValuesOf(list, variants.parentId), variants.cutSeq), t)
   const count = variants.members.length
+  if (mobile) return (
+    <span className={css.root}>
+      <button type="button" className={css.chip} aria-haspopup="dialog" aria-expanded={open}
+        aria-label={t('chip.aria', { index: variants.index, count, cut: cutText })}
+        onClick={() => { setOpen(value => !value) }}>
+        <IconBranchOutlineRegular size={14} />
+        <span>{t('chip.variant', { index: variants.index, count })}</span>
+      </button>
+      <VariantSheet open={open} close={() => { setOpen(false) }} members={variants.members} current={sessionId}
+        parent={variants.parentId} list={list} cut={cutText} select={openSession} t={t} />
+    </span>
+  )
   return (
     <span className={css.root}>
       <Menu

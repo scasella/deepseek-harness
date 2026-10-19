@@ -678,6 +678,16 @@ describe('list lifecycle', () => {
 })
 
 describe('search', () => {
+  it('forwards ownership and target Sessions for a scoped family search', async ({ mock, remote }) => {
+    const manager = makeManager(mock, remote)
+    onTestFinished(() => manager.dispose())
+    remote.session.search.mockResolvedValue(ok({ items: [], hasMore: false }))
+    const signal = new AbortController().signal
+    await manager.search('family needle', signal, 'own', [S1, S2])
+    expect(remote.session.search).toHaveBeenCalledExactlyOnceWith({
+      query: 'family needle', scope: 'own', sessionIds: [S1, S2],
+    }, signal)
+  })
   it('returns bounded Host results and forwards the caller signal', async ({ mock, remote }) => {
     remote.session.search.mockResolvedValue(ok({
       items: [{ sessionId: S1, snippet: 'matching excerpt' }],

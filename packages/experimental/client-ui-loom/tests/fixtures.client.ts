@@ -5,7 +5,7 @@ import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { forkFamily } from '@deepseek-ai/dsh-experimental-loom/family'
-import type { LoomBranchKind, LoomFamily, LoomMark, LoomSetId } from '@deepseek-ai/dsh-experimental-loom/types'
+import type { LoomBranchKind, LoomCompareRow, LoomFamily, LoomMark, LoomSetId } from '@deepseek-ai/dsh-experimental-loom/types'
 import { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type { TurnOutlineEntry } from '@deepseek-ai/dsh-session-turn-outline/client'
 import type { LoomTranslate } from '../src/client/format.ts'
@@ -109,4 +109,24 @@ export function familyIn(list: SessionListState, focus: string): LoomFamily {
  */
 export function entry(turn: number, seq: number, prompt = ''): TurnOutlineEntry {
   return { turn, seq: SessionSeq(seq), prompt, response: '' }
+}
+
+/**
+ * Build one compare row; fields not named take a plain shared-folder run.
+ * @param id - Session id and title suffix.
+ * @param extra - fields to set.
+ * @returns the row.
+ */
+export function compareRow(id: string, extra: Partial<LoomCompareRow> = {}): LoomCompareRow {
+  return {
+    sessionId: SessionId(id),
+    title: `title ${id}`,
+    prompt: `prompt ${id}`,
+    kind: 'steer',
+    isolation: 'shared',
+    running: false,
+    own: { steps: 3, inputTokens: 100, cachedTokens: 900, outputTokens: 50 },
+    adopted: false,
+    ...extra,
+  }
 }

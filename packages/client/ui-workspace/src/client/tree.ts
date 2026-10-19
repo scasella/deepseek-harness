@@ -43,6 +43,10 @@ function mainSessionId(list: SessionListState): SessionId | undefined {
 /** One top-level session row in a group or the flat list. */
 export interface SessionNode {
   id: SessionId
+  /** Visible fork nesting; absent on callers that supply an unnested root row. */
+  depth?: number
+  /** Stable fork identity displayed beside titles, including before retitling. */
+  forkId?: string
   /** Stored title, or empty; the renderer localizes blank and unnamed row labels. */
   title: string
   /** The provisional blank session (renderer shows the localized New Session title). */
@@ -417,8 +421,62 @@ function sessionNode(
   }
 }
 
+/** Keep each visible fork family adjacent; missing sources and cycles remain visible roots. */
+function familyRows(
+  members: readonly SessionSummary[],
+  list: SessionListState,
+  statuses: SessionStatuses,
+  pinned: ReadonlySet<SessionId>,
+  archived: ReadonlySet<SessionId>,
+): SessionNode[] {
+  const byId = new Map(members.map(member => [member.id, member]))
+  const prefixOf = (member: SessionSummary) => member.id.replace(/^session-/u, '').slice(0, 8)
+  const prefixCounts = new Map<string, number>()
+  for (const member of members) {
+    const prefix = prefixOf(member)
+    prefixCounts.set(prefix, (prefixCounts.get(prefix) ?? 0) + 1)
+  }
+  const lineage = (member: SessionSummary) =>
+    list.projectionsBySession[member.id]?.values.forkLineage ?? member.projectionValues?.forkLineage
+  const parentOf = (member: SessionSummary) => lineage(member)?.parentSession ?? member.parentId
+  const children = new Map<SessionId, SessionSummary[]>()
+  const roots: SessionSummary[] = []
+  for (const member of members) {
+    const parent = parentOf(member)
+    if (parent === undefined || parent === member.id || !byId.has(parent)) roots.push(member)
+    else {
+      const siblings = children.get(parent) ?? []
+      siblings.push(member)
+      children.set(parent, siblings)
+    }
+  }
+  for (const siblings of children.values()) {
+    siblings.sort((a, b) => {
+      const byTime = (lineage(a)?.createdAt ?? 0) - (lineage(b)?.createdAt ?? 0)
+      return byTime || (a.id < b.id ? -1 : 1)
+    })
+  }
+  const seen = new Set<SessionId>()
+  const rows: SessionNode[] = []
+  const visit = (member: SessionSummary, depth: number): void => {
+    if (seen.has(member.id)) return
+    seen.add(member.id)
+    const parent = parentOf(member)
+    const prefix = prefixOf(member)
+    rows.push({
+      ...sessionNode(member, list, statuses, pinned, archived),
+      depth,
+      ...parent === undefined ? {} : { forkId: prefixCounts.get(prefix) === 1 ? prefix : member.id },
+    })
+    for (const child of children.get(member.id) ?? []) visit(child, depth + 1)
+  }
+  for (const root of roots) visit(root, 0)
+  for (const member of members) visit(member, 0)
+  return rows
+}
+
 /**
- * Derive the workspace browser groups with every session as a top-level row.
+ * Derive workspace groups with visible fork descendants nested under their sources.
  *
  * Every group shows, except that the archived-only filter drops groups
  * without visible members; sessions populate under expanded groups with
@@ -460,8 +518,7 @@ export function deriveGroups(
       expanded,
       containsCurrent: g.key === currentGroup,
       sessions: expanded
-        ? sectionMembers(g.sessions, pinned, archived)
-          .map(session => sessionNode(session, list, statuses, pinned, archived))
+        ? familyRows(sectionMembers(g.sessions, pinned, archived), list, statuses, pinned, archived)
         : [],
     })
   }
@@ -521,8 +578,7 @@ export function deriveFlat(
       ? [session]
       : []
   })
-  return sectionMembers(members, pinned, archived)
-    .map(session => sessionNode(session, list, statuses, pinned, archived))
+  return familyRows(sectionMembers(members, pinned, archived), list, statuses, pinned, archived)
 }
 
 /**

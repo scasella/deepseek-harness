@@ -52,7 +52,32 @@ function appendRoute(session: ReturnType<Context['sessions']['create']>, reason:
 }
 
 describe('SessionTitleService Provider lifecycle', () => {
-  it('inherits title events across forks, skips first-prompt retitling, and lets all-messages update later', async () => {
+  it('retitles a fork of a user-named source while an own rename remains pinned', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SessionTitleService, CONFIG)
+    const source = ctx.sessions.create(SessionId('named-source'))
+    ctx.sessionTitle.rename(source, 'Source custom name')
+    const child = ctx.sessions.fork(source, undefined, SessionId('named-child'))
+    const generate = vi.fn(async (request: SessionTitleProviderRequest) => ({
+      title: 'Fork-specific title', messageSeqs: request.messages.map(message => message.seq),
+    }))
+    ctx.sessionTitle.register({ id: SessionTitleProviderId('fork-pin'), automatic: 'first-prompt', generate })
+    appendHumanPrompt(child, 'Own fork prompt')
+    appendRoute(child)
+    await settle()
+    expect(ctx.sessionTitle.get(child)?.title).toBe('Fork-specific title')
+    ctx.sessionTitle.rename(child, 'Own custom name')
+    appendHumanPrompt(child, 'Later own prompt')
+    appendRoute(child, 'change')
+    await settle()
+    expect(generate).toHaveBeenCalledOnce()
+    expect(ctx.sessionTitle.get(child)?.title).toBe('Own custom name')
+    expect(ctx.sessionTitle.get(source)?.title).toBe('Source custom name')
+    await ctx.fiber.dispose()
+  })
+  it('inherits title events until its first own prompt and titles the fork from its own messages', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     await ctx.plugin(SessionProjectionRegistry)
@@ -61,7 +86,7 @@ describe('SessionTitleService Provider lifecycle', () => {
     parent.append('turn/start', {
       turn: 1,
     })
-    const inheritedMessage = appendHumanPrompt(parent, 'Inherited title prompt')
+    appendHumanPrompt(parent, 'Inherited title prompt')
     await settle()
     parent.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
 
@@ -71,7 +96,7 @@ describe('SessionTitleService Provider lifecycle', () => {
       .toEqual(parent.snapshotEvents().find(event => event.type === 'session/title'))
 
     const firstGenerate = vi.fn(async (request: SessionTitleProviderRequest) => ({
-      title: 'Should not run',
+      title: 'Own fork prompt',
       messageSeqs: [request.messages[0]!.seq],
     }))
     const disposeFirst = ctx.sessionTitle.register({
@@ -87,7 +112,9 @@ describe('SessionTitleService Provider lifecycle', () => {
     appendRoute(child)
     await settle()
     child.append('turn/end', { turn: 2, reason: { kind: 'completed' } })
-    expect(firstGenerate).not.toHaveBeenCalled()
+    expect(firstGenerate).toHaveBeenCalledOnce()
+    expect(firstGenerate.mock.calls[0]![0].messages).toEqual([{ seq: childMessage.seq, text: 'Child follow-up prompt' }])
+    expect(ctx.sessionTitle.get(child)?.title).toBe('Own fork prompt')
     await disposeFirst()
 
     const allGenerate = vi.fn(async (request: SessionTitleProviderRequest) => ({
@@ -111,7 +138,7 @@ describe('SessionTitleService Provider lifecycle', () => {
     expect(allGenerate).toHaveBeenCalledOnce()
     expect(ctx.sessionTitle.get(child)).toMatchObject({
       title: 'Fork all prompts',
-      messageSeqs: [inheritedMessage.seq, childMessage.seq, latestMessage.seq],
+      messageSeqs: [childMessage.seq, latestMessage.seq],
       source: { kind: 'provider', provider: SessionTitleProviderId('fork-all') },
     })
     expect(ctx.sessionTitle.get(parent)?.title).toBe('Inherited title prompt')

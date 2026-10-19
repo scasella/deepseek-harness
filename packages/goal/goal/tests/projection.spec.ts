@@ -46,6 +46,7 @@ async function liveAgent(ctx: Context, session: Session): Promise<Agent> {
     ctx,
     get status() { return status },
     send: () => {},
+    continue: () => {},
     followup: () => {},
     steer: () => ({ outcome: Promise.resolve({ status: 'rejected' as const }) }),
     inject: () => { throw new Error('goal projection tests do not inject model context') },

@@ -243,6 +243,8 @@ export interface ResolvedPiAiProviderProfile
    * own, so a catalog capability must not appear here.
    */
   configuredMaxTokens: ReadonlyMap<string, number>
+  /** Explicit generation-feature opt-ins by model id, validated against the materialized protocol. */
+  generationFeatures: ReadonlyMap<string, Pick<PiAiModelProfile, 'tokenLogprobs' | 'assistantPrefill'>>
 }
 
 /** Plugin configuration: the provider routes this instance owns. */
@@ -328,6 +330,8 @@ const reasoningEfforts = z.dict(
 
 /** The fields a `models` entry and a `modelOverrides` value share; only the id's home differs. */
 const modelFields = {
+  tokenLogprobs: z.object({ maxTopLogprobs: z.natural().max(20).required() }).default(undefined as never),
+  assistantPrefill: z.union(['trailing-message', 'deepseek-prefix'] as const),
   name: z.string(),
   contextWindow: z.number().step(1).min(1),
   maxTokens: z.number().step(1).min(1),
@@ -545,6 +549,22 @@ export function resolveProfiles(
       if (validation === 'strict' || !(error instanceof PiAiCatalogError)) throw error
       catalogError ??= error.message
     }
+    const generationFeatures = new Map<string, Pick<PiAiModelProfile, 'tokenLogprobs' | 'assistantPrefill'>>()
+    for (const model of catalog?.models ?? []) {
+      const entry = source.models?.find(candidate => candidate.id === model.id) ?? source.modelOverrides?.[model.id]
+      if (entry?.tokenLogprobs === undefined && entry?.assistantPrefill === undefined) continue
+      if (model.api !== 'openai-completions') {
+        throw new Error(`llm-pi-ai: model "${model.id}" token probabilities and assistant prefixes require openai-completions`)
+      }
+      const max = entry.tokenLogprobs?.maxTopLogprobs
+      if (max !== undefined && (!Number.isSafeInteger(max) || max < 0 || max > 20)) {
+        throw new Error(`llm-pi-ai: model "${model.id}" maxTopLogprobs must be an integer from 0 through 20`)
+      }
+      generationFeatures.set(model.id, {
+        ...entry.tokenLogprobs === undefined ? {} : { tokenLogprobs: { ...entry.tokenLogprobs } },
+        ...entry.assistantPrefill === undefined ? {} : { assistantPrefill: entry.assistantPrefill },
+      })
+    }
     const {
       apiKeyEnv,
       retryPolicy,
@@ -567,6 +587,7 @@ export function resolveProfiles(
       ...rest.headers === undefined ? {} : { headers: { ...rest.headers } },
       ...rest.thinkingBudgets === undefined ? {} : { thinkingBudgets: { ...rest.thinkingBudgets } },
       configuredMaxTokens: catalog?.configuredMaxTokens ?? new Map(),
+      generationFeatures,
       modelErrors: catalog?.modelErrors ?? new Map(),
       ...piProvider === undefined ? {} : { piProvider },
       ...catalogError === undefined ? {} : { catalogError },

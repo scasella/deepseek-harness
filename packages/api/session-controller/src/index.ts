@@ -30,6 +30,7 @@ import { ApiSessionList } from './list.ts'
 import { buildModelCatalog, hasProviderApiKey } from './catalog.ts'
 import { installModelSelectionProjection } from './model-selection-projection.ts'
 import { installForkLineageProjection } from './fork-lineage-projection.ts'
+import { installContinuationProjection } from './continuation-projection.ts'
 import { SessionSkillCatalog } from './skill-catalog.ts'
 import { SessionMediaReferences } from './media-references.ts'
 import { ArchivedSessionGate } from './archived-session-gate.ts'
@@ -41,6 +42,8 @@ import type {
   SessionAttachmentValue,
   SessionCancelRequest,
   SessionCancelValue,
+  SessionContinueRequest,
+  SessionContinueValue,
   SessionControlFrame,
   SessionCreateRequest,
   SessionCreateValue,
@@ -162,6 +165,7 @@ export class SessionController extends TypertRemoteService {
     const resolved = SessionController.Config(config)
     installModelSelectionProjection(ctx)
     installForkLineageProjection(ctx)
+    installContinuationProjection(ctx)
     this.agents = new ApiSessionAgentController(ctx)
     this.commands = new SessionCommandController(ctx, this.agents, process.cwd())
     ctx.effect(() => ctx.fileUploads.registerAgentResolver(async (sessionId) => {
@@ -220,8 +224,10 @@ export class SessionController extends TypertRemoteService {
           event.data.header.config.reasoningEffort,
         )
       }
-      if (event.type !== 'user/message' || event.data.source.kind !== 'user') return
-      ctx.emit('api-session/activity', session.id, event.time)
+      if ((event.type === 'user/message' && event.data.source.kind === 'user')
+        || (event.type === 'turn/start' && event.data.continuation?.kind === 'user')) {
+        ctx.emit('api-session/activity', session.id, event.time)
+      }
     })
   }
 
@@ -291,7 +297,7 @@ export class SessionController extends TypertRemoteService {
    */
   @Remote('search')
   async search(request: SessionSearchRequest, signal: AbortSignal): Promise<SessionSearchValue> {
-    const result = await this.listState.search(request.query, signal)
+    const result = await this.listState.search(request.query, signal, request.scope, request.sessionIds)
     return { ...result, items: result.items.filter(item => this.ctx.remoteAccess.allows({ kind: 'session', id: item.sessionId })) }
   }
 
@@ -486,6 +492,23 @@ export class SessionController extends TypertRemoteService {
       ...(principal === undefined ? {} : { principal }),
     }
     return this.commands.prompt(request, source)
+  }
+
+  /**
+   * Request one turn over existing history without adding a user message.
+   * @param request - Session identity and durable retry identity.
+   * @param signal - caller cancellation before continuation admission.
+   * @returns acknowledgement after the turn opens, or a typed admission failure.
+   */
+  @Remote('continue')
+  continue(request: SessionContinueRequest, signal: AbortSignal): Promise<SessionContinueValue> {
+    signal.throwIfAborted()
+    const principal = principalOf(this.ctx.invocation)
+    return this.commands.continue(request, {
+      kind: 'user',
+      rpcId: request.requestId,
+      ...principal === undefined ? {} : { principal },
+    }, signal)
   }
 
   /**

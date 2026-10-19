@@ -24,7 +24,10 @@ const corpusRoot = join(repoRoot, 'snapshots')
 const profiles = ['acp', 'sdk', 'session', 'web'] as const
 const snapshotAdapters = [
   'apps/web/tests/code-language.snapshot.ts',
+  'apps/web/tests/loom-autoloom.snapshot.ts',
   'apps/web/tests/loom-branch.snapshot.ts',
+  'apps/web/tests/loom-counterfactual.snapshot.ts',
+  'apps/web/tests/loom-prose.snapshot.ts',
   'apps/web/tests/message-feedback-protocol.snapshot.ts',
   'apps/web/tests/minimal-preset.snapshot.ts',
   'apps/web/tests/preset-migration.snapshot.ts',

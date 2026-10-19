@@ -123,14 +123,14 @@ describe.skipIf(MODE === 'record')('web e2e: Loom fork band and tab', () => {
     await groupRow.waitFor({ timeout: 15_000 })
     await groupRow.click()
     await expect.poll(() => sessions.getByRole('treeitem').count(), { timeout: 15_000 }).toBe(4)
-    // Rows sort by recency: branch B, branch A, then the root. Reading the root first lists its durable title.
-    await sessions.getByRole('treeitem').nth(3).click()
+    // Read the root first so its durable title is available in the fork crumb.
+    await page.locator(`[data-row-key="session:${ROOT_ID}"]`).click()
     await page.getByText(rootFixture.markers.user(2), { exact: false }).last().waitFor({ timeout: 15_000 })
     expect(await page.locator('[data-loom-fork-band]').count()).toBe(0)
     expect(await page.getByRole('button', { name: /Inherited from parent/u }).count()).toBe(0)
-    await expect.poll(() => sessions.getByRole('treeitem').nth(3).textContent(), { timeout: 15_000 }).toContain('Loom family')
+    await expect.poll(() => page.locator(`[data-row-key="session:${ROOT_ID}"]`).textContent(), { timeout: 15_000 }).toContain('Loom family')
 
-    await sessions.getByRole('treeitem').nth(2).click()
+    await page.locator(`[data-row-key="session:${BRANCH_A}"]`).click()
     await page.getByText(`${MARKER_A} This branch continues`, { exact: false }).last().waitFor({ timeout: 15_000 })
     const band = page.locator('[data-loom-fork-band]')
     await band.waitFor({ timeout: 15_000 })
@@ -231,7 +231,7 @@ describe.skipIf(MODE === 'record')('web e2e: Loom fork band and tab', () => {
     await reference.waitFor({ state: 'detached', timeout: 15_000 })
   })
 
-  it('narrows the band at phone width and hides the header chip', async () => {
+  it('narrows the band at phone width and exposes the compact sheet chooser', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-loom-narrow'))
     const original = page.viewportSize()
     await page.setViewportSize({ width: 390, height: 844 })
@@ -255,12 +255,16 @@ describe.skipIf(MODE === 'record')('web e2e: Loom fork band and tab', () => {
         const row = scroller.getBoundingClientRect()
         return chip.left >= row.left - 0.5 && chip.right <= row.right + 0.5
       })
-      const headerChips = await page.getByRole('button', { name: /Switch variant/u }).count()
+      const headerChooser = page.getByRole('button', { name: /Switch variant/u })
+      await expect.poll(() => headerChooser.getAttribute('aria-haspopup')).toBe('dialog')
+      const headerChips = await headerChooser.count()
+      const headerHeight = await headerChooser.evaluate(element => element.getBoundingClientRect().height)
       const pageScrolls = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
       expect(labelLines).toBe(3)
       expect(chipHeights).toEqual([32, 32])
       expect(currentInView).toBe(true)
-      expect(headerChips).toBe(0)
+      expect(headerChips).toBe(1)
+      expect(headerHeight).toBeGreaterThanOrEqual(44)
       expect(pageScrolls).toBe(false)
       const facts = [
         `label lines: ${String(labelLines)}`,

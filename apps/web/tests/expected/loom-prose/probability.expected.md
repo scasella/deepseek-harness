@@ -1,0 +1,9 @@
+- dialog "Token probabilities":
+  - paragraph: "waited.: probability 60%"
+  - paragraph: "Dotted underline: under 30%; tint and heavier underline: under 5%. Select a captured token to inspect its probability."
+  - list:
+    - listitem:
+      - button "waited. · 60%"
+    - listitem:
+      - button "sea · 40%"
+  - button "Close probabilities"

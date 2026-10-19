@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { Agent, ModelSelection as AgentModelSelection } from '@deepseek-ai/dsh-agent'
+import { AgentContinuationError } from '@deepseek-ai/dsh-agent'
 import { AttachmentError } from '@deepseek-ai/dsh-attachment'
 import type {
   AttachmentAdmissionPart, FileAttachmentRef, ImageAttachmentRef,
@@ -42,6 +43,8 @@ import type {
   SessionAttachmentValue,
   SessionCancelRequest,
   SessionCancelValue,
+  SessionContinueRequest,
+  SessionContinueValue,
   SessionCreateRequest,
   SessionCreateValue,
   SessionForkRequest,
@@ -384,6 +387,32 @@ export class SessionCommandController {
       return { accepted: true }
     }
     return hasImage ? this.agents.serializeImageAdmission(agent, admit) : admit()
+  }
+
+  /**
+   * Resume an ordinary Session and open one turn over its existing history.
+   * A repeated request id in the Session's own continuation history is accepted
+   * without another turn. Admission failures leave history and queues unchanged.
+   * @param request - Session identity and durable retry identity.
+   * @param source - initiator attribution recorded on turn/start.
+   * @param signal - caller cancellation before admission.
+   * @returns acknowledgement that this request opened a continuation turn.
+   */
+  async continue(request: SessionContinueRequest, source: MessageSource, signal: AbortSignal): Promise<SessionContinueValue> {
+    const agent = await this.resolveAgent(request.sessionId)
+    signal.throwIfAborted()
+    const retryState = this.ctx.sessionProjections.stateOf(agent.session, 'sessionContinuationRequests')
+    if (retryState === undefined) throw new RemoteError('gateway/internal', 'continuation retry state is unavailable', {})
+    if (retryState.requestIds.includes(request.requestId)) return { accepted: true }
+    try {
+      agent.continue(source)
+    } catch (error: unknown) {
+      if (!(error instanceof AgentContinuationError)) throw error
+      throw new RemoteError('session/continue-unavailable',
+        'This Session cannot continue its existing history. Finish pending work or branch from a user message or tool result.',
+        { sessionId: agent.id, reason: error.reason })
+    }
+    return { accepted: true }
   }
 
   private async requireModel(selection: Pick<AgentModelSelection, 'provider' | 'model'>): Promise<void> {

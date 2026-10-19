@@ -231,6 +231,9 @@ export function apply(ctx: Context, config: Config): void {
         + ` sending that message as provider-neutral content (${reason})`,
       )
     },
+    onLogprobsDegrade: ({ provider, model, reason }) => {
+      ctx.logger.warn(`llm-pi-ai: omitted unaligned token probabilities for route "${provider}/${model}" (${reason})`)
+    },
   })
   // Independent of the route set: signing in is what makes a route worth
   // adding, so the flows are offered before any profile names their provider.

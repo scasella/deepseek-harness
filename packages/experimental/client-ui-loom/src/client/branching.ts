@@ -11,8 +11,8 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { createSnapshotStore, type ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type {
   LoomBranchChild, LoomBranchKind, LoomBranchRequest, LoomBranchRequestId, LoomBranchValue, LoomCancelRequest,
-  LoomCancelValue, LoomMark, LoomMarkRequest, LoomMarkValue, LoomSetId, LoomSetStatus, LoomSetStatusChild,
-  LoomSetStatusRequest,
+  LoomCancelValue, LoomIsolation, LoomIsolationUnavailableReason, LoomMark, LoomMarkRequest, LoomMarkValue, LoomSetId,
+  LoomSetStatus, LoomSetStatusChild, LoomSetStatusRequest,
 } from '@deepseek-ai/dsh-experimental-loom/types'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { RemoteErrorDetailsMap, RemoteFailure, RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
@@ -36,6 +36,14 @@ export interface LoomFailure {
   readonly line?: number
   /** `loom/turn-unavailable`: why the turn cannot be branched. */
   readonly reason?: RemoteErrorDetailsMap['loom/turn-unavailable']['reason']
+  /** `loom/isolation-unavailable`: why worktree isolation cannot run. */
+  readonly isolationReason?: LoomIsolationUnavailableReason
+  /** `loom/worktree-unavailable`: why the branch has no worktree. */
+  readonly worktreeReason?: RemoteErrorDetailsMap['loom/worktree-unavailable']['reason']
+  /** `loom/apply-dirty` and `loom/apply-conflict`: the paths in the way; `loom/worktree-cleanup-failed`: the paths the change wrote. */
+  readonly paths?: readonly string[]
+  /** `loom/adopt-incomplete`: how many siblings stayed unarchived. */
+  readonly remaining?: number
   /** Whether the Host may have acted before the failure: a carrier failure leaves the outcome unknown. */
   readonly unknownOutcome: boolean
 }
@@ -88,6 +96,10 @@ export interface LoomBranchForm {
   readonly samples: number
   /** Route override for every branch; null keeps the source's route. */
   readonly selection: ModelSelection | null
+  /** Where each branch's files live. */
+  readonly isolation: LoomIsolation
+  /** Why the Host refused worktree isolation for this form, until the form closes; null while untried. */
+  readonly isolationUnavailable: LoomIsolationUnavailableReason | null
   /** Whether the form's request is in flight. */
   readonly starting: boolean
   /** Failure of the latest start, until the draft changes. */
@@ -108,7 +120,7 @@ export interface LoomBranchingState {
 }
 
 /** Fields of a form the user edits. */
-export type LoomFormEdit = Partial<Pick<LoomBranchForm, 'rows' | 'samples' | 'selection'>>
+export type LoomFormEdit = Partial<Pick<LoomBranchForm, 'rows' | 'samples' | 'selection' | 'isolation'>>
 
 /** Remote calls and navigation supplied by the owning plugin. */
 export interface LoomBranchingInputs {
@@ -216,6 +228,14 @@ export function failureOf(error: RemoteFailure): LoomFailure {
     case 'loom/too-many-branches': return { code: error.code, limit: error.details.limit, unknownOutcome: false }
     case 'loom/empty-line': return { code: error.code, line: error.details.index, unknownOutcome: false }
     case 'loom/turn-unavailable': return { code: error.code, reason: error.details.reason, unknownOutcome: false }
+    case 'loom/isolation-unavailable': return { code: error.code, isolationReason: error.details.reason, unknownOutcome: false }
+    case 'loom/apply-dirty':
+    case 'loom/apply-conflict':
+      return { code: error.code, paths: error.details.paths, unknownOutcome: false }
+    case 'loom/apply-too-large': return { code: error.code, limit: error.details.limit, unknownOutcome: false }
+    case 'loom/worktree-unavailable': return { code: error.code, worktreeReason: error.details.reason, unknownOutcome: false }
+    case 'loom/worktree-cleanup-failed': return { code: error.code, paths: error.details.applied, unknownOutcome: false }
+    case 'loom/adopt-incomplete': return { code: error.code, remaining: error.details.remaining.length, unknownOutcome: false }
     // A carrier failure or cancellation may arrive after the Host acted.
     case 'gateway/internal':
     case 'gateway/cancelled':
@@ -234,6 +254,21 @@ const UNAVAILABLE: LoomFailure = Object.freeze({ code: LOOM_UNAVAILABLE, unknown
  */
 function rejected(_error: unknown): { readonly ok: false; readonly failure: LoomFailure } {
   return { ok: false, failure: UNAVAILABLE }
+}
+
+/** Result of one Remote call with its failure reduced to copy facts. */
+export type LoomValueOutcome<Value> = { readonly ok: true; readonly value: Value } | { readonly ok: false; readonly failure: LoomFailure }
+
+/**
+ * Reduce one Remote call to a value or the facts of its failure.
+ * @param call - the pending call.
+ * @returns the value, or the failure; a call that rejected reads as {@link LOOM_UNAVAILABLE}.
+ */
+export function settled<Value>(call: Promise<RemoteResult<Value>>): Promise<LoomValueOutcome<Value>> {
+  return call.then((result): LoomValueOutcome<Value> => {
+    if (result.ok) return { ok: true, value: result.value }
+    return { ok: false, failure: failureOf(result.error) }
+  }, rejected)
 }
 
 /**
@@ -423,7 +458,14 @@ export function createLoomBranching(inputs: LoomBranchingInputs): LoomBranching 
         const open = state.forms[ownerSessionId]
         if (open?.sourceSessionId === target.sourceSessionId && open.afterTurn === target.afterTurn) return state
         const form: LoomBranchForm = {
-          ...target, rows: NEW_FORM_ROWS, samples: 1, selection: null, starting: false, failure: null,
+          ...target,
+          rows: NEW_FORM_ROWS,
+          samples: 1,
+          selection: null,
+          isolation: 'shared',
+          isolationUnavailable: null,
+          starting: false,
+          failure: null,
         }
         return { ...state, forms: { ...state.forms, [ownerSessionId]: form } }
       })
@@ -442,6 +484,7 @@ export function createLoomBranching(inputs: LoomBranchingInputs): LoomBranching 
         sessionId: form.sourceSessionId,
         afterTurn: form.afterTurn,
         lines,
+        isolation: form.isolation,
         ...form.selection === null ? {} : { selection: form.selection },
       }
       const draft: LoomBranchDraft = form.samples > 1
@@ -451,7 +494,14 @@ export function createLoomBranching(inputs: LoomBranchingInputs): LoomBranching 
       const outcome = await start(draft, { ownerSessionId })
       if (store.getSnapshot().forms[ownerSessionId]?.afterTurn !== form.afterTurn) return false
       if (!outcome.ok) {
-        updateForm(ownerSessionId, current => ({ ...current, starting: false, failure: outcome.failure }))
+        // A refused isolation is a fact of this Session's folder, so the form falls back to the shared folder and keeps the reason.
+        const refused = outcome.failure.isolationReason
+        updateForm(ownerSessionId, current => ({
+          ...current,
+          starting: false,
+          failure: outcome.failure,
+          ...refused === undefined ? {} : { isolation: 'shared' as const, isolationUnavailable: refused },
+        }))
         return false
       }
       update(state => ({ ...state, forms: withoutKey(state.forms, ownerSessionId) }))

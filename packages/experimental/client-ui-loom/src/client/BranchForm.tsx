@@ -1,8 +1,9 @@
 /**
  * The Branch ×N form in the input dock: one steering line per branch, how
  * many samples to run of each line, the route with an optional override, and
- * the shared-folder note. Start sends a `steer` set, or a `variants` set when
- * each line is sampled more than once; nothing runs before Start. Cancel,
+ * where the branches keep their files, and what they would cost. Start sends
+ * a `steer` set, or a `variants` set when each line is sampled more than
+ * once; nothing runs before Start. Cancel,
  * Escape, and a successful Start return keyboard focus to the control that
  * opened the form: its Branch ×N caret, else the Loom tree's tab stop.
  */
@@ -10,11 +11,15 @@ import { useMemo, useRef, type KeyboardEvent } from 'react'
 import {
   Button, IconBranchOutlineRegular, IconCloseOutlineRegular, IconPlusOutlineRegular, Input,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { LoomBranchForm } from './branching.ts'
 import { classes } from './classes.ts'
+import { CostRow } from './CostRow.tsx'
 import { CountChoice } from './CountChoice.tsx'
 import type { LoomDockProps } from './dock.ts'
 import { failureText, plural, rowsText } from './format.ts'
+import { IsolationRow } from './IsolationRow.tsx'
 import { projectionValuesOf, sessionTitle } from './lineage.ts'
+import { loomEstimateKey } from './reads.ts'
 import { inheritedRoute } from './routes.ts'
 import { RouteRow } from './RouteRow.tsx'
 import panelCss from './panel.module.css'
@@ -63,12 +68,35 @@ function returnFocus(opener: HTMLElement | null, form: HTMLElement | null): void
 }
 
 /**
+ * Render the Cost row of an open form. A separate component, so the estimate is read only while the form is open
+ * and only when the branch count, the cut, or the kind of set changes; typing a steering line reads nothing.
+ * @param props.form - the open form.
+ * @param props.count - children the form would create.
+ * @param props.useLoomEstimate - estimate hook.
+ * @param props.t - Loom translate seat.
+ * @returns the `dt`/`dd` pair, or null when the estimate failed.
+ */
+function FormCost({ form, count, useLoomEstimate, t }: {
+  form: LoomBranchForm
+  count: number
+  useLoomEstimate: LoomDockProps['useLoomEstimate']
+  t: LoomDockProps['t']
+}) {
+  const state = useLoomEstimate(loomEstimateKey({
+    sessionId: form.sourceSessionId, kind: form.samples > 1 ? 'variants' : 'steer', afterTurn: form.afterTurn, count,
+    ...form.selection === null ? {} : { selection: form.selection },
+  }))
+  return <CostRow state={state} count={count} t={t} />
+}
+
+/**
  * Render the form while one is open for this dock.
  * @param props - the dock's Session, Session list, projections, branching state and verbs, routes, and copy.
  * @returns the form, or null.
  */
 export function BranchForm({
-  sessionId, useSessions, useProjection, useChat, useLoomBranching, useLoomRoutes, editForm, closeForm, submitForm, loadRoutes, t,
+  sessionId, useSessions, useProjection, useChat, useLoomBranching, useLoomRoutes, useLoomEstimate, editForm, closeForm,
+  submitForm, loadRoutes, t,
 }: LoomDockProps) {
   const form = useLoomBranching(state => state.forms[sessionId])
   const list = useSessions(state => state)
@@ -182,8 +210,14 @@ export function BranchForm({
             onSelect={(selection) => { editForm(sessionId, { selection }) }}
             t={t}
           />
-          <dt>{t('workspace.title')}</dt>
-          <dd>{t('workspace.shared')}</dd>
+          <IsolationRow
+            value={form.isolation}
+            unavailable={form.isolationUnavailable}
+            disabled={form.starting}
+            onChange={(isolation) => { editForm(sessionId, { isolation }) }}
+            t={t}
+          />
+          <FormCost form={form} count={total} useLoomEstimate={useLoomEstimate} t={t} />
         </dl>
         {form.failure !== null && <p className={css.error} role="alert">{failureText(form.failure, t)}</p>}
         <footer className={css.footer}>

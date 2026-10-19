@@ -76,6 +76,18 @@
     },
     {
       "path": "../loom"
+    },
+    {
+      "path": "../../client/ui-layout"
+    },
+    {
+      "path": "../../client/ui-sidebar"
+    },
+    {
+      "path": "../../client/ui-tool"
+    },
+    {
+      "path": "../../llm/llm"
     }
   ]
 }

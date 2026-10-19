@@ -481,13 +481,20 @@ export class SessionManager {
    * state to the list snapshot.
    * @param query - non-blank literal phrase.
    * @param signal - cancellation for superseded UI queries.
+   * @param scope - optional own or fork-inherited message restriction; omission searches both.
+   * @param sessionIds - target subset applied before ranking; empty matches nothing, omission searches the visible corpus.
    * @returns the Host result or a folded transport error.
    */
   async search(
     query: string,
     signal: AbortSignal,
+    scope?: 'own' | 'inherited',
+    sessionIds?: readonly SessionId[],
   ): Promise<RemoteResult<{ items: SessionSearchResultItem[]; hasMore: boolean }>> {
-    const result = await this.remote.session.search({ query }, signal)
+    const result = await this.remote.session.search({
+      query, ...scope === undefined ? {} : { scope },
+      ...sessionIds === undefined ? {} : { sessionIds: [...sessionIds] },
+    }, signal)
     if (!result.ok) return result
     return {
       ok: true,

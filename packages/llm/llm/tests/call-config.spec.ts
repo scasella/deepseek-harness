@@ -23,6 +23,7 @@ describe('callConfigEquals', () => {
     )).toBe(true)
     expect(callConfigEquals({ ...base, temperature: 0.5 }, base)).toBe(false)
     expect(callConfigEquals({ ...base, maxTokens: 1 }, { ...base, maxTokens: 2 })).toBe(false)
+    expect(callConfigEquals({ ...base, topLogprobs: 0 }, { ...base, topLogprobs: 1 })).toBe(false)
     expect(callConfigEquals({ ...base, stop: ['a'] }, base)).toBe(false)
     expect(callConfigEquals({ ...base, stop: ['a'] }, { ...base, stop: ['a', 'b'] })).toBe(false)
     expect(callConfigEquals({ ...base, stop: ['a'] }, { ...base, stop: ['b'] })).toBe(false)

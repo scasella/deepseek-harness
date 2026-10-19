@@ -31,7 +31,7 @@ import { freezeMessage } from './message.ts'
 import { resolveRetryPolicy } from './retry-policy.ts'
 import type { ResolvedRetryPolicy } from './retry-policy.ts'
 import type { ProviderRequestId } from './brand.ts'
-import { callConfigEquals } from './call-config.ts'
+import { callConfigEquals, isAgentLoopRequest } from './call-config.ts'
 import type { ConfigureCall, LlmCallConfig, LlmCallConfigAdapterDefaults } from './call-config.ts'
 import { HarnessError, INVALID_CREDENTIAL_CODE } from './error.ts'
 import { normalizeLlmFailure } from './adapter-failure.ts'
@@ -131,6 +131,38 @@ export class LlmError extends HarnessError {
 }
 
 /**
+ * Validate requested generation features against a resolved exact model before provider dispatch.
+ * @param options - request controls and model-visible input.
+ * @param model - registration-bound model metadata.
+ * @throws LlmError for unsupported token probabilities or prefix completion, or invalid request fields.
+ */
+export function assertLlmRequestCapabilities(options: GenerateOptions, model: LlmResolvedModelInfo): void {
+  assertTokenLogprobs(options.topLogprobs, model)
+  if (options.assistantPrefix === undefined) return
+  if (model.assistantPrefill !== 'tool-free') {
+    throw new LlmError('this model does not support assistant prefix completion', 'UNSUPPORTED_ASSISTANT_PREFILL')
+  }
+  if (options.assistantPrefix.length === 0
+    || isAgentLoopRequest(options)
+    || options.tools !== undefined
+    || options.toolHistory !== undefined
+    || options.messages.some(message => message.role === 'tool' || message.content.some(block => block.type === 'tool-call'))
+    || (model.reasoning !== undefined && options.reasoningEffort !== 'off')) {
+    throw new LlmError('assistant prefix completion requires nonempty text and a tool-free auxiliary request with reasoning off', 'INVALID_REQUEST')
+  }
+}
+
+/** Validate token-probability controls during both preparation and dispatch. */
+function assertTokenLogprobs(value: number | undefined, model: LlmResolvedModelInfo): void {
+  if (value === undefined) return
+  const limit = model.tokenLogprobs?.maxTopLogprobs
+  if (limit === undefined) throw new LlmError('this model does not support token probabilities', 'UNSUPPORTED_TOKEN_LOGPROBS')
+  if (!Number.isSafeInteger(value) || value < 0 || value > limit) {
+    throw new LlmError(`topLogprobs must be an integer from 0 through ${String(limit)}`, 'INVALID_REQUEST')
+  }
+}
+
+/**
  * Accept one supplied credential, or refuse it as unusable.
  *
  * A stored key arrives from the credentials seam, a `.env` line, or a shell
@@ -167,6 +199,10 @@ export function assertUsableApiKey(raw: string, pkg: string, ref: string): strin
 
 /** One model call whose config and adapter registration were resolved together. */
 export interface PreparedLlmCall {
+  /** Exact model sampled-token probability capability. */
+  readonly tokenLogprobs?: LlmResolvedModelInfo['tokenLogprobs']
+  /** Exact model's tool-free auxiliary prefix support. */
+  readonly assistantPrefill?: 'tool-free'
   /** Detached, deep-frozen config with any adapter-owned default materialized. */
   readonly config: LlmCallConfig
   /** Immutable retry policy captured with the adapter registration. */
@@ -818,6 +854,15 @@ export class LlmRuntime extends TypertRemoteService {
       )
     }
     const defaultMaxTokens = resolved.defaultMaxTokens
+    const tokenLogprobs = resolved.tokenLogprobs
+    if (tokenLogprobs !== undefined && (!Number.isSafeInteger(tokenLogprobs.maxTopLogprobs)
+      || tokenLogprobs.maxTopLogprobs < 0 || tokenLogprobs.maxTopLogprobs > 20)) {
+      throw new LlmError('adapter returned invalid token-probability capability', 'INVALID_MODEL_INFO')
+    }
+    const assistantPrefill: string | undefined = resolved.assistantPrefill
+    if (assistantPrefill !== undefined && assistantPrefill !== 'tool-free') {
+      throw new LlmError('adapter returned invalid assistant prefix capability', 'INVALID_MODEL_INFO')
+    }
     if (defaultMaxTokens !== undefined
       && (!Number.isSafeInteger(defaultMaxTokens) || defaultMaxTokens <= 0)) {
       throw new LlmError(
@@ -835,6 +880,8 @@ export class LlmRuntime extends TypertRemoteService {
       ...defaultMaxTokens === undefined ? {} : { defaultMaxTokens },
       ...resolved.systemPromptUpdate === undefined ? {} : { systemPromptUpdate: resolved.systemPromptUpdate },
       ...resolved.toolUpdate === undefined ? {} : { toolUpdate: resolved.toolUpdate },
+      ...tokenLogprobs === undefined ? {} : { tokenLogprobs: { maxTopLogprobs: tokenLogprobs.maxTopLogprobs } },
+      ...resolved.assistantPrefill === undefined ? {} : { assistantPrefill: resolved.assistantPrefill },
     }
     const reasoning = resolved.reasoning
     if (reasoning === undefined) return info
@@ -909,6 +956,7 @@ export class LlmRuntime extends TypertRemoteService {
     config: LlmCallConfig,
     info: LlmResolvedModelInfo,
   ): { config: LlmCallConfig; context?: LlmModelContext; modelInfo: LlmResolvedModelInfo } {
+    assertTokenLogprobs(config.topLogprobs, info)
     const defaulted = config.maxTokens === undefined && info.defaultMaxTokens !== undefined
       ? { ...config, maxTokens: info.defaultMaxTokens }
       : config
@@ -992,6 +1040,8 @@ export class LlmRuntime extends TypertRemoteService {
         : { inputModalities: Object.freeze([...modelInfo.inputModalities]) },
       ...modelInfo.systemPromptUpdate === undefined ? {} : { systemPromptUpdate: modelInfo.systemPromptUpdate },
       ...modelInfo.toolUpdate === undefined ? {} : { toolUpdate: modelInfo.toolUpdate },
+      ...modelInfo.tokenLogprobs === undefined ? {} : { tokenLogprobs: Object.freeze({ ...modelInfo.tokenLogprobs }) },
+      ...modelInfo.assistantPrefill === undefined ? {} : { assistantPrefill: modelInfo.assistantPrefill },
       stream: (options: GenerateOptions): AsyncIterable<StreamChunk> => {
         if (dispatched) {
           throw new LlmError('a prepared LLM call can only be dispatched once', 'INVALID_PREPARED_CALL')
@@ -1002,6 +1052,7 @@ export class LlmRuntime extends TypertRemoteService {
             'INVALID_PREPARED_CALL',
           )
         }
+        assertLlmRequestCapabilities(options, modelInfo)
         dispatched = true
         return this.streamWithRegistration(options, {
           registration,
@@ -1093,6 +1144,7 @@ export class LlmRuntime extends TypertRemoteService {
         : Object.isFrozen(options)
           ? deepFreeze({ ...options, ...resolvedConfig })
           : { ...options, ...resolvedConfig }
+      assertLlmRequestCapabilities(resolvedOptions, modelInfo)
       // Files are never dispatched natively: every route receives handle text.
       let projectedMessages: readonly RequestMessage[] = resolvedOptions.messages
       if (projectedMessages.some(message => contentHasFile(message.content))) {

@@ -38,6 +38,7 @@ async function liveAgent(ctx: Context, session: Session, initial: AgentStatus): 
     get status() { return status },
     ctx,
     send: () => {},
+    continue: () => {},
     followup: () => {},
     steer: () => {},
     inject: () => {},

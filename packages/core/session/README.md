@@ -118,6 +118,8 @@ The package is built on event sourcing: a `Session` is an append-only log of typ
 
 Every append uses the shared iterative `snapshotJsonValue()` pass, which reads, validates, and copies each nested value once, so a stateful getter cannot supply one value to validation and another to storage. Non-lossless-JSON payloads (BigInt, cycles, sparse arrays, `-0`, exotic prototypes) are rejected at the append site, before any backend flush. The append path constructs each `SessionSeq`; surface events additionally validate marker shape, cited source-event sequences, and complete shadowed-node coverage for replacements.
 
+`turn/start.continuation` records the initiator of a turn requested over existing history without a new user message. It is log-only attribution; it adds no model message and does not change the history surface.
+
 ### Shared recovery
 
 `ToolCallRecovery` tracks unanswered requests from committed events without retaining event history. AgentLoop observes live steps; crash recovery and fork-seed construction replay their prefixes through `openTurnClosers`. Live failures and crash recovery use interrupted-result wording by default; fork construction passes the fork cause to select its distinct retry guidance. The caller appends recovery results before closing the step ([reference](../agent-loop/README.md)).

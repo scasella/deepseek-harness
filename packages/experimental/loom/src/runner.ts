@@ -4,8 +4,8 @@
  */
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
-import type {} from '@deepseek-ai/dsh-agent'
-import { ApiSessionNotFound, type SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { createUserMessage, type MessageSource } from '@deepseek-ai/dsh-llm'
 import { appendPluginRecord, type SessionId } from '@deepseek-ai/dsh-session'
@@ -13,15 +13,34 @@ import { RemoteError, remoteErrorOf, type Principal, type RemoteErrorCode } from
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { resolveBranch, type LoomBranchSource, type LoomBranchSpec, type LoomChildSpec } from './branch-spec.ts'
 import type { ResolvedConfig } from './index.ts'
+import { inspectSession } from './inspect.ts'
+import { resolveIsolation, type LoomWorktreeSpec, type RepositoryQueue } from './isolation.ts'
 import type {
   LoomBranchChild,
   LoomBranchRequest,
+  LoomIsolationRecord,
   LoomBranchValue,
   LoomCancelValue,
   LoomSetId,
   LoomSetStatus,
   LoomSetStatusChild,
 } from './types.ts'
+
+/**
+ * Choices a Host caller makes for a branch set it starts for a model or a
+ * plugin rather than for a person; the `loom` Remote never passes them.
+ */
+export interface LoomHostBranchOptions {
+  /** Source of every child's prompt, in place of the user source the Remote path writes. */
+  readonly source: MessageSource
+  /**
+   * Runs for each child after its branch record and before its prompt. A
+   * throw fails that child: it keeps its Session and gets no prompt.
+   * @param agent - the child's Agent.
+   * @param child - the child's set and request index.
+   */
+  readonly prepare?: (agent: Agent, child: { readonly setId: LoomSetId; readonly index: number }) => void
+}
 
 /** Lifecycle of one child in Host memory; `admitting` is reported as `queued`. */
 type ChildStatus =
@@ -34,6 +53,7 @@ type ChildStatus =
 interface ChildEntry {
   readonly spec: LoomChildSpec
   status: ChildStatus
+  finished: boolean
 }
 
 /** One branch set: its resolved spec and every child's current status. */
@@ -44,9 +64,16 @@ interface SetEntry {
   readonly spec: LoomBranchSpec
   /** Request identity each child's `rpcId` derives from. */
   readonly requestId: string
+  readonly requestKey: string
   /** Non-owner caller recorded on every child prompt. */
   readonly principal: Principal | undefined
+  /** Host caller's prompt source and preparation, absent for a Remote call. */
+  readonly host: LoomHostBranchOptions | undefined
   readonly children: readonly ChildEntry[]
+  /** Repository each child gets a worktree from; absent for a set that shares the source folder. */
+  readonly worktree?: LoomWorktreeSpec
+  /** Base commit of the set's first worktree, which every later child of the set starts from. */
+  base?: string
 }
 
 interface QueuedChild {
@@ -72,9 +99,14 @@ export class LoomBranchRunner {
 
   /**
    * @param ctx - Loom service Context; the runner's teardown is one of its effects.
-   * @param limits - admission limits from the Loom `Config`.
+   * @param limits - admission limits and isolation choices from the Loom `Config`.
+   * @param repositories - per-repository order of the Loom service's Git work.
    */
-  constructor(private readonly ctx: Context, private readonly limits: ResolvedConfig) {
+  constructor(
+    private readonly ctx: Context,
+    private readonly limits: ResolvedConfig,
+    private readonly repositories: RepositoryQueue,
+  ) {
     ctx.effect(() => async () => {
       this.closed = true
       for (const { child } of this.queue.splice(0)) child.status = { state: 'cancelled' }
@@ -90,6 +122,7 @@ export class LoomBranchRunner {
    * @param principal - non-owner caller to record on every child prompt.
    * @param visible - whether the caller may branch a Session other than the
    *   addressed one, asked for the fork parent of a first-own-turn regenerate or edit.
+   * @param host - a Host caller's prompt source and preparation; undefined for a Remote call.
    * @returns the set and its children as they stand after the immediate
    *   admissions; when the runner was torn down during them, the children it
    *   withdrew read `cancelled`.
@@ -105,11 +138,12 @@ export class LoomBranchRunner {
     request: LoomBranchRequest,
     principal: Principal | undefined,
     visible: (sessionId: SessionId) => boolean,
+    host?: LoomHostBranchOptions,
   ): Promise<LoomBranchValue> {
     const key = JSON.stringify([request.sessionId, request.requestId])
     const existing = this.requests.get(key)
     if (existing !== undefined) return existing
-    const pending = this.create(request, principal, visible)
+    const pending = this.create(request, key, principal, visible, host)
     this.requests.set(key, pending)
     // A rejected request created nothing, so a retry resolves it again.
     void pending.catch(() => { this.requests.delete(key) })
@@ -143,9 +177,11 @@ export class LoomBranchRunner {
     for (const child of set.children) {
       if (child.status.state !== 'queued' || (indices !== undefined && !indices.includes(child.spec.index))) continue
       child.status = { state: 'cancelled' }
+      child.finished = true
       this.queue.splice(this.queue.findIndex(entry => entry.child === child), 1)
       cancelled.push(child.spec.index)
     }
+    this.trimFinished()
     return { cancelled }
   }
 
@@ -159,13 +195,16 @@ export class LoomBranchRunner {
 
   private async create(
     request: LoomBranchRequest,
+    requestKey: string,
     principal: Principal | undefined,
     visible: (sessionId: SessionId) => boolean,
+    host: LoomHostBranchOptions | undefined,
   ): Promise<LoomBranchValue> {
     const source = await this.inspect(request.sessionId)
     const policy = {
       maxBranchesPerRequest: this.limits.maxBranchesPerRequest,
       defaultSandboxMode: this.ctx.get('sandboxPolicy')?.defaultMode,
+      defaultIsolation: this.limits.defaultIsolation,
     }
     let spec = resolveBranch(request, source, { ...policy, redirect: true })
     // A first-own-turn regenerate or edit forks the addressed fork's parent, which the Gateway did not
@@ -185,14 +224,18 @@ export class LoomBranchRunner {
         spec = resolveBranch(request, source, { ...policy, redirect: false })
       }
     }
+    const worktree = await resolveIsolation(this.ctx, spec.isolation, source, spec)
     if (this.closed) throw unloaded()
     const set: SetEntry = {
       setId: brandString<LoomSetId>(`loomset-${randomUUID()}`),
       addressedSessionId: request.sessionId,
       spec,
       requestId: request.requestId,
+      requestKey,
       principal,
-      children: spec.children.map(child => ({ spec: child, status: { state: 'queued' } })),
+      host,
+      children: spec.children.map(child => ({ spec: child, status: { state: 'queued' }, finished: false })),
+      ...worktree === undefined ? {} : { worktree },
     }
     this.sets.set(set.setId, set)
     this.queue.push(...set.children.map(child => ({ set, child })))
@@ -200,7 +243,18 @@ export class LoomBranchRunner {
     // Teardown during these admissions withdraws the set's other queued children while the admitted ones run on,
     // so the caller still receives the set id. Awaiting no admissions would let teardown withdraw every child first.
     if (admissions.length > 0) await Promise.all(admissions.map(admission => admission.done))
+    this.trimFinished()
     return { setId: set.setId, children: set.children.map(branchChild) }
+  }
+
+  /** Keep active sets and at most the configured number of oldest-to-newest finished sets. */
+  private trimFinished(): void {
+    const finished = [...this.sets.values()].filter(set => set.children.every(child => child.finished && child.status.state !== 'admitting'))
+    const evicted = finished.length - this.limits.retainedBranchSets
+    for (const set of finished.slice(0, Math.max(0, evicted))) {
+      this.sets.delete(set.setId)
+      this.requests.delete(set.requestKey)
+    }
   }
 
   /**
@@ -210,12 +264,7 @@ export class LoomBranchRunner {
    * @throws RemoteError `session/not-found` when the Session does not exist; other read failures propagate.
    */
   private inspect(sessionId: SessionId): Promise<LoomBranchSource> {
-    return this.ctx.sessionController.inspect(sessionId).catch((error: unknown) => {
-      if (error instanceof ApiSessionNotFound) {
-        throw new RemoteError('session/not-found', error.message, { sessionId }, { cause: error })
-      }
-      throw error
-    })
+    return inspectSession(this.ctx, sessionId)
   }
 
   /**
@@ -227,7 +276,8 @@ export class LoomBranchRunner {
     for (const entry of [...this.queue]) {
       if (this.closed || this.running >= this.limits.maxConcurrentBranches) break
       const { set, child } = entry
-      const folder = set.spec.writable && !this.limits.concurrentWritableBranches ? set.spec.folder : undefined
+      const shared = set.worktree === undefined && set.spec.writable && !this.limits.concurrentWritableBranches
+      const folder = shared ? set.spec.folder : undefined
       if (folder !== undefined && this.writing.has(folder)) continue
       this.queue.splice(this.queue.indexOf(entry), 1)
       this.running += 1
@@ -275,6 +325,7 @@ export class LoomBranchRunner {
       if ('error' in resolved) throw resolved.error
       const { agent } = resolved
       for (const id of spec.inheritedPrompts) agent.inbox.remove(id)
+      const isolation = set.worktree === undefined ? undefined : await this.isolate(set, set.worktree, agent, sessionId)
       appendPluginRecord(agent.session, 'plugin:loom/branch', {
         version: 1,
         setId: set.setId,
@@ -284,7 +335,9 @@ export class LoomBranchRunner {
         index: child.spec.index,
         ...child.spec.variantKey === undefined ? {} : { variantKey: child.spec.variantKey },
       })
-      const source: MessageSource = {
+      if (isolation !== undefined) appendPluginRecord(agent.session, 'plugin:loom/isolation', isolation)
+      set.host?.prepare?.(agent, { setId: set.setId, index: child.spec.index })
+      const source: MessageSource = set.host?.source ?? {
         kind: 'user',
         rpcId: brandString<SessionRequestId>(`${set.requestId}/${String(child.spec.index)}`),
         ...spec.clientTimeZone === undefined ? {} : { clientTimeZone: spec.clientTimeZone },
@@ -292,10 +345,15 @@ export class LoomBranchRunner {
       }
       agent.followup(createUserMessage({ content: child.spec.content, source }))
       prompted = true
-      const release = (): void => { this.release(folder) }
+      const release = (): void => {
+        child.finished = true
+        this.release(folder)
+        this.trimFinished()
+      }
       void agent.whenIdle().then(release, release)
       await this.ctx.sessions.flush(agent.session)
       child.status = { state: 'started', sessionId }
+      this.trimFinished()
     } catch (error) {
       const failure = remoteErrorOf(error)
       const message = error instanceof Error ? error.message : String(error)
@@ -307,8 +365,43 @@ export class LoomBranchRunner {
       }
       this.ctx.logger.warn(`loom: child ${String(child.spec.index)} of branch set "${set.setId}" failed: ${message}`)
     } finally {
-      if (!prompted) this.release(folder)
+      if (!prompted) {
+        child.finished = true
+        this.release(folder)
+      }
+      this.trimFinished()
     }
+  }
+
+  /**
+   * Create one child's worktree in its repository's turn and enter it. The
+   * set's first worktree starts from the source folder's HEAD plus its
+   * uncommitted tracked changes; every later child starts from that commit.
+   * @param set - the child's set.
+   * @param worktree - the set's repository.
+   * @param agent - the child's Agent.
+   * @param sessionId - the child's Session, which names its branch.
+   * @returns the child's isolation record.
+   * @throws RemoteError `loom/isolation-unavailable` when the worktree service unloaded since the set was resolved,
+   *   and the worktree service's failures.
+   */
+  private isolate(set: SetEntry, worktree: LoomWorktreeSpec, agent: Agent, sessionId: SessionId): Promise<LoomIsolationRecord> {
+    return this.repositories.run(worktree.repositoryRoot, async () => {
+      const worktrees = this.ctx.get('worktrees')
+      if (worktrees === undefined) {
+        throw new RemoteError('loom/isolation-unavailable', 'the worktree service unloaded before the child was isolated', { reason: 'service-unavailable' })
+      }
+      const name = `${this.limits.worktreeBranchPrefix}${sessionId}`
+      const created = await worktrees.create(agent, set.base === undefined ? { name, includeUncommitted: true } : { name, from: set.base })
+      set.base ??= created.baseCommit
+      return {
+        version: 1,
+        baseCommit: created.baseCommit,
+        worktreePath: created.path,
+        branchName: created.branch,
+        repositoryRoot: created.repositoryRoot,
+      }
+    })
   }
 }
 

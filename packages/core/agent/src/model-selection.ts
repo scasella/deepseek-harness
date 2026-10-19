@@ -112,11 +112,11 @@ export function installModelSelection(agentCtx: Context, selection: ModelSelecti
   )
   const disposeNotice = agentCtx.on(
     'agent/pre-step',
-    async ({ agent, messages, signal, step }, next): Promise<PreStepDecision> => {
+    async ({ agent, messages, signal, step, continuation }, next): Promise<PreStepDecision> => {
       const decision = await next()
       if (decision.kind === 'reject' || signal.aborted) return decision
       // The loop skips an empty first step and an emptied offered continuation.
-      if (decision.messages.length === 0 && (step === 1 || messages.length > 0)) return decision
+      if (decision.messages.length === 0 && continuation === undefined && (step === 1 || messages.length > 0)) return decision
       const selected = selection.assembled
       const previous = agent.session.requestHeader()?.config
       if (selected === undefined || previous === undefined || sameRoute(selected, previous)) return decision

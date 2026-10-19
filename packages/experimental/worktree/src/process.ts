@@ -15,6 +15,34 @@ export interface ProcessConfig {
   maxOutputBytes: number
 }
 
+/** Per-command choices beyond the argv. */
+export interface CommandOptions {
+  /** Command-specific successful statuses; omission accepts 0 only. */
+  allowedExitCodes?: readonly number[]
+  /** Command-local environment overrides, applied after Git selector removal. */
+  env?: NodeJS.ProcessEnv
+  /** Text written to standard input before it is closed; omission leaves standard input on the null device. */
+  stdin?: string
+  /** Standard-output cap for this command; omission uses the configured `maxOutputBytes`. */
+  maxOutputBytes?: number
+  /**
+   * `fail`, the default, rejects a command whose standard output exceeds its cap. `report` resolves
+   * with `truncated` set and an empty `stdout` instead.
+   */
+  overflow?: 'fail' | 'report'
+}
+
+/** Complete output of one command whose exit code was allowed. */
+export interface CommandResult {
+  /** Complete standard output; empty when `truncated`. */
+  stdout: string
+  /** Standard error, its tail when it exceeded the configured cap. */
+  stderr: string
+  exitCode: number
+  /** Whether standard output exceeded its cap; only an `overflow: 'report'` command resolves with it set. */
+  truncated: boolean
+}
+
 /** Clear inherited repository, attribute-tree, command-line configuration, and replacement-ref selectors. */
 const GIT_ENV: NodeJS.ProcessEnv = Object.fromEntries([
   'GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY',
@@ -31,9 +59,9 @@ const GIT_ENV: NodeJS.ProcessEnv = Object.fromEntries([
  * @param cwd - canonical process working directory.
  * @param argv - executable followed by literal arguments.
  * @param signal - operation cancellation.
- * @param allowedExitCodes - command-specific successful statuses.
- * @param env - command-local environment overrides, applied after Git selector removal.
- * @returns complete bounded stdout and the exit code.
+ * @param options - allowed statuses, environment overrides, standard input, and the output cap.
+ * @returns complete bounded output and the exit code.
+ * @throws when the exit code is not allowed, or standard output exceeds its cap under `overflow: 'fail'`.
  */
 export async function runCommand(
   ctx: Context,
@@ -42,9 +70,9 @@ export async function runCommand(
   cwd: string,
   argv: readonly [string, ...string[]],
   signal: AbortSignal,
-  allowedExitCodes: readonly number[] = [0],
-  env: NodeJS.ProcessEnv = {},
-): Promise<{ stdout: string; exitCode: number }> {
+  options: CommandOptions = {},
+): Promise<CommandResult> {
+  const { allowedExitCodes = [0], env = {}, stdin, maxOutputBytes = config.maxOutputBytes, overflow = 'fail' } = options
   using timeout = deadline(signal, config.timeoutMs, 'WORKTREE_TIMEOUT')
   timeout.signal.throwIfAborted()
   const program = await ctx.subprocess.resolveExecutable(argv[0], undefined, timeout.signal)
@@ -60,8 +88,8 @@ export async function runCommand(
     signal: timeout.signal,
     graceMs: config.graceMs,
     stdio: {
-      stdin: 'ignore',
-      stdout: { maxBytes: config.maxOutputBytes },
+      stdin: stdin === undefined ? 'ignore' : { data: stdin },
+      stdout: { maxBytes: maxOutputBytes },
       stderr: { maxBytes: config.maxOutputBytes },
     },
   })
@@ -75,8 +103,8 @@ export async function runCommand(
     if (outcome.exitCode === null || !allowedExitCodes.includes(outcome.exitCode)) {
       throw new Error(`worktree command failed (${outcome.signal ?? outcome.exitCode}): ${stderr.text.trim()}`)
     }
-    if (stdout.lossy) throw new Error('worktree command output exceeds maxOutputBytes')
-    return { stdout: stdout.text, exitCode: outcome.exitCode }
+    if (stdout.lossy && overflow === 'fail') throw new Error('worktree command output exceeds maxOutputBytes')
+    return { stdout: stdout.lossy ? '' : stdout.text, stderr: stderr.text, exitCode: outcome.exitCode, truncated: stdout.lossy }
   } finally {
     child.terminate()
     await child.waitForExit()

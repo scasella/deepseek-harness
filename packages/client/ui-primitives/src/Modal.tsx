@@ -18,6 +18,7 @@ interface ModalBaseProps {
   shortcutModal?: string
   onKeyDownCapture?: KeyboardEventHandler<HTMLDivElement>
   backdropBlur?: boolean
+  placement?: 'center' | 'bottom'
 }
 
 type ModalProps = ModalBaseProps & (
@@ -38,6 +39,7 @@ type ModalProps = ModalBaseProps & (
  * @param props.footer - action row (Cancel / Create).
  * @param props.contentClassName - optional class for a scrollable content region.
  * @param props.backdropBlur - disable when the caller already blurs the page; defaults to true.
+ * @param props.placement - centered card by default, or a full-width sheet anchored at the bottom.
  * @param props.shortcutModal - command scope allowed by shortcut owners; unnamed
  * dialogs block application commands unless their owner allows the "other" scope.
  * @param props.headless - render children directly in the card (no default
@@ -47,7 +49,7 @@ type ModalProps = ModalBaseProps & (
  */
 export function Modal({
   open, onClose, title, closeLabel, description, children, footer, className, contentClassName,
-  onKeyDownCapture, headless = false, backdropBlur = true, shortcutModal,
+  onKeyDownCapture, headless = false, backdropBlur = true, shortcutModal, placement = 'center',
 }: ModalProps) {
   const dialog = useRef<HTMLDivElement>(null)
   useModalLayer(dialog, open, onClose)
@@ -55,13 +57,13 @@ export function Modal({
   if (!open) return null
 
   return createPortal((
-    <div className={css.root} role="presentation" onKeyDownCapture={onKeyDownCapture}>
+    <div className={clsx(css.root, placement === 'bottom' && css.sheetRoot)} role="presentation" onKeyDownCapture={onKeyDownCapture}>
       <div className={css.mask} style={backdropBlur ? undefined : { backdropFilter: 'none' }} aria-hidden="true" onClick={onClose} />
       <div
         ref={dialog}
         tabIndex={-1}
         data-shortcut-modal={shortcutModal}
-        className={clsx(css.dialog, className)}
+        className={clsx(css.dialog, placement === 'bottom' && css.sheet, className)}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -88,4 +90,16 @@ export function Modal({
       </div>
     </div>
   ), document.body)
+}
+
+/** Bottom-sheet labels, content, and actions, with the shared Modal focus and dismissal behavior. */
+export type BottomSheetProps = ModalProps & { placement?: never }
+
+/**
+ * Render a body-portaled bottom sheet with Modal focus containment and return focus.
+ * @param props - owner-localized title and close label, visibility, content, and close callback.
+ * @returns the sheet, or null while closed.
+ */
+export function BottomSheet(props: BottomSheetProps) {
+  return <Modal {...props} placement="bottom" />
 }

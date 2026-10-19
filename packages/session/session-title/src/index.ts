@@ -15,7 +15,7 @@ import type {
   Session,
   SessionEvent,
 } from '@deepseek-ai/dsh-session'
-import { SessionSeq } from '@deepseek-ai/dsh-session'
+import { SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-projection'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-agent'
@@ -95,7 +95,7 @@ export type SessionTitleAutomaticMode = 'first-prompt' | 'all-prompts'
 export interface SessionTitleProviderRequest {
   /** Live session being titled. */
   readonly session: Session
-  /** All eligible human messages through this generation revision. */
+  /** This Session's own eligible human messages through this generation revision. */
   readonly messages: readonly SessionTitleUserMessage[]
   /** Exact current logged main-request route, when one has been recorded. */
   readonly route?: SessionTitleModelIdentity
@@ -216,14 +216,13 @@ function titleSnapshotFromState(state: TitleProjection): SessionTitleSnapshot {
   })
 }
 
-const EMPTY_TITLE_INPUT: TitleInputState = { first: null, count: 0, lastSeq: null }
-
 const sessionTitleUserMessageSchema: ZodType<SessionTitleUserMessage> = zod.object({
   seq: zod.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).transform(SessionSeq),
   text: zod.string(),
 }).strict()
 
 const titleInputStateSchema: ZodType<TitleInputState> = zod.object({
+  inheritedEventCount: zod.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).transform(SessionLogOffset),
   first: sessionTitleUserMessageSchema.nullable(),
   count: zod.number().int().nonnegative(),
   lastSeq: zod.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).transform(SessionSeq).nullable(),
@@ -232,6 +231,7 @@ const titleInputStateSchema: ZodType<TitleInputState> = zod.object({
   const populated = state.first !== null
     && state.lastSeq !== null
     && state.count > 0
+    && state.first.seq >= state.inheritedEventCount
     && state.first.seq <= state.lastSeq
   if (!empty && !populated) {
     context.addIssue({
@@ -248,14 +248,17 @@ const titleInputStateSchema: ZodType<TitleInputState> = zod.object({
  * the O(1) `titleInput` projection.
  * @param events - the session event log.
  * @param throughSeq - optional inclusive upper seq bound.
+ * @param inheritedEventCount - fork-inherited prefix excluded from generation.
  * @returns eligible messages with exact source seqs.
  */
 function collectSessionTitleMessages(
   events: readonly SessionEvent[],
   throughSeq?: SessionSeq,
+  inheritedEventCount: SessionLogOffset = SessionLogOffset(0),
 ): SessionTitleUserMessage[] {
   const messages: SessionTitleUserMessage[] = []
   for (const event of events) {
+    if (event.seq < inheritedEventCount) continue
     if (throughSeq !== undefined && event.seq > throughSeq) break
     const message = sessionTitleUserMessageOf(event)
     if (message !== undefined) messages.push(message)
@@ -345,13 +348,15 @@ export class SessionTitleService extends Service {
 
     ctx.sessionProjections.register<'titleInput', TitleInputState>({
       key: 'titleInput',
-      stateVersion: 3,
+      stateVersion: 4,
       stateSchema: titleInputStateSchema,
-      init: () => EMPTY_TITLE_INPUT,
+      init: (_header, inheritedEventCount) => ({ inheritedEventCount, first: null, count: 0, lastSeq: null }),
       apply: (state, event) => {
+        if (event.seq < state.inheritedEventCount) return state
         const message = sessionTitleUserMessageOf(event)
         if (message === undefined) return state
         return {
+          inheritedEventCount: state.inheritedEventCount,
           first: state.first ?? message,
           count: state.count + 1,
           lastSeq: message.seq,
@@ -507,12 +512,13 @@ export class SessionTitleService extends Service {
     if (!this.serviceActive()) return
     if (event.data.source.kind !== 'user' || sessionTitleUserMessageOf(event) === undefined) return
     // A user rename pins the title: no automatic revision may override it.
-    if (this.get(session)?.source.kind === 'user') return
+    const title = this.get(session)
+    if (title?.source.kind === 'user' && title.eventSeq >= session.inheritedEventCount) return
     const registration = this.registration
     if (registration !== undefined && !registration.closing) {
       const count = this.titleInputOf(session).count
       const shouldSchedule = registration.provider.automatic === 'all-prompts'
-        || (session.header.parentSession === undefined && count === 1 && this.get(session) === undefined)
+        || (count === 1 && (title === undefined || title.eventSeq < session.inheritedEventCount))
       if (shouldSchedule) {
         const state = this.stateFor(session)
         const revision = this.supersede(state, 'newer user message superseded title generation')
@@ -604,7 +610,7 @@ export class SessionTitleService extends Service {
       // watermark, while the current title is not bounded by that watermark.
       // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
       const events = session.snapshotEvents()
-      const messages = collectSessionTitleMessages(events, work.throughSeq)
+      const messages = collectSessionTitleMessages(events, work.throughSeq, session.inheritedEventCount)
       const currentTitle = foldSessionTitle(events)
       const result = await work.registration.provider.generate({
         session,
@@ -809,8 +815,8 @@ export class SessionTitleService extends Service {
   private async ensureFallback(session: Session): Promise<SessionTitleSnapshot | undefined> {
     this.assertServiceActive()
     const current = this.get(session)
-    if (current !== undefined) return current
     const first = this.titleInputOf(session).first
+    if (current !== undefined && (current.eventSeq >= session.inheritedEventCount || first === null)) return current
     if (first === null) return undefined
     const title = fallbackSessionTitle(
       first.text,
@@ -826,7 +832,7 @@ export class SessionTitleService extends Service {
         throw new Error(`session "${session.id}" is not live in this store`)
       }
       const accepted = this.get(session)
-      if (accepted !== undefined) return accepted
+      if (accepted !== undefined && accepted.eventSeq >= session.inheritedEventCount) return accepted
       session.append('session/title', {
         title,
         messageSeqs: [first.seq],

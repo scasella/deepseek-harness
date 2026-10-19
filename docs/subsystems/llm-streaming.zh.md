@@ -199,13 +199,14 @@ interface ReplayEnvelope {
  * afterward; tool arguments remain raw JSON strings. An adapter implementation
  * may throw, but `LlmRuntime.stream()` normalizes that failure to a terminal
  * `error` or `aborted` finish before exposing it to consumers.
+ * Completed text blocks may carry generation-time token probabilities.
  */
 type StreamChunk =
   | { type: 'block-start'; index: number; blockType: ContentBlockType }
   | { type: 'text-delta'; index: number; text: string }
   | { type: 'reasoning-delta'; index: number; text: string }
   | { type: 'tool-call-delta'; index: number; id: ToolCallId; name?: string; argumentsDelta: string }
-  | { type: 'block-end'; index: number; block: ContentBlock }
+  | { type: 'block-end'; index: number; block: ContentBlock; logprobs?: BlockTokenLogprobs }
   | { type: 'usage'; usage: TokenUsage }
   | {
     type: 'finish'
@@ -592,6 +593,10 @@ interface LlmModelReasoningInfo {
 ```ts type-equiv
 /** Exact-route model metadata resolved by its owning adapter. */
 interface LlmResolvedModelInfo extends LlmModelInfo {
+  /** Sampled-token probabilities with at most this many alternatives per position. */
+  tokenLogprobs?: { readonly maxTopLogprobs: number }
+  /** Assistant prefixes are accepted only on auxiliary requests without tools or tool history. */
+  assistantPrefill?: 'tool-free'
   /** Provider-owned context capacity when known. */
   context?: LlmModelContext
   /** Adapter-configured per-request output cap materialized when callers omit one. */
@@ -648,6 +653,10 @@ interface GenerateOptions {
   toolHistory?: ToolHistory
   temperature?: number
   maxTokens?: number
+  /** Number of alternatives to capture per output token, 0–20; presence requests sampled-token probabilities. */
+  topLogprobs?: number
+  /** Tool-free auxiliary response prefix; output contains only its continuation. The exact prefix must be logged before dispatch. */
+  assistantPrefix?: string
   /**
    * Stop sequences: generation halts as soon as the model produces any one of
    * these strings (adapters map to the provider's stop field, e.g. OpenAI
@@ -787,6 +796,8 @@ interface LlmCallControls {
   reasoningEffort?: ReasoningEffortId
   temperature?: number
   maxTokens?: number
+  /** Alternatives captured per output token; presence enables token probabilities. */
+  topLogprobs?: number
   stop?: string[]
 }
 ```
@@ -844,6 +855,10 @@ interface LlmCallConfigAdapterDefaults {
 ```ts type-equiv
 /** One model call whose config and adapter registration were resolved together. */
 interface PreparedLlmCall {
+  /** Exact model sampled-token probability capability. */
+  readonly tokenLogprobs?: LlmResolvedModelInfo['tokenLogprobs']
+  /** Exact model's tool-free auxiliary prefix support. */
+  readonly assistantPrefill?: 'tool-free'
   /** Detached, deep-frozen config with any adapter-owned default materialized. */
   readonly config: LlmCallConfig
   /** Immutable retry policy captured with the adapter registration. */

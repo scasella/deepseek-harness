@@ -6,8 +6,11 @@ import { mountLoom } from './mount.ts'
 export { inject } from './mount.ts'
 export type {
   LoomBranchDraft, LoomBranchForm, LoomBranchingState, LoomFailure, LoomMarkOverride, LoomOutcome, LoomTrackedChild,
-  LoomTrackedSet,
+  LoomTrackedSet, LoomValueOutcome,
 } from './branching.ts'
+export type { CompareDetailProps } from './CompareDetail.tsx'
+export type { CompareViewProps } from './CompareView.tsx'
+export type { LoomReadState } from './read-sources.ts'
 export type { LoomDockProps } from './dock.ts'
 export type { EditBranchProps } from './EditBranch.tsx'
 export type { LoomFamilyState } from './family.ts'
@@ -20,7 +23,15 @@ export type { LoomRequestState } from './requests.ts'
 export type { LoomRouteOption, LoomRoutesState } from './routes.ts'
 export type { LoomTailProps } from './tail.ts'
 export type { VariantChipProps } from './VariantChip.tsx'
-export type { LoomViewState } from './view-store.ts'
+export type { LoomProseDraft, LoomViewMode, LoomViewState } from './view-store.ts'
+export type { LoomWorkspace } from './workspace.ts'
+export type { MultiverseInjected, MultiversePageProps } from './MultiversePage.tsx'
+export type { MultiverseSearchRequest, MultiverseSearchValue } from './multiverse.ts'
+export type { LoomProseCalls, LoomProseInjected } from './prose.ts'
+export type { WeaveViewProps } from './WeaveView.tsx'
+export type { CounterfactualActionProps, CounterfactualInjected } from './CounterfactualAction.tsx'
+export type { TokenTextProps } from './TokenText.tsx'
+export type { AutoloomCardProps, AutoloomCardValue } from './AutoloomCard.tsx'
 
 /**
  * Activate the experimental Loom contribution.

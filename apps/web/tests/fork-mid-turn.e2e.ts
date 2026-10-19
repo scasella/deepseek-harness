@@ -134,15 +134,12 @@ describe('web e2e: exact-boundary fork seeds branch closers and continues', () =
 
   it.skipIf(MODE === 'record')('continues the child through the composer as a resume of the branched log', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-fork-mid-turn'))
-    // The session-added frame published the child row; the list sorts by
-    // recency, so the just-forked child is the first session row after the
-    // group header (the seeded source stays last). The settled-turn assertion
-    // below proves the prompt really ran on the child.
+    // Families keep the source before its descendants regardless of recency.
     const groupRow = page.locator('[role="treeitem"]').first()
     await groupRow.waitFor({ timeout: 15_000 })
     await groupRow.click()
     await expect.poll(() => page.locator('[role="treeitem"]').count(), { timeout: 15_000 }).toBe(3)
-    await page.locator('[role="treeitem"]').nth(1).click()
+    await page.locator(`[data-row-key="session:${childId}"]`).click()
     // The child renders the inherited prefix up to the cut.
     await expect.poll(() => page.getByText('Use the read tool twice', { exact: false }).count(), { timeout: 15_000 })
       .toBeGreaterThanOrEqual(1)

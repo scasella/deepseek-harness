@@ -60,6 +60,8 @@ async function harness(script: AdapterArgs[0], reasoning?: AdapterArgs[1]): Prom
     return next()
   })
   ctx.provide('workspaceRegistry', { list: () => [], archivedSessionIds: [] } as never)
+  // Loom reads the filesystem only to isolate children in worktrees, which these specs never request.
+  ctx.provide('fs', {} as never)
   const remote = createSessionTestRemote(ctx, { defaultModelSelection: () => ({ provider: 'mock', model: 'mock' }), cwd: '/tmp' })
   await ctx.plugin(Loom)
   return { ctx, agents, adapter, remote, requests }

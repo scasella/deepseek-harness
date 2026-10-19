@@ -3,7 +3,7 @@
 label lines: 3
 chip heights: 32, 32
 current chip in view: true
-header variant chips: 0
+header variant chips: 1
 page scrolls sideways: false
 
 ## Band
@@ -21,6 +21,7 @@ page scrolls sideways: false
   - navigation "Session hierarchy":
     - button "Loom family"
     - text: / Loom family
+  - button "Variant 1 of 2, after turn 1. Switch variant": Variant 1 of 2
   - button "More actions"
   - button "Open right sidebar"
   - tablist:

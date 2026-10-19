@@ -27,7 +27,16 @@
       "path": "../../core/session"
     },
     {
+      "path": "../../deliverables/workspace-changes"
+    },
+    {
+      "path": "../../fs/fs"
+    },
+    {
       "path": "../../llm/llm"
+    },
+    {
+      "path": "../../llm/token-meter"
     },
     {
       "path": "../../sandbox/sandbox-policy"
@@ -36,7 +45,16 @@
       "path": "../../session/session-projection"
     },
     {
+      "path": "../../session/session-stats"
+    },
+    {
       "path": "../../session/session-telemetry"
+    },
+    {
+      "path": "../../session/session-title"
+    },
+    {
+      "path": "../../session/working-directory"
     },
     {
       "path": "../../typert/protocol"
@@ -46,6 +64,15 @@
     },
     {
       "path": "../../util/values"
+    },
+    {
+      "path": "../../workspace/workspace"
+    },
+    {
+      "path": "../worktree"
+    },
+    {
+      "path": "../../client/connection/tsconfig.host.json"
     }
   ]
 }

@@ -3,7 +3,9 @@ import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { LoomBranching, LoomBranchingState } from './branching.ts'
 import type { LoomFamilyState } from './family.ts'
+import type { LoomReadState } from './read-sources.ts'
 import type { LoomRoutesState } from './routes.ts'
+import type { LoomEstimateValue } from '@deepseek-ai/dsh-experimental-loom/types'
 
 /** Family hook source and navigation callbacks the band, the header chip, and the view receive. */
 export interface LoomLinkInjected {
@@ -23,6 +25,10 @@ export interface LoomLinkInjected {
 
 /** Branching state, route list, and verbs the turn-tail actions, dock entries, user-message editor, and view receive. */
 export interface LoomBranchingInjected extends LoomLinkInjected {
+  readonly keyedHooks: LoomLinkInjected['keyedHooks'] & {
+    /** Cost estimates keyed by {@link loomEstimateKey}, bound as `useLoomEstimate(key)`. */
+    readonly loomEstimate: (key: string) => ObservableSnapshot<LoomReadState<LoomEstimateValue>>
+  }
   readonly hooks: {
     /** Branch sets, forms, and marks being saved, bound as `useLoomBranching(selector)`. */
     readonly loomBranching: ObservableSnapshot<LoomBranchingState>

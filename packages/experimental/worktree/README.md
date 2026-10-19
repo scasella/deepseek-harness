@@ -1,5 +1,5 @@
 ---
-description: "Create and enter a retained Git worktree under the calling Session file policy."
+description: "Create, enter, and remove Git worktrees under the calling Session file policy."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Create an isolated checkout from a local commit and continue the same Session in it. Each operation creates a new named branch and leaves the source checkout intact. The existing sandbox governs all writes. Leaving the checkout retains its files and branch.
+Create an isolated checkout from a local commit, or from the caller's uncommitted tracked changes, and continue the same Session in it. Each creation makes a new named branch and leaves the source checkout intact. The existing sandbox governs all writes. Leaving the checkout retains its files and branch until a consumer removes it.
 
 ## Table of Contents
 
@@ -34,6 +34,10 @@ Mount the service alongside `workingDirectory`, `fs`, `subprocess`, `sandbox`, a
 
 `ctx.worktrees.create(agent, { name?, from? }, signal?)` creates a new branch and checkout, then enters the canonical checkout directory through `ctx.workingDirectory.set`. `from` resolves to a local commit before creation and defaults to `HEAD`; staged, unstaged, untracked, and ignored source files are not copied. `baseCommit` reports the resolved commit object name; repository-local replacement refs still apply to the checked-out content. Checkout disables configured Git clean, smudge, and process filters without changing repository configuration. An existing branch or checkout path is an error. The returned record contains `path`, `branch`, `baseCommit`, and `repositoryRoot`.
 
+`includeUncommitted: true`, with `from` omitted, bases the checkout on a new commit whose only parent is HEAD and whose tree holds the caller's tracked files as they are, staged and unstaged changes included; without such changes the base is HEAD. The commit is made with `git stash create` and `git commit-tree` under the fixed identity `dsh worktree <worktree@dsh.invalid>`, with configured filters disabled; no ref, index entry, or file of the source checkout changes, and untracked and ignored files are not carried.
+
+`ctx.worktrees.remove(agent, { path, branch, repositoryRoot }, signal?)` removes one linked checkout with `git worktree remove --force` and deletes its branch, discarding the files it holds. It returns `{ kind: 'missing' }` and changes nothing unless the repository registers a linked checkout at that path holding that branch, so a consumer removes only checkouts it created. When the caller's current directory is inside the checkout, the caller first moves to `repositoryRoot`. `ctx.worktrees.locate(directory)` finds the repository that contains a directory from the nearest `.git` entry at or above it, reports whether that entry is a directory or a file, and runs no command. `ctx.worktrees.git(agent, { cwd, args, allowedExitCodes?, stdin?, disableFilters?, maxOutputBytes? })` runs one Git command with this service's executable, hooks and the file-system monitor disabled, under the caller's file policy, and reports standard output beyond its cap as `truncated` instead of failing.
+
 The default checkout directory is `<current checkout root>/.agents/worktrees/<name>`. The returned `repositoryRoot` is the top-level directory of the caller’s current checkout; when it is a linked checkout, the pool is nested inside it. Omitted names use `worktree-` plus a UUID. The service writes a `.gitignore` containing `*` and a trailing newline only when its allocation creates the pool; existing files and ignore rules are preserved. Relative `directory`, generated `namePrefix`, executable choices, and process limits are configurable in the [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-experimental-worktree).
 
 -----
@@ -44,7 +48,7 @@ The default checkout directory is `<current checkout root>/.agents/worktrees/<na
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-Git and directory allocation run through the mounted subprocess and sandbox providers with the calling Session's existing file policy. Creation does not widen write access to the destination or shared Git administration directory. Directory creation claims the destination exclusively; cancellation and failed setup can leave retained artifacts, whose path appears in the error. Service disposal aborts pending operations and waits for their settlement.
+Git and directory allocation run through the mounted subprocess and sandbox providers with the calling Session's existing file policy. Creation and removal do not widen write access to the destination or shared Git administration directory. Directory creation claims the destination exclusively; cancellation and failed setup can leave retained artifacts, whose path appears in the error. Service disposal aborts pending operations and waits for their settlement.
 
 | Source | Responsibility |
 |---|---|
@@ -82,8 +86,8 @@ This package contributes no prompt text. Its consumers own the appended tool res
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **Retained artifacts** — leaving a worktree keeps its branch and files. Setup failures can also retain partial artifacts; removal, pruning, and branch deletion belong to the user or another consumer.
-- **Local revisions only** — creation does not fetch commits or missing partial-clone objects, initialize submodules, install dependencies, or copy uncommitted files. On Git that meets the execution requirements, missing local objects cause creation to fail.
+- **Retained artifacts** — leaving a worktree keeps its branch and files until a consumer calls `remove()`. Setup failures can also retain partial artifacts, which the service does not track; pruning and the removal of checkouts it did not register belong to the user.
+- **Local revisions only** — creation does not fetch commits or missing partial-clone objects, initialize submodules, install dependencies, or copy untracked files; uncommitted tracked changes are carried only through `includeUncommitted`. On Git that meets the execution requirements, missing local objects cause creation to fail.
 - **Filtered representations** — checkout skips configured filters to avoid executing repository-configured programs or triggering implicit downloads. Git LFS pointers and encrypted blobs stay in their stored representation; hydration or decryption is a separate user-controlled operation.
 - **Execution requirements** — the subprocess provider must offer Git and Node in the same execution world as the filesystem provider. Git must honor `GIT_NO_LAZY_FETCH`, which Git 2.45 and the 2.39.4, 2.40.2, 2.41.1, 2.42.2, 2.43.4, and 2.44.1 maintenance releases do; older releases ignore it and proceed instead of failing, so creation can fetch missing partial-clone objects from a promisor remote. The `git --no-lazy-fetch` option would reject these releases, but it exists only in Git 2.45 and later and also rejects the patched maintenance releases. The existing sandbox must permit all checkout and shared Git metadata writes.
 

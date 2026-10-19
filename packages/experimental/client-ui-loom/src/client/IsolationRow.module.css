@@ -1,0 +1,67 @@
+/* Two stacked radio rows: a long label and its note do not fit side by side in a 440px panel. */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.option:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.dot {
+  box-sizing: border-box;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: 50%;
+  corner-shape: round;
+}
+
+.checked .dot {
+  border: 4px solid var(--dsw-alias-label-primary);
+}
+
+.text {
+  min-width: 0;
+}
+
+.label {
+  display: block;
+  color: var(--dsw-alias-label-primary);
+}
+
+@media (hover: hover) {
+  .option:not(:disabled):hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+.option:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+}
+
+/* A phone keeps the options 44px tall. */
+@media (max-width: 480px) {
+  .option {
+    min-height: 44px;
+    padding: 8px 6px;
+  }
+}

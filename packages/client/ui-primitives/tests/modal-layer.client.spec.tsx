@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { Modal } from '../src/Modal.tsx'
+import { BottomSheet, Modal } from '../src/Modal.tsx'
 import { closeTopModal, isBehindModal } from '../src/useModalLayer.ts'
 import { Menu } from '../src/Menu.tsx'
 
@@ -24,6 +24,51 @@ function Nested({ withSearch = true }: { withSearch?: boolean }) {
   </>
 }
 const escape = (init = {}) => fireEvent.keyDown(document.activeElement ?? document, { key: 'Escape', code: 'Escape', ...init })
+
+function Sheet() {
+  const [open, setOpen] = useState(false)
+  return <>
+    <button onClick={() => { setOpen(true) }}>Variants</button>
+    <BottomSheet open={open} title="Variants" closeLabel="Close variants" onClose={() => { setOpen(false) }}>
+      <button>Keep variant</button>
+      <input aria-label="Filter variants" />
+    </BottomSheet>
+  </>
+}
+
+it('opens a sheet without focusing an input and restores its opener after Escape', () => {
+  render(<Sheet />)
+  expect(screen.queryByRole('dialog')).toBeNull()
+  const opener = screen.getByRole('button', { name: 'Variants' })
+  opener.focus()
+  fireEvent.click(opener)
+  const dialog = screen.getByRole('dialog', { name: 'Variants' })
+  expect(dialog.getAttribute('aria-modal')).toBe('true')
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close variants' }))
+  dialog.focus()
+  fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true })
+  expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Filter variants' }))
+  fireEvent.keyDown(document.activeElement!, { key: 'Tab' })
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close variants' }))
+  escape()
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(document.activeElement).toBe(opener)
+})
+
+it.each(['close', 'mask'])('dismisses a sheet through its %s control', (target) => {
+  render(<Sheet />)
+  const opener = screen.getByRole('button', { name: 'Variants' })
+  opener.focus()
+  fireEvent.click(opener)
+  const dialog = screen.getByRole('dialog', { name: 'Variants' })
+  const control = target === 'close'
+    ? screen.getByRole('button', { name: 'Close variants' })
+    : dialog.previousElementSibling!
+  fireEvent.click(control)
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(document.activeElement).toBe(opener)
+})
+
 it('closes only the top modal through application commands and restores each opener', () => {
   render(<Nested />)
   const settings = screen.getByRole('button', { name: 'Settings' }); settings.focus(); fireEvent.click(settings)

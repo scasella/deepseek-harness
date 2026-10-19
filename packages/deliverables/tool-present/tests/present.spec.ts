@@ -38,6 +38,7 @@ async function agent(ctx: Context, cwd: string | undefined): Promise<Agent> {
     status: 'idle',
     get ctx() { return scope.ctx },
     send: () => {},
+    continue: () => {},
     followup: () => {},
     steer: () => ({ outcome: Promise.resolve({ status: 'rejected' as const }) }),
     inject: () => {},

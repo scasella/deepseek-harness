@@ -29,6 +29,9 @@
 /deepseek-ai-dsh-llm-replay/use-this-package/failure-modes-and-overrides:
   en: 319e95521a4a06fe
   zh: 884c8299028df8a3
+/deepseek-ai-dsh-llm-replay/use-this-package/replay-loom-auxiliary-generations:
+  en: b7b25140cb9dc75b
+  zh: ca4a7671948da08f
 /deepseek-ai-dsh-llm-replay/use-this-package/what-can-go-wrong:
   en: 965da31d63ec88fe
   zh: 8ca1428daae5d583

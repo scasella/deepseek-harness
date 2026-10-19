@@ -24,6 +24,13 @@ function trigger(source: unknown): ChatNode<'turn-trigger'> {
 }
 
 describe('Turn trigger notices', () => {
+  it('identifies a weaver child from its recorded source', () => {
+    expect(turnTriggerDetails(trigger({ kind: 'loom', weaver: 'parent', callId: 'expand' }).data))
+      .toEqual({ title: 'message.trigger.loom', icon: 'agent' })
+    const view = render(<TurnTriggerNodeView node={trigger({ kind: 'loom' })} t={makeTranslate(en)} />)
+    expect(view.getByRole('button').textContent).toContain('Weaver branch')
+  })
+
   it.each([
     [{ kind: 'schedule' }, 'schedule', 'Automation task'],
     [{ kind: 'tool-jobs' }, 'job', 'Background task updated'],

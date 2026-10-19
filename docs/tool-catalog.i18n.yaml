@@ -9,8 +9,8 @@
   en: 6cc2cd9ced70bb09
   zh: 1c0e6cb4ba2ed637
 /tool-schema-catalog/tool-package-map:
-  en: e72ad7af437fa362
-  zh: d8f3683a4efe01b0
+  en: 88eafa22238bcfef
+  zh: 3f441caac2902246
 /tool-schema-catalog/deepseek-ai-dsh-plugin-manager:
   en: e0143916bb634762
   zh: e0143916bb634762
@@ -300,8 +300,26 @@
   en: 1bdc4627ca4fff29
   zh: 1bdc4627ca4fff29
 /tool-schema-catalog/deepseek-ai-dsh-tool-working-directory/working-directory:
-  en: ac1944f6035b8b50
-  zh: f5fc005c13185211
+  en: 655ec5a66ae9c936
+  zh: 51540fdc05714ee8
+/tool-schema-catalog/deepseek-ai-dsh-experimental-tool-loom:
+  en: d38f1ac32baf9fca
+  zh: d38f1ac32baf9fca
+/tool-schema-catalog/deepseek-ai-dsh-experimental-tool-loom/loom-cull:
+  en: a9470e8df45195e5
+  zh: ae3d414b58135e2a
+/tool-schema-catalog/deepseek-ai-dsh-experimental-tool-loom/loom-expand:
+  en: 9c3331891dcb6c37
+  zh: f2231079d7eff62a
+/tool-schema-catalog/deepseek-ai-dsh-experimental-tool-loom/loom-keep:
+  en: 459b974d68886ae2
+  zh: 0b3b3c7deb9bb632
+/tool-schema-catalog/deepseek-ai-dsh-experimental-tool-loom/loom-read:
+  en: 0ca5271219064d2d
+  zh: caebb157e97d1a09
+/tool-schema-catalog/deepseek-ai-dsh-experimental-tool-loom/loom-wait:
+  en: dd47b5af98850a8a
+  zh: 1240917c36aa1f96
 /tool-schema-catalog/deepseek-ai-dsh-experimental-tool-worktree:
   en: d5f5679abe86e316
   zh: d5f5679abe86e316

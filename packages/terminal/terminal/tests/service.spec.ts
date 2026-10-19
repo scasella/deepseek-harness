@@ -31,6 +31,7 @@ function stubAgent(ctx: Context, rawId: string): Agent {
     status: 'idle',
     ctx: scopeFiber.ctx,
     send: () => {},
+    continue: () => {},
     followup: () => {},
     steer: () => ({ outcome: Promise.resolve({ status: 'rejected' as const }) }),
     inject: () => {},

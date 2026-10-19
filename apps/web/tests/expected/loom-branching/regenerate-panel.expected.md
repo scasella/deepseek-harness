@@ -14,7 +14,10 @@
     - button "Change"
     - text: Same as this branch
   - term: Workspace
-  - definition: Children share this folder, including edits earlier branches make
-  - term: Usage
-  - definition: 7.2K tok · 85% cache hit This turn's own usage
+  - definition:
+    - radiogroup "Where branches keep their files":
+      - radio "Run one at a time in the shared folder Children share this folder, including edits earlier branches make" [checked]
+      - 'radio "Isolate each branch in a worktree Each branch starts from a snapshot of this folder: committed files and uncommitted changes to tracked files. Untracked files are not carried over."'
+  - term: Cost
+  - definition: ≈ 7.2K tokens per branch · no list price for this route 85% of input was cached in this turn's own run
   - button "Regenerate ×1"

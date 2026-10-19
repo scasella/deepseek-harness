@@ -64,7 +64,11 @@
     "@deepseek-ai/dsh-util-values": "workspace:*",
     "@testing-library/react": "^16.3.3",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "@deepseek-ai/dsh-client-ui-layout": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-sidebar": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-tool": "workspace:*",
+    "@deepseek-ai/dsh-llm": "workspace:*"
   },
   "dsh": {
     "client": {

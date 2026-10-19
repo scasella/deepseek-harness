@@ -11,6 +11,7 @@ import {
   type SessionMessageProjection,
 } from '@deepseek-ai/dsh-session'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
+import { isSettlement } from './route.ts'
 import type { LoomRequestMessage, LoomRequestSystemPrompt, LoomRequestTools, LoomRequestView } from './types.ts'
 
 /** Most Unicode code points a request message preview holds, its trailing `…` included. */
@@ -40,15 +41,6 @@ export interface RequestLog {
   readonly events: readonly SessionEvent[]
   /** Number of leading events the Session inherited from its fork source. */
   readonly inheritedEventCount: number
-}
-
-/**
- * Narrow an event to a request settlement.
- * @param event - any logged event.
- * @returns whether the event settled one model request.
- */
-function isSettlement(event: SessionEvent): event is SessionEvent<'assistant/message'> | SessionEvent<'assistant/attempt'> {
-  return event.type === 'assistant/message' || event.type === 'assistant/attempt'
 }
 
 /**

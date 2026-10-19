@@ -1,0 +1,47 @@
+- text: After turn 1 · Compare family · 2 branches Branches ran in the shared folder
+- table "Branch comparison":
+  - rowgroup:
+    - row "Select Branch Tests Diff Steps Own tokens Wall Marks":
+      - columnheader "Select"
+      - columnheader "Branch"
+      - columnheader "Tests"
+      - columnheader "Diff"
+      - columnheader "Steps"
+      - columnheader "Own tokens"
+      - columnheader "Wall"
+      - columnheader "Marks"
+  - rowgroup:
+    - 'row "Compare family Compare family Passing approach adopted 4 passed no changes 1 200 tok {{duration}} Keep: Compare family Set aside: Compare family"':
+      - cell "Compare family":
+        - radio "Compare family" [checked]
+      - cell "Compare family Passing approach adopted"
+      - cell "4 passed"
+      - cell "no changes"
+      - cell "1"
+      - cell "200 tok"
+      - cell "{{duration}}"
+      - 'cell "Keep: Compare family Set aside: Compare family"':
+        - 'button "Keep: Compare family"'
+        - 'button "Set aside: Compare family"'
+    - 'row "Selected branch: Compare family"':
+      - 'cell "Selected branch: Compare family"':
+        - 'region "Selected branch: Compare family"':
+          - button "Adopted" [disabled]
+          - paragraph: Makes it the main line; the other branch is archived, never deleted.
+          - button "Continue here"
+          - paragraph: Opens this branch in Chat.
+          - paragraph: This branch worked in the shared folder, so its changes are already there, mixed with its siblings.
+          - paragraph: This branch has no text changes
+          - status: Adopted. 1 other branch archived, never deleted.
+    - 'row "Compare family Compare family Failing approach 1 of 4 failed no changes 1 200 tok {{duration}} Keep: Compare family Set aside: Compare family"':
+      - cell "Compare family":
+        - radio "Compare family"
+      - cell "Compare family Failing approach"
+      - cell "1 of 4 failed"
+      - cell "no changes"
+      - cell "1"
+      - cell "200 tok"
+      - cell "{{duration}}"
+      - 'cell "Keep: Compare family Set aside: Compare family"':
+        - 'button "Keep: Compare family"'
+        - 'button "Set aside: Compare family"'

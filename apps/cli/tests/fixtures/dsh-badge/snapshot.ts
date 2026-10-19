@@ -34,6 +34,7 @@ try {
     inbox: unsupportedInbox(),
     status: 'idle',
     send: () => {},
+    continue: () => {},
     followup: () => {},
     steer: () => {},
     inject: () => { throw new Error('dsh-badge snapshot must receive the catalog at the step boundary') },

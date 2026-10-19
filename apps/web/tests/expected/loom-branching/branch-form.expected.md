@@ -19,7 +19,12 @@
     - button "Change"
     - text: Same as parent
   - term: Workspace
-  - definition: Children share this folder, including edits earlier branches make
+  - definition:
+    - radiogroup "Where branches keep their files":
+      - radio "Run one at a time in the shared folder Children share this folder, including edits earlier branches make" [checked]
+      - 'radio "Isolate each branch in a worktree Each branch starts from a snapshot of this folder: committed files and uncommitted changes to tracked files. Untracked files are not carried over."'
+  - term: Cost
+  - definition: ≈ 5.7K tokens per branch · no list price for this route ≈ 11.4K tokens for 2 · 90% of input was cached across this family's own turns
   - text: Nothing runs until you start
   - button "Cancel"
   - button "Start 2 branches"

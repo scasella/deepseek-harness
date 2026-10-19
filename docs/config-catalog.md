@@ -220,7 +220,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-api-session-controller`
 
 - `inject`: `agentDefaultModel` · `agents` · `attachments` · `fileUploads` · `fs` · `llm` · `remoteAccess` · `sessions` · `sessionProjections` · `sessionQuery` · `typert` · `workspaceRegistry`
-- `source`: [`packages/api/session-controller/src/index.ts:96`](../packages/api/session-controller/src/index.ts)
+- `source`: [`packages/api/session-controller/src/index.ts:99`](../packages/api/session-controller/src/index.ts)
 
 ```ts config-catalog
 /** Session Controller deployment policy. */
@@ -1117,25 +1117,186 @@ export interface InspectorOptions {
 
 ## `@deepseek-ai/dsh-experimental-loom`
 
-- `inject`: `remoteAccess` · `sessionController` · `sessionProjections` · `sessions` · `typert`
-- `source`: [`packages/experimental/loom/src/index.ts:71`](../packages/experimental/loom/src/index.ts)
+- `inject`: `fs` · `llm` · `remoteAccess` · `sessionController` · `sessionProjections` · `sessions` · `typert` · `workspaceRegistry`
+- `source`: [`packages/experimental/loom/src/index.ts:154`](../packages/experimental/loom/src/index.ts)
 
 ```ts config-catalog
-/** Admission limits after schema defaults. */
-export type ResolvedConfig = Required<Config>
+/** Configuration after schema defaults. */
+export type ResolvedConfig = Required<Omit<Config, 'outcomes' | 'diff' | 'apply' | 'weave' | 'probe' | 'export'>> & {
+  /** Command output matching after defaults. */
+  readonly outcomes: Required<LoomOutcomesConfig>
+  /** Diff limits after defaults. */
+  readonly diff: Required<LoomDiffConfig>
+  /** Apply limits after defaults. */
+  readonly apply: Required<LoomApplyConfig>
+  /** Prose-generation settings after defaults. */
+  readonly weave: Required<LoomWeaveConfig>
+  /** Token-exploration limits after defaults. */
+  readonly probe: Required<LoomProbeConfig>
+  /** Download limits after defaults. */
+  readonly export: Required<LoomExportConfig>
+}
 
-/** Branch admission limits; omitted fields take their schema defaults. */
+/** Branch admission limits, isolation, outcomes, and diff limits; omitted fields take their schema defaults. */
 export interface Config {
   /** Largest number of children one `loom.branch` call may create; a larger request fails before any fork. Default 8. */
   readonly maxBranchesPerRequest?: number
   /** Largest number of Loom children that are being admitted or running their first prompt at once, across every set. Default 4. */
   readonly maxConcurrentBranches?: number
+  /** Finished sets retained in Host memory; oldest finished sets and retry results are evicted first. Default 256. */
+  readonly retainedBranchSets?: number
+  /** List prices in USD per million tokens, indexed by provider and model; no routes are priced by default. */
+  readonly pricing?: LoomPriceRow[]
   /**
    * Whether children whose inherited sandbox mode can write their folder may
    * run at once. When false, the default, such children that share a folder
    * run one at a time; read-only children are not limited by it.
    */
   readonly concurrentWritableBranches?: boolean
+  /** Where children keep their files when a `loom.branch` request names no `isolation`. Default `shared`. */
+  readonly defaultIsolation?: LoomIsolation
+  /**
+   * Prefix of the Git branch, and of the directory in the worktree pool, that
+   * each isolated child gets; the child's Session id follows it. Default `loom/`.
+   */
+  readonly worktreeBranchPrefix?: string
+  /** How `loom.compare` finds test outcomes. */
+  readonly outcomes?: LoomOutcomesConfig
+  /** Limits of `loom.diff`. */
+  readonly diff?: LoomDiffConfig
+  /** Limits of `loom.apply`. */
+  readonly apply?: LoomApplyConfig
+  /** Prose-generation limits, framing and cache-warming policy. */
+  readonly weave?: LoomWeaveConfig
+  /** Bounded next-token exploration limits. */
+  readonly probe?: LoomProbeConfig
+  /** Byte, retention and expiry limits for downloadable snapshots. */
+  readonly export?: LoomExportConfig
+}
+
+/** How `loom.compare` finds test outcomes in a branch's own command output. */
+export interface LoomOutcomesConfig {
+  /** Tools whose results count as command output. Default: `bash`, with its `command` argument. */
+  readonly commandTools?: LoomCommandTool[]
+  /** Summary patterns, tried on every own command result; the last match wins. Default: unittest, pytest, Vitest, and Jest. */
+  readonly testSummary?: LoomTestSummaryPattern[]
+}
+
+/** Limits of `loom.diff`. */
+export interface LoomDiffConfig {
+  /** Largest unified diff text in UTF-8 bytes; files beyond it are left out and the result says so. Default 262144. */
+  readonly maxBytes?: number
+}
+
+/** Limits of `loom.apply`. */
+export interface LoomApplyConfig {
+  /** Largest change in UTF-8 bytes of its binary patch; a larger one is refused before any write. Default 33554432. */
+  readonly maxPatchBytes?: number
+}
+
+/** Deployment limits and defaults for prose generation. */
+export interface LoomWeaveConfig {
+  /** Largest sibling count per prose request. Default 4; at most 16. */
+  readonly maxSiblings?: number
+  /** Default and upper bound of output tokens per sibling. Default 200. */
+  readonly maxTokens?: number
+  /** Default sampling temperature, from 0 through 2. Default 1. */
+  readonly temperature?: number
+  /** Default captured alternatives per token, from 0 through 20. Default 10. */
+  readonly topLogprobs?: number
+  /** Milliseconds after the lead's first token before starting siblings. Default 1500. */
+  readonly leadDelayMs?: number
+  /** Whole prose operation timeout in milliseconds, probes included. Default 120000. */
+  readonly timeoutMs?: number
+  /** Milliseconds a successful identical prefix remains eligible for a direct burst. Default 3600000. */
+  readonly warmWindowMs?: number
+  /** Largest joined prose prefix in Unicode code points. Default 262144. */
+  readonly maxPrefixCodePoints?: number
+  /** Exact model-visible prose instructions, logged before dispatch. */
+  readonly framing?: {
+    /** System instructions for the auxiliary prose call. */
+    readonly system: string
+    /** User-role instruction preceding the assistant prefix. */
+    readonly user: string
+  }
+}
+
+/** Deployment limits for breadth-first next-token exploration. */
+export interface LoomProbeConfig {
+  /** Largest token depth callers may request. Default 4. */
+  readonly maxDepth?: number
+  /** Smallest cumulative probability explored; callers may choose a higher cutoff. Default 0.02. */
+  readonly cutoff?: number
+  /** Largest number of provider calls in one breadth-first probe. Default 32. */
+  readonly maxRequests?: number
+  /** Captured next-token alternatives per probe request, from 1 through 20. Default 20. */
+  readonly topLogprobs?: number
+}
+
+/** Limits for retained download snapshots. */
+export interface LoomExportConfig {
+  /** Largest complete encoded download in bytes. Default 16777216. */
+  readonly maxBytes?: number
+  /** Largest retained immutable download count; oldest snapshots are evicted first. Default 64. */
+  readonly maxDownloads?: number
+  /** Download lifetime in milliseconds. Default 300000. */
+  readonly ttlMs?: number
+}
+
+/**
+ * List prices of one provider route in US dollars per million tokens. A row
+ * prices cache reads at `inputHitPerMTok`, uncached input and cache writes at
+ * `inputMissPerMTok`, and output, reasoning tokens included, at `outputPerMTok`.
+ */
+export interface LoomPriceRow {
+  /** Registered provider route, as a request header names it. */
+  readonly provider: string
+  /** Provider-owned model id, as a request header names it. */
+  readonly model: string
+  /** Price of one million input tokens the provider did not serve from cache. */
+  readonly inputMissPerMTok: number
+  /** Price of one million input tokens the provider served from cache. */
+  readonly inputHitPerMTok: number
+  /** Price of one million output tokens. */
+  readonly outputPerMTok: number
+}
+
+/**
+ * Where a branch child's files live. `shared`: the source's folder, which its
+ * siblings and the source also write. `worktree`: a Git worktree of its own,
+ * which Loom created for it from the source folder.
+ */
+export type LoomIsolation = 'shared' | 'worktree'
+
+/** A model tool whose results count as command output for test summaries. */
+export interface LoomCommandTool {
+  /** Tool name as the model calls it. */
+  readonly name: string
+  /** String argument of the call that holds the command, reported as `tests.command`. */
+  readonly commandArgument: string
+}
+
+/**
+ * One way to find a test summary in command output. Every field is a
+ * JavaScript regular expression source. `summary` matches the summary text,
+ * with `^` and `$` matching at line boundaries; each count pattern is then
+ * searched in the matched text, and its first capture group is the count.
+ */
+export interface LoomTestSummaryPattern {
+  /** Label of the pattern in diagnostics. */
+  readonly name: string
+  /** Summary text pattern. */
+  readonly summary: string
+  /** Passed tests; omission derives them from the total. */
+  readonly passed?: string
+  /** Failed tests. */
+  readonly failed?: string
+  /** Errors, counted as failed tests. */
+  readonly errors?: string
+  /** Skipped tests, counted in the total only. */
+  readonly skipped?: string
+  /** All tests; omission adds passed, failed, errors, and skipped. */
+  readonly total?: string
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-loom -->
@@ -1310,6 +1471,45 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-tool-agent-team -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-experimental-tool-loom -->
+<a id="deepseek-aidsh-experimental-tool-loom"></a>
+
+## `@deepseek-ai/dsh-experimental-tool-loom`
+
+- `inject`: `agents` · `loom` · `permissionPresets` · `sessionController` · `sessionProjections` · `sessionQuery` · `tokenMeter` · `tools` · `workspaceRegistry`
+- `source`: [`packages/experimental/tool-loom/src/runtime.ts:33`](../packages/experimental/tool-loom/src/runtime.ts)
+
+```ts config-catalog
+/** Limits the runtime enforces, after schema defaults. */
+export interface AutoloomLimits {
+  /** Budgets of every weaver Session. */
+  readonly autoloom: AutoloomBudget
+  /** Wait used when `loom_wait` names no timeout. */
+  readonly defaultWaitMs: number
+  /** Longest wait `loom_wait` accepts. */
+  readonly maxWaitMs: number
+  /** Output length `loom_read` returns when it names no limit. */
+  readonly defaultReadChars: number
+  /** Longest output `loom_read` accepts as a limit. */
+  readonly maxReadChars: number
+}
+
+/** Budget of one weaver Session after schema defaults. */
+export interface AutoloomBudget {
+  /** Most children the weaver may start. */
+  readonly maxBranches: number
+  /** Deepest generation of children below the first Session the weaver branched that is not its own child. */
+  readonly maxDepth: number
+  /** Most tokens the weaver's children may use in their own requests, summed over every child. */
+  readonly maxOwnTokens: number
+  /** Optional list-price dollar ceiling; a route without configured prices is refused. */
+  readonly maxUsd?: number
+  /** Permission preset every child runs with; its approval policy is `never`. */
+  readonly childPermissionPreset: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-tool-loom -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-experimental-translator -->
 <a id="deepseek-aidsh-experimental-translator"></a>
 
@@ -1355,7 +1555,7 @@ export type PaidTranslationProvider = 'deepseek-account' | 'deepseek-official'
 ## `@deepseek-ai/dsh-experimental-worktree`
 
 - `inject`: `workingDirectory` · `fs` · `subprocess` · `sandbox` · `sandboxPolicy`
-- `source`: [`packages/experimental/worktree/src/index.ts:19`](../packages/experimental/worktree/src/index.ts)
+- `source`: [`packages/experimental/worktree/src/index.ts:28`](../packages/experimental/worktree/src/index.ts)
 
 ```ts config-catalog
 /** Worktree location, generated names, executables, and subprocess resource limits. */
@@ -1805,7 +2005,7 @@ export interface Config extends ProtocolConfig {
 
 - `inject`: `llm`
 - `refs`: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`) · `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/llm/llm-pi-ai/src/config.ts:249`](../packages/llm/llm-pi-ai/src/config.ts)
+- `source`: [`packages/llm/llm-pi-ai/src/config.ts:251`](../packages/llm/llm-pi-ai/src/config.ts)
 
 ```ts config-catalog
 /** Plugin configuration: the provider routes this instance owns. */
@@ -1920,6 +2120,13 @@ export interface PiAiProviderProfile {
 
 /** One configured model entry: an id plus the catalog fields it overrides. */
 export interface PiAiModelProfile {
+  /** Opt in to provider-returned probabilities on openai-completions routes; maximum 0–20 alternatives. */
+  tokenLogprobs?: {
+    /** Maximum number of alternative tokens to request at each answer position. */
+    readonly maxTopLogprobs: number
+  }
+  /** Opt in to tool-free assistant prefixes; direct DeepSeek beta requires its native prefix marker. */
+  assistantPrefill?: 'trailing-message' | 'deepseek-prefix'
   /** Model id sent to the provider and accepted by {@link GenerateOptions.model}. */
   id: string
   /** Display name for selectors; defaults to the catalog name, then the id. */
@@ -2097,7 +2304,7 @@ export type PiAiThinkingTokenBudgetField = NonNullable<OpenAICompletionsCompat['
 
 - `inject`: `llm`
 - `refs`: [`ModelModality`](../packages/llm/llm/src/index.ts) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · [`SystemPromptUpdate`](../packages/llm/llm/src/index.ts) · [`ToolUpdate`](../packages/llm/llm/src/index.ts)
-- `source`: [`packages/test-support/llm-replay/src/index.ts:1171`](../packages/test-support/llm-replay/src/index.ts)
+- `source`: [`packages/test-support/llm-replay/src/index.ts:1193`](../packages/test-support/llm-replay/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config: the {@link ReplayConfig} inputs, each defaulting to its `DSH_SNAPSHOT_*` env var in `apply`. */
@@ -2132,6 +2339,13 @@ export interface ReplayProviderConfig {
 
 /** One model exposed by a replay-only provider catalog. */
 export interface ReplayModelConfig {
+  /** Exact-route probability capture for keyless Loom calls. */
+  tokenLogprobs?: {
+    /** Maximum number of alternative tokens accepted by this replay model. */
+    readonly maxTopLogprobs: number
+  }
+  /** Tool-free auxiliary assistant-prefix support for keyless Loom calls. */
+  assistantPrefill?: 'tool-free'
   /** Model id used for replay requests. */
   id: string
   /** Selector label; defaults to {@link id}. */

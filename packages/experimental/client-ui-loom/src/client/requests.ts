@@ -5,11 +5,11 @@
  * so a later observation reads again. The view binds the sources as
  * `useLoomRequest(key)`.
  */
-import { notifySubscribers, type ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { LoomRequestAtRequest, LoomRequestView } from '@deepseek-ai/dsh-experimental-loom/types'
 import { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
-import { keyedSourceRegistry, type KeyedLifecycle } from './keyed-sources.ts'
+import { keyedSourceRegistry, ObservedSource, type KeyedLifecycle } from './keyed-sources.ts'
 
 /** Read state of one step's request. */
 export type LoomRequestState =
@@ -72,34 +72,22 @@ export function createLoomRequestSources(inputs: LoomRequestInputs): LoomRequest
 }
 
 /** One step's request read. */
-class RequestSource implements ObservableSnapshot<LoomRequestState> {
-  private readonly listeners = new Set<() => void>()
-  private state: LoomRequestState = LOADING
+class RequestSource extends ObservedSource<LoomRequestState> {
   private pending: AbortController | undefined
 
   constructor(
     private readonly request: LoomRequestAtRequest,
     private readonly inputs: LoomRequestInputs,
-    private readonly lifecycle: KeyedLifecycle,
-  ) {}
-
-  getSnapshot(): LoomRequestState { return this.state }
-
-  subscribe(listener: () => void): () => void {
-    this.listeners.add(listener)
-    if (this.listeners.size === 1) {
-      this.lifecycle.active()
-      if (this.state.status !== 'ready') this.start()
-    }
-    return () => {
-      if (!this.listeners.delete(listener) || this.listeners.size > 0) return
-      this.close()
-      this.lifecycle.idle()
-    }
+    lifecycle: KeyedLifecycle,
+  ) {
+    super(LOADING, lifecycle, 'request')
   }
 
-  close(): void {
-    this.listeners.clear()
+  protected observed(): void {
+    if (this.state.status !== 'ready') this.start()
+  }
+
+  protected released(): void {
     this.pending?.abort()
     this.pending = undefined
   }
@@ -118,10 +106,5 @@ class RequestSource implements ObservableSnapshot<LoomRequestState> {
       this.pending = undefined
       this.publish({ status: 'failed' })
     })
-  }
-
-  private publish(state: LoomRequestState): void {
-    this.state = state
-    notifySubscribers(this.listeners, '[client-ui-loom] request')
   }
 }

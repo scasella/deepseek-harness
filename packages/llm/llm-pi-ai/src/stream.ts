@@ -14,6 +14,7 @@ import type { FinishReason, StreamChunk, TokenUsage, ToolCallId } from '@deepsee
 import { isContextOverflow } from '@earendil-works/pi-ai/utils/overflow'
 import type { AssistantMessage, AssistantMessageEvent, Usage as PiUsage } from '@earendil-works/pi-ai'
 import { toPiReplayState } from './replay.ts'
+import type { TokenLogprobCapture } from './logprobs.ts'
 
 /**
  * Map pi-ai usage; pi-ai's output count already includes reasoning tokens.
@@ -138,6 +139,7 @@ export function mapStopReason(message: AssistantMessage, contextWindow?: number)
  * @param callerSignal - caller cancellation state; an aborted caller makes any
  *   in-band terminal error an aborted finish.
  * @param requestedModel - request model identity recorded for durable replay.
+ * @param capture - optional raw-provider token probability FIFO for this request.
  * @returns the harness chunks, ending with `usage` then `finish`; throws
  *   `LlmError` (`STREAM_CLOSED`) if the source ends without a terminal event.
  */
@@ -146,6 +148,7 @@ export async function* toStreamChunks(
   contextWindow?: number,
   callerSignal?: AbortSignal,
   requestedModel?: string,
+  capture?: TokenLogprobCapture,
 ): AsyncGenerator<StreamChunk> {
   // pi-ai contentIndex ↔ our block index map 1:1 (both count blocks from 0
   // in stream order), but we track ids per index for tool calls.
@@ -159,11 +162,17 @@ export async function* toStreamChunks(
         yield { type: 'block-start', index: event.contentIndex, blockType: 'text' }
         break
       case 'text_delta':
+        capture?.delta(event.contentIndex)
         yield { type: 'text-delta', index: event.contentIndex, text: event.delta }
         break
-      case 'text_end':
-        yield { type: 'block-end', index: event.contentIndex, block: { type: 'text', text: event.content } }
+      case 'text_end': {
+        const logprobs = capture?.finish(event.contentIndex, event.content)
+        yield {
+          type: 'block-end', index: event.contentIndex, block: { type: 'text', text: event.content },
+          ...logprobs === undefined ? {} : { logprobs },
+        }
         break
+      }
       case 'thinking_start':
         yield { type: 'block-start', index: event.contentIndex, blockType: 'reasoning' }
         break

@@ -15,7 +15,7 @@ import type {
   RequestImageAttachment,
 } from '@deepseek-ai/dsh-attachment'
 import type { Context as PiContext, ImageContent, Message as PiMessage, SystemMessage, TextContent, Tool as PiTool } from '@earendil-works/pi-ai'
-import { toPiAssistant } from './replay.ts'
+import { emptyPiUsage, toPiAssistant } from './replay.ts'
 import { requestImageDimensions } from '@deepseek-ai/dsh-attachment'
 import { DEFAULT_REQUEST_IMAGE_MAX_BYTES, DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET } from './config.ts'
 
@@ -160,6 +160,16 @@ function splitSystemPrompt(options: GenerateOptions): SystemPromptSplit {
 /** Assemble the request-level pi-ai context envelope shared by both conversion paths. */
 function piContext(systemPrompt: string | undefined, options: GenerateOptions, messages: PiMessage[]): PiContext {
   const tools = toolsOf(options)
+  if (options.assistantPrefix !== undefined) messages.push({
+    role: 'assistant',
+    content: [{ type: 'text', text: options.assistantPrefix }],
+    api: 'dsh-foreign',
+    provider: options.provider,
+    model: options.model,
+    usage: emptyPiUsage(),
+    stopReason: 'stop',
+    timestamp: 0,
+  })
   return {
     ...systemPrompt !== undefined ? { systemPrompt } : {},
     messages,

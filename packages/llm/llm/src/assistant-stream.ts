@@ -8,7 +8,7 @@
 import { assertNever, deepFreeze, snapshotJsonValue } from '@deepseek-ai/dsh-util-values'
 import { BlockAssembler } from './assembler.ts'
 import type { ToolCallId } from './brand.ts'
-import type { ContentBlock, StreamChunk } from './types.ts'
+import type { BlockTokenLogprobs, ContentBlock, StreamChunk } from './types.ts'
 
 /** One model chunk paired with its original Session timestamp. */
 export interface TimedStreamChunk {
@@ -410,6 +410,45 @@ export function joinAssistantStreamText(stream: readonly AssistantStreamRecord[]
     else if (record.type === 'chunk' && record.chunk.type === 'text-delta') parts.push(record.chunk.text)
   }
   return parts.join('')
+}
+
+/**
+ * Read captured probabilities in assembled block order, preserving absent captures and max-token tool-call removal.
+ * @param stream - trusted compact records; validate durable input with expandAssistantStream first.
+ * @returns one probability value per block returned by assembleAssistantStream(stream).blocks().
+ */
+export function assistantStreamBlockLogprobs(stream: readonly AssistantStreamRecord[]): readonly (BlockTokenLogprobs | undefined)[] {
+  const blocks = new Map<number, { type: string | undefined; logprobs: BlockTokenLogprobs | undefined }>()
+  let truncated = false
+  const blockAt = (index: number) => {
+    let block = blocks.get(index)
+    if (block === undefined) {
+      block = { type: undefined, logprobs: undefined }
+      blocks.set(index, block)
+    }
+    return block
+  }
+  for (const record of stream) {
+    if (record.type !== 'chunk') {
+      const block = blockAt(record.index)
+      block.type ??= record.type === 'text-chunks' ? 'text' : record.type === 'reasoning-chunks' ? 'reasoning' : 'tool-call'
+      continue
+    }
+    const chunk = record.chunk
+    if (chunk.type === 'finish') truncated = chunk.reason.kind === 'max-tokens'
+    if (!('index' in chunk)) continue
+    const block = blockAt(chunk.index)
+    switch (chunk.type) {
+      case 'block-start': block.type ??= chunk.blockType; break
+      case 'block-end': block.type = chunk.block.type; block.logprobs = chunk.logprobs; break
+      case 'text-delta': block.type ??= 'text'; break
+      case 'reasoning-delta': block.type ??= 'reasoning'; break
+      case 'tool-call-delta': block.type ??= 'tool-call'; break
+      /* v8 ignore next 2 -- indexed StreamChunk variants are closed. */
+      default: assertNever(chunk)
+    }
+  }
+  return [...blocks.values()].filter(block => !truncated || block.type !== 'tool-call').map(block => block.logprobs)
 }
 
 /**

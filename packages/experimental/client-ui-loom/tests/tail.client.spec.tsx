@@ -16,7 +16,9 @@ import type { LoomBranchingState, LoomOutcome } from '../src/client/branching.ts
 import { createLoomFamilySources, type LoomFamilyState } from '../src/client/family.ts'
 import { MarkGroup } from '../src/client/MarkGroup.tsx'
 import { RegenerateSplit } from '../src/client/RegenerateSplit.tsx'
+import type { LoomReadState } from '../src/client/read-sources.ts'
 import type { LoomRoutesState } from '../src/client/routes.ts'
+import type { LoomEstimateValue } from '@deepseek-ai/dsh-experimental-loom/types'
 import type { LoomTailProps } from '../src/client/tail.ts'
 import { VariantPager, VariantPagerBody } from '../src/client/VariantPager.tsx'
 import { entry, listOf, ROOT, tEn, tZh, type Member } from './fixtures.client.ts'
@@ -104,12 +106,16 @@ function bench(options: {
   routes?: LoomRoutesState
   branching?: Partial<LoomBranchingState>
   start?: (...args: unknown[]) => Promise<LoomOutcome>
+  /** Read state of every cost estimate; a failed read leaves the panel on the turn's own usage. */
+  estimate?: LoomReadState<LoomEstimateValue>
   locale?: 'en' | 'zh'
 } = {}) {
   const sessions = createSnapshotStore<SessionListState>(listOf(options.members ?? MEMBERS))
   const families = createLoomFamilySources({ sessions })
   const branching = createSnapshotStore<LoomBranchingState>({ sets: [], forms: {}, marks: {}, ...options.branching })
   const routes = createSnapshotStore<LoomRoutesState>(options.routes ?? { status: 'idle' })
+  const estimate = createSnapshotStore<LoomReadState<LoomEstimateValue>>(options.estimate ?? { status: 'failed' })
+  const estimateKeys: string[] = []
   const chatData = options.chat ?? {
     user: [{ content: [{ type: 'text', text: 'Go with C' }, { type: 'text', text: 'and test it' }] }],
     tail: [{ tokenUsage: { uncachedInputTokens: 100, outputTokens: 100, totalTokens: 1100, cacheReadTokens: 900, routes: [{ provider: 'openrouter', model: 'v4' }] } }],
@@ -143,10 +149,14 @@ function bench(options: {
     useLoomFamily: keyed<LoomFamilyState>(key => families.source(key)),
     useLoomBranching: bindSnapshotSelector(branching),
     useLoomRoutes: bindSnapshotSelector(routes),
+    useLoomEstimate: keyed<LoomReadState<LoomEstimateValue>>((key) => {
+      estimateKeys.push(key)
+      return estimate
+    }),
     t: options.locale === 'zh' ? tZh : tEn,
     ...injected,
   } as never
-  return { props, injected, branching, routes, sessions }
+  return { props, injected, branching, routes, sessions, estimate, estimateKeys }
 }
 
 describe('Branch ×N caret', () => {
@@ -157,7 +167,7 @@ describe('Branch ×N caret', () => {
     expect(caret.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(caret)
     expect(injected.openForm).toHaveBeenCalledWith(B, { sourceSessionId: B, afterTurn: 2 })
-    act(() => { branching.set({ sets: [], marks: {}, forms: { [B]: { sourceSessionId: B, afterTurn: 2, rows: [''], samples: 1, selection: null, starting: false, failure: null } } }) })
+    act(() => { branching.set({ sets: [], marks: {}, forms: { [B]: { sourceSessionId: B, afterTurn: 2, rows: [''], samples: 1, selection: null, isolation: 'shared', isolationUnavailable: null, starting: false, failure: null } } }) })
     expect(caret.getAttribute('aria-expanded')).toBe('true')
     fireEvent.click(caret)
     expect(injected.closeForm).toHaveBeenCalledWith(B)
@@ -291,7 +301,7 @@ describe('Regenerate', () => {
     const group = within(panel).getByRole('radiogroup', { name: 'Number of variants' })
     fireEvent.click(within(group).getByRole('radio', { name: '×4' }))
     fireEvent.click(within(panel).getByRole('button', { name: 'Regenerate ×4' }))
-    expect(injected.startBranches).toHaveBeenCalledWith({ kind: 'regenerate', sessionId: B, turn: 2, count: 4 }, { ownerSessionId: B })
+    expect(injected.startBranches).toHaveBeenCalledWith({ kind: 'regenerate', sessionId: B, turn: 2, count: 4, isolation: 'shared' }, { ownerSessionId: B })
     await act(async () => {})
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(document.activeElement).toBe(caret)
@@ -350,6 +360,90 @@ describe('Regenerate', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /Same as this branch/u }))
     // The turn's first route reads by the catalog's display name.
     expect(screen.getByRole('dialog').textContent).toContain('ModelV4 FlashChange')
+  })
+
+  it('chooses where the branches keep their files, falls back with the Host\'s reason after a refusal, and tries again on reopening', async () => {
+    const refusal: LoomOutcome = { ok: false, failure: { code: 'loom/isolation-unavailable', isolationReason: 'no-repository', unknownOutcome: false } }
+    const start = vi.fn<(...args: unknown[]) => Promise<LoomOutcome>>().mockResolvedValueOnce(refusal).mockResolvedValue({ ok: true })
+    const { props, injected } = bench({ start })
+    render(<RegenerateSplit {...props} />)
+    const caret = screen.getByRole('button', { name: 'Regenerate several' })
+    fireEvent.click(caret)
+    const panel = screen.getByRole('dialog')
+    const group = within(panel).getByRole('radiogroup', { name: 'Where branches keep their files' })
+    const shared = within(group).getByRole('radio', { name: /Run one at a time in the shared folder/u })
+    const worktree = within(group).getByRole('radio', { name: /Isolate each branch in a worktree/u })
+    expect([shared.getAttribute('aria-checked'), worktree.getAttribute('aria-checked')]).toEqual(['true', 'false'])
+    expect(worktree.textContent).toContain('Untracked files are not carried over.')
+    fireEvent.click(worktree)
+    expect(worktree.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(within(panel).getByRole('button', { name: 'Regenerate ×1' }))
+    expect(injected.startBranches).toHaveBeenLastCalledWith(expect.objectContaining({ isolation: 'worktree' }), { ownerSessionId: B })
+    await act(async () => {})
+    expect(shared.getAttribute('aria-checked')).toBe('true')
+    expect(worktree).toHaveProperty('disabled', true)
+    expect(worktree.textContent).toContain('Not available: this folder is not in a git repository')
+    expect(within(panel).getByRole('alert').textContent).toContain('Worktree isolation is unavailable')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    fireEvent.click(caret)
+    expect(within(screen.getByRole('dialog')).getByRole('radio', { name: /Isolate each branch in a worktree/u })).toHaveProperty('disabled', false)
+    // The one-click part leaves the folder choice to the Host.
+    fireEvent.keyDown(document, { key: 'Escape' })
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate once' }))
+    expect(injected.startBranches).toHaveBeenLastCalledWith({ kind: 'regenerate', sessionId: B, turn: 2, count: 1 }, { ownerSessionId: B })
+  })
+
+  it('moves between the folder choices with the arrow keys, and stays on the shared folder once worktrees are refused', () => {
+    const { props } = bench()
+    render(<RegenerateSplit {...props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate several' }))
+    const group = screen.getByRole('radiogroup', { name: 'Where branches keep their files' })
+    const shared = within(group).getByRole('radio', { name: /shared folder/u })
+    const worktree = within(group).getByRole('radio', { name: /worktree/u })
+    fireEvent.keyDown(shared, { key: 'a' })
+    expect(shared.getAttribute('aria-checked')).toBe('true')
+    fireEvent.keyDown(shared, { key: 'ArrowDown' })
+    expect(worktree.getAttribute('aria-checked')).toBe('true')
+    expect(document.activeElement).toBe(worktree)
+    fireEvent.keyDown(worktree, { key: 'ArrowUp' })
+    expect(shared.getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('reads the cost of the branches from the estimate: list price, tokens without a price, or the turn\'s own usage when it fails', () => {
+    const ready = (value: LoomEstimateValue): LoomReadState<LoomEstimateValue> => ({ status: 'ready', value, refreshing: false, stale: false })
+    const open = (estimate: LoomReadState<LoomEstimateValue>, extra: Parameters<typeof bench>[0] = {}): HTMLElement => {
+      cleanup()
+      render(<RegenerateSplit {...bench({ estimate, ...extra }).props} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Regenerate several' }))
+      return screen.getByRole('dialog')
+    }
+    expect(open({ status: 'loading' }).textContent).toContain('Estimating…')
+    const priced = open(ready({ priced: true, perBranch: { low: 0.006, high: 0.01 }, total: { low: 0.006, high: 0.01 }, cacheShare: 0.5, basis: 'own-turn' }))
+    expect(priced.textContent).toContain('≈ $0.006–$0.010 per branch · list price')
+    expect(priced.textContent).toContain("50% of input was cached in this turn's own run")
+    expect(priced.textContent).not.toContain("This turn's own usage")
+    expect(open(ready({ priced: false, perBranch: { low: 12_000, high: 15_000 }, cacheShare: 0, basis: 'own-turn' })).textContent)
+      .toContain('≈ 12K–15K tokens per branch · no list price for this route')
+    expect(open(ready({ priced: false, cacheShare: 0, basis: 'own-turn' })).textContent).toContain('No estimate yet')
+    // A failed estimate falls back to the turn's own usage, and to nothing without one.
+    expect(open({ status: 'failed' }).textContent).toContain("This turn's own usage")
+    expect(open({ status: 'failed' }, { chat: { user: [{ content: [{ type: 'text', text: 'Again' }] }], tail: [] } }).textContent).not.toContain('Usage')
+  })
+
+  it('reads the estimate for the turn, variant count, and selected route', () => {
+    const options = [{ selection: { provider: 'p', model: 'm' }, providerName: 'P', modelName: 'M', efforts: [] }]
+    const { props, estimateKeys } = bench({ routes: { status: 'ready', options }, estimate: { status: 'ready', value: { priced: true, perBranch: { low: 1, high: 2 }, cacheShare: 0, basis: 'family' }, refreshing: false, stale: false } })
+    render(<RegenerateSplit {...props} />)
+    expect(estimateKeys).toEqual([])
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate several' }))
+    expect(estimateKeys.at(-1)).toBe(['b', 'regenerate', '2', '', '1'].join('\u0000'))
+    fireEvent.click(screen.getByRole('radio', { name: '×4' }))
+    expect(estimateKeys.at(-1)).toBe(['b', 'regenerate', '2', '', '4'].join('\u0000'))
+    expect(screen.getByRole('dialog').textContent).not.toContain('not this override')
+    fireEvent.click(screen.getByRole('button', { name: /Change/u }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /P · M/u }))
+    expect(estimateKeys.at(-1)).toBe(['b', 'regenerate', '2', '', '4', JSON.stringify({ provider: 'p', model: 'm' })].join('\u0000'))
+    expect(screen.getByRole('dialog').textContent).not.toContain('not this override')
   })
 
   it('names its parts in tooltips on a hover device while the panel is closed', () => {

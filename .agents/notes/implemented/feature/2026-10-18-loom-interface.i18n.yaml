@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for 2026-10-18-loom-interface.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-18-loom-interface.md
+/agent-note-loom-interface-for-branching-sessions-and-prose:
+  en: b26a14bc18003305
+  zh: f7461fc4bb53f102
+/agent-note-loom-interface-for-branching-sessions-and-prose/problem:
+  en: 282e8f366fb8f7e5
+  zh: 412765c5e77e6f31
+/agent-note-loom-interface-for-branching-sessions-and-prose/decision:
+  en: 5caf715ff0f0a396
+  zh: fda4350f7eafe9fd
+/agent-note-loom-interface-for-branching-sessions-and-prose/decision/families-and-orientation:
+  en: 84a8d67b3b4718d9
+  zh: bfb3c2db42148e2e
+/agent-note-loom-interface-for-branching-sessions-and-prose/decision/branch-admission-and-workspace-ownership:
+  en: 589b2c1d37fb6a9b
+  zh: d7df86d5efb76abb
+/agent-note-loom-interface-for-branching-sessions-and-prose/decision/pricing-and-autonomous-exploration:
+  en: 6f58d9bcfa19e0c6
+  zh: e13fbf249965fc4a
+/agent-note-loom-interface-for-branching-sessions-and-prose/decision/continuation-and-tool-result-counterfactuals:
+  en: 6bb52c7bee88ce20
+  zh: dce4a3a5ab0cf0b9
+/agent-note-loom-interface-for-branching-sessions-and-prose/decision/recorded-probabilities-and-prose:
+  en: 57fef5b854ee7b1a
+  zh: da9cf1239912c71d
+/agent-note-loom-interface-for-branching-sessions-and-prose/alternatives-considered:
+  en: 25aebd0863cb6bdd
+  zh: 2330de9a3695b046
+/agent-note-loom-interface-for-branching-sessions-and-prose/consequences:
+  en: 18d7259516a24f71
+  zh: 4f91bdc31665f83a

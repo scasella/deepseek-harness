@@ -111,7 +111,7 @@ describe('title projection unit', () => {
     for (const state of invalidStates) {
       const malformed = {
         ...checkpoint,
-        titleInput: { ...row!, val: state },
+        titleInput: { ...row!, val: { inheritedEventCount: 0, ...state } },
       }
       expect(() => ctx.sessionProjections.restore(
         malformed, [], SessionLogOffset(0), session.header, session.inheritedEventCount,
@@ -123,8 +123,26 @@ describe('title projection unit', () => {
       ...checkpoint,
       titleInput: {
         ...row!,
-        val: { first: { seq: 1, text: 'first' }, count: 1, lastSeq: 1 },
+        val: { inheritedEventCount: 0, first: { seq: 1, text: 'first' }, count: 1, lastSeq: 1 },
       },
     }, [], SessionLogOffset(0), session.header, session.inheritedEventCount)).not.toThrow()
+  })
+
+  it('keeps inherited prompts out of the fork title input checkpoint', async () => {
+    const { ctx, session } = await harness(true)
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'Inherited title source' }], source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    const child = ctx.sessions.fork(session, SessionSeq(0), SessionId('own-title'))
+    expect(ctx.sessionProjections.stateOf(child, 'titleInput')).toMatchObject({
+      inheritedEventCount: 1, first: null, count: 0, lastSeq: null,
+    })
+    const own = child.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'Own title source' }], source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    expect(ctx.sessionProjections.stateOf(child, 'titleInput')).toMatchObject({
+      inheritedEventCount: 1, first: { seq: own.seq, text: 'Own title source' }, count: 1, lastSeq: own.seq,
+    })
+    await ctx.fiber.dispose()
   })
 })

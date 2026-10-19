@@ -40,6 +40,7 @@ import type {
 } from '@earendil-works/pi-ai'
 import {
   attributionHeaders,
+  assertLlmRequestCapabilities,
   contentHasImage,
   LlmAdapter,
   LlmError,
@@ -63,6 +64,8 @@ import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { requestImageTarget, toPiContext } from './context.ts'
 import { conversationUpdates, createModels, getSupportedThinkingLevels } from './models.ts'
 import { toStreamChunks } from './stream.ts'
+import { TokenLogprobCapture } from './logprobs.ts'
+import { markDeepSeekPrefix } from './prefix.ts'
 
 /**
  * Initially active declaration added to an Anthropic request whose projected
@@ -114,6 +117,8 @@ export interface PiAiAdapterOptions {
    * conversion because its stored replay state is unusable by this build.
    */
   onReplayDegrade?: (detail: { provider: string; model: string; reason: string }) => void
+  /** Observe a text block whose returned token probabilities cannot be aligned safely. */
+  onLogprobsDegrade?: (detail: { provider: string; model: string; reason: string }) => void
 }
 
 /** The two auth injectables a pi-ai collection is built with. */
@@ -392,6 +397,7 @@ export class PiAiAdapter extends LlmAdapter {
     // Only a cap the deployment configured is a request default; the
     // catalog's `maxTokens` sizes the model and stops there.
     const configuredMaxTokens = profile.configuredMaxTokens.get(model)
+    const features = profile.generationFeatures.get(model)
     return {
       provider,
       id: model,
@@ -401,6 +407,8 @@ export class PiAiAdapter extends LlmAdapter {
       ...configuredMaxTokens === undefined ? {} : { defaultMaxTokens: configuredMaxTokens },
       ...reasoningInfo(resolvedModel, defaultLevel),
       ...conversationUpdates(resolvedModel),
+      ...features?.tokenLogprobs === undefined ? {} : { tokenLogprobs: { ...features.tokenLogprobs } },
+      ...features?.assistantPrefill === undefined ? {} : { assistantPrefill: 'tool-free' as const },
     }
   }
 
@@ -441,7 +449,15 @@ export class PiAiAdapter extends LlmAdapter {
       model,
       options.reasoningEffort ?? profile.reasoning,
     )
-    const samplingParams = resolveSamplingParams(model, profile, options.stop, reasoning)
+    const info = this.modelInfo(snapshot, options.provider, options.model)
+    assertLlmRequestCapabilities({ ...options, ...reasoning === undefined ? {} : { reasoningEffort: ReasoningEffortId(reasoning) } }, info)
+    let samplingParams = resolveSamplingParams(model, profile, options.stop, reasoning)
+    if (options.topLogprobs !== undefined) samplingParams = { ...samplingParams, logprobs: true, top_logprobs: options.topLogprobs }
+    const capture = options.topLogprobs === undefined ? undefined : new TokenLogprobCapture((reason) => {
+      this.config.onLogprobsDegrade?.({ provider: options.provider, model: options.model, reason })
+    })
+    const prefixMode = profile.generationFeatures.get(options.model)?.assistantPrefill
+    const assistantPrefix = options.assistantPrefix
     const cacheSession = resolveCacheSession(options)
     const apiKey = await this.config.resolveApiKey(options.provider, profile)
 
@@ -481,12 +497,16 @@ export class PiAiAdapter extends LlmAdapter {
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...cacheSession === undefined ? {} : { sessionId: cacheSession },
         ...samplingParams === undefined ? {} : { samplingParams },
+        ...capture === undefined ? {} : { onProviderStreamEvent: (raw: unknown) => { capture.observe(raw) } },
+        ...assistantPrefix === undefined || prefixMode !== 'deepseek-prefix'
+          ? {}
+          : { onPayload: (payload: unknown) => markDeepSeekPrefix(payload, assistantPrefix) },
         signal: watchdog.signal,
         // Profile headers are deployment-owned; attribution names are
         // Harness-owned and therefore win collisions.
         headers: requestHeaders(profile.headers),
       })
-      const iterator = toStreamChunks(events, model.contextWindow, options.signal, model.id)[Symbol.asyncIterator]()
+      const iterator = toStreamChunks(events, model.contextWindow, options.signal, model.id, capture)[Symbol.asyncIterator]()
       let exhausted = false
       try {
         while (true) {

@@ -1,0 +1,22 @@
+- region "Multiverse":
+  - heading "Multiverse" [level=1]
+  - paragraph: Explore Session fork families and keep every path.
+  - textbox "Search family titles and messages": coastal
+  - text: Family
+  - combobox "Family":
+    - option "All families" [selected]
+    - option "Write the opening line of"
+  - text: Message scope
+  - combobox "Message scope":
+    - option "Own messages" [selected]
+    - option "Inherited messages"
+    - option "All history"
+  - region "Write the opening line of":
+    - 'heading "Write the opening line of Branches: 2" [level=2]'
+    - list:
+      - listitem:
+        - button "Write the opening line of"
+      - listitem:
+        - button "Northern path Own coastal note A"
+      - listitem:
+        - button "Southern path Own coastal note B"

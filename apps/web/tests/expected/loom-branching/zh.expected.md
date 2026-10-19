@@ -7,9 +7,9 @@
 - group "第 1 轮之后的变体":
   - button "变体 1/5：Branch A": 1 Branch A
   - button "变体 2/5：Loom branching": 2 Loom branching
-  - button "变体 3/5：Loom branching": 3 Loom branching
-  - button "变体 4/5：Loom branching": 4 Loom branching
-  - button "变体 5/5：Loom branching": 5 Loom branching
+  - button "变体 3/5：LOOM_BRANCHING Take the other approach": 3 LOOM_BRANCHING Take the other approach
+  - button "变体 4/5：LOOM_BRANCHING Take the other approach": 4 LOOM_BRANCHING Take the other approach
+  - button "变体 5/5：LOOM_BRANCHING Take the shortest approac": 5 LOOM_BRANCHING Take the shortest approac
 - text: LOOM_BRANCHING Take the other approach from here. {{clock}}
 - button "复制"
 - button "编辑并分支"
@@ -50,7 +50,10 @@
     - button "更换"
     - text: 与此分支相同
   - term: 工作区
-  - definition: 子分支共用此文件夹，包括先前分支所做的改动
-  - term: 用量
-  - definition: 7.2K tok · 缓存命中 85% 本轮自身用量
+  - definition:
+    - radiogroup "分支文件的存放位置":
+      - radio "在共用文件夹中逐个运行 子分支共用此文件夹，包括先前分支所做的改动" [checked]
+      - radio "为每个分支单独创建 worktree 每个分支从此文件夹的快照开始：已提交的文件，加上已跟踪文件的未提交改动。未跟踪的文件不会带过去。"
+  - term: 费用
+  - definition: 每个分支 ≈ 7.2K token · 此路由未设置标价 本轮自身运行中 85% 的输入命中缓存
   - button "重新生成 ×1"

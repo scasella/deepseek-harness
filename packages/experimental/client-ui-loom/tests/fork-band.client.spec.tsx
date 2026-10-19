@@ -232,6 +232,19 @@ describe('header variant chip', () => {
     return render(<VariantChip {...shared as VariantChipProps} />)
   }
 
+  it('uses the bottom sheet on phones and closes it after a sibling selection', () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }))
+    try {
+      const { shared, injected } = bench()
+      chip(shared)
+      fireEvent.click(screen.getByRole('button', { name: /Switch variant/ }))
+      const dialog = screen.getByRole('dialog')
+      fireEvent.click(within(dialog).getByRole('button', { name: /Clamp final value/ }))
+      expect(injected.openSession).toHaveBeenCalledWith(A)
+      expect(screen.queryByRole('dialog')).toBeNull()
+    } finally { vi.unstubAllGlobals() }
+  })
+
   it('shows "Variant k of N" with the cut and switches variants through its menu', () => {
     const { shared, injected } = bench()
     chip(shared)

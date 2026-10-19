@@ -94,6 +94,65 @@ function installSearchQuery(
 }
 
 describe('session.search', () => {
+  it('filters a target family before the provider cap and owns its ids across visibility reads', async () => {
+    const ctx = await baseContext()
+    ctx.sessions.create(sid('visible'), { meta: header('visible') })
+    const ids = [sid('visible'), sid('visible')]
+    const searchSessions = vi.fn(() => Promise.resolve({ items: [hit('visible')] }))
+    installSearchQuery(ctx, searchSessions)
+    const pending = new ApiSessionList(ctx, 8).search('needle', new AbortController().signal, 'own', ids)
+    ids.push(sid('unrelated'))
+    await expect(pending).resolves.toMatchObject({ items: [{ sessionId: 'visible' }] })
+    expect(searchSessions).toHaveBeenCalledWith(expect.objectContaining({
+      sessionFilters: [{ kind: 'id', values: [sid('visible')] }], limit: 20,
+    }), expect.any(Object))
+    await ctx.fiber.dispose()
+  })
+
+  it('matches no Sessions for an empty target list and rejects malformed target ids', async () => {
+    const ctx = await baseContext()
+    const searchSessions = vi.fn()
+    installSearchQuery(ctx, searchSessions)
+    const remote = createSessionTestRemote(ctx, defaults)
+    await expect(remote.search({ query: 'needle', sessionIds: [] }, new AbortController().signal))
+      .resolves.toMatchObject({ ok: true, value: { items: [], hasMore: false } })
+    for (const sessionIds of ['invalid', [''], [42]]) {
+      await expect(remote.search({ query: 'needle', sessionIds: sessionIds as never }, new AbortController().signal))
+        .resolves.toMatchObject({ ok: false, error: { code: 'gateway/bad-request' } })
+    }
+    expect(searchSessions).not.toHaveBeenCalled()
+    await ctx.fiber.dispose()
+  })
+  it.each(['own', 'inherited'] as const)('passes %s ownership as an explicit provider filter', async (scope) => {
+    const ctx = await baseContext()
+    ctx.sessions.create(sid('visible'), { meta: header('visible') })
+    const searchSessions = vi.fn(() => Promise.resolve({ items: [hit('visible')] }))
+    installSearchQuery(ctx, searchSessions)
+    const response = await createSessionTestRemote(ctx, defaults).search(
+      { query: 'needle', scope }, new AbortController().signal,
+    )
+    expect(response).toMatchObject({ ok: true, value: { items: [{ sessionId: 'visible' }], hasMore: false } })
+    expect(searchSessions).toHaveBeenCalledWith(expect.objectContaining({
+      eventFilters: [
+        { kind: 'type', values: ['user/message', 'assistant/message'] },
+        { kind: 'surface', values: ['current'] },
+        { kind: 'ownership', values: [scope] },
+      ],
+      limit: 20,
+    }), expect.any(Object))
+    await ctx.fiber.dispose()
+  })
+
+  it('rejects an invalid wire ownership scope before querying', async () => {
+    const ctx = await baseContext()
+    const searchSessions = vi.fn()
+    installSearchQuery(ctx, searchSessions)
+    await expect(createSessionTestRemote(ctx, defaults).search(
+      { query: 'needle', scope: 'all' as never }, new AbortController().signal,
+    )).resolves.toMatchObject({ ok: false, error: { code: 'gateway/bad-request' } })
+    expect(searchSessions).not.toHaveBeenCalled()
+    await ctx.fiber.dispose()
+  })
   it('rejects search when the query service is absent', async () => {
     const ctx = await baseContext()
     const list = new ApiSessionList(ctx, 8)

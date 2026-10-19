@@ -49,7 +49,8 @@ export function applySessionListMetadata(
   event: SessionEvent,
 ): SessionListMetadata {
   const blank = state.blank && event.type !== 'turn/start'
-  const lastPromptAt = event.type === 'user/message' && event.data.source.kind === 'user'
+  const lastPromptAt = (event.type === 'user/message' && event.data.source.kind === 'user')
+    || (event.type === 'turn/start' && event.data.continuation?.kind === 'user')
     ? event.time
     : state.lastPromptAt
   return blank === state.blank && lastPromptAt === state.lastPromptAt
@@ -87,7 +88,7 @@ export class ApiSessionList {
       init: () => ({ blank: true, lastPromptAt: null }),
       apply: applySessionListMetadata,
       wire: { viewSchema: sessionListMetadataSchema, view: state => state },
-      stateVersion: 1,
+      stateVersion: 2,
     })
     ctx.inject(['attachments'], (attachmentCtx) => {
       ctx.sessionProjections.register<'imageLimits', null>({
@@ -184,10 +185,25 @@ export class ApiSessionList {
    * Search current visible message content without activating any matching Session.
    * @param query - literal message-content query.
    * @param signal - cancellation for list and search reads.
+   * @param scope - optional restriction to own or fork-inherited messages.
+   * @param sessionIds - optional target Sessions; an empty list matches nothing, omission searches the visible corpus.
    * @returns authorized bounded Session search results.
    */
-  async search(query: string, signal: AbortSignal): Promise<SessionSearchValue> {
+  async search(
+    query: string,
+    signal: AbortSignal,
+    scope?: 'own' | 'inherited',
+    sessionIds?: readonly SessionId[],
+  ): Promise<SessionSearchValue> {
     const normalizedQuery = normalizeSearchQuery(query)
+    if (scope !== undefined && !['own', 'inherited'].includes(scope)) {
+      throw new RemoteError('gateway/bad-request', 'session search scope must be own or inherited', {})
+    }
+    if (sessionIds !== undefined && (!Array.isArray(sessionIds)
+      || sessionIds.some(id => typeof id !== 'string' || id.length === 0))) {
+      throw new RemoteError('gateway/bad-request', 'session search sessionIds must contain non-empty Session ids', {})
+    }
+    const targets = sessionIds === undefined ? undefined : [...new Set(sessionIds)]
     signal.throwIfAborted()
     const provider = this.ctx.get('sessionQuery')
     if (provider === undefined) {
@@ -198,6 +214,7 @@ export class ApiSessionList {
       )
     }
     try {
+      if (targets?.length === 0) return { items: [], hasMore: false }
       const visible = await provider.listSessions(signal)
       signal.throwIfAborted()
       const visibleIds = new Set(visible
@@ -222,9 +239,11 @@ export class ApiSessionList {
         try {
           page = await provider.searchSessions({
             query: normalizedQuery,
+            ...targets === undefined ? {} : { sessionFilters: [{ kind: 'id' as const, values: targets }] },
             eventFilters: [
               { kind: 'type', values: ['user/message', 'assistant/message'] },
               { kind: 'surface', values: ['current'] },
+              ...scope === undefined ? [] : [{ kind: 'ownership' as const, values: [scope] }],
             ],
             limit: requestedLimit,
             ...(requestedCursor === undefined ? {} : { cursor: requestedCursor }),

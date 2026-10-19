@@ -17,6 +17,8 @@ export interface LlmCallControls {
   reasoningEffort?: ReasoningEffortId
   temperature?: number
   maxTokens?: number
+  /** Alternatives captured per output token; presence enables token probabilities. */
+  topLogprobs?: number
   stop?: string[]
 }
 
@@ -71,6 +73,7 @@ export function callConfigEquals(a: LlmCallConfig, b: LlmCallConfig): boolean {
     || a.reasoningEffort !== b.reasoningEffort
     || a.temperature !== b.temperature
     || a.maxTokens !== b.maxTokens
+    || a.topLogprobs !== b.topLogprobs
   ) return false
   if (a.stop === undefined || b.stop === undefined) return a.stop === b.stop
   return a.stop.length === b.stop.length && a.stop.every((s, i) => s === b.stop?.[i])

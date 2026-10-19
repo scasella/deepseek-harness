@@ -23,6 +23,9 @@ export type { SessionSearchCursor } from './cursor.ts'
 /** Whether an event is current model context, replaced context, or raw-log-only. */
 export type SessionEventSurface = 'current' | 'shadowed' | 'log-only'
 
+/** Whether an event was written by the queried Session or copied from its fork source. */
+export type SessionEventOwnership = 'own' | 'inherited'
+
 /** Lightweight identity and source availability for one logical session. */
 export interface SessionRecord {
   /** Cloned session header selected from the live-preferred corpus. */
@@ -218,6 +221,7 @@ export type SessionEventResultFilter =
   | ({ kind: 'time' } & SessionResultRange)
   | { kind: 'type'; values: readonly SessionEventType[] }
   | { kind: 'surface'; values: readonly SessionEventSurface[] }
+  | { kind: 'ownership'; values: readonly SessionEventOwnership[] }
   | { kind: 'text'; text: string }
 
 /** Event predicates a full-text provider can apply before relevance ranking. */

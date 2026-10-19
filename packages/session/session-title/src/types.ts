@@ -11,7 +11,7 @@
 export {}
 
 import type { Branded } from '@deepseek-ai/dsh-brand'
-import type { OptionalSessionSeq, SessionSeq } from '@deepseek-ai/dsh-session/types'
+import type { OptionalSessionSeq, SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session/types'
 
 /** Identifies one session-title provider registration. */
 export type SessionTitleProviderId = Branded<'SessionTitleProviderId'>
@@ -68,9 +68,11 @@ export interface SessionTitleUserMessage {
 
 /** Eligible title input stored as a bounded aggregate. */
 export interface TitleInputState {
-  /** The oldest eligible message, or null before any. */
+  /** Exact inherited prefix excluded from this Session's title inputs. */
+  readonly inheritedEventCount: SessionLogOffset
+  /** The oldest own eligible message, or null before any. */
   readonly first: SessionTitleUserMessage | null
-  /** Total eligible messages folded so far. */
+  /** Total own eligible messages folded so far. */
   readonly count: number
   /** Seq of the newest eligible message, or null before any. */
   readonly lastSeq: OptionalSessionSeq

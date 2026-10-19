@@ -9,6 +9,7 @@ import type { SessionBinding, SessionReference } from '@deepseek-ai/dsh-api-sess
 import type { ChatSnapshot } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { notifySubscribers, type ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { BlockTokenLogprobs } from '@deepseek-ai/dsh-llm/types'
 import { keyedSourceRegistry, type KeyedLifecycle } from './keyed-sources.ts'
 
 /** One loaded turn of the read Session. */
@@ -20,6 +21,8 @@ export interface LoomReaderTurn {
   readonly prompt: string
   /** Text of the closing assistant message, verbatim. */
   readonly reply: string
+  /** Answer text blocks with provider-captured probabilities; reasoning is excluded. */
+  readonly capturedReply?: readonly { readonly text: string; readonly logprobs: BlockTokenLogprobs }[]
   /** Reasoning of the closing assistant message, verbatim. */
   readonly reasoning: string
   /** Reasoning tokens of every attempt in the turn; absent when any attempt did not report them. */
@@ -93,6 +96,11 @@ function sameTurn(left: LoomReaderTurn, right: LoomReaderTurn): boolean {
     && left.reasoningTokens === right.reasoningTokens && left.closingSeq === right.closingSeq && left.closed === right.closed
     && left.usage?.inputTokens === right.usage?.inputTokens && left.usage?.cachedTokens === right.usage?.cachedTokens
     && left.usage?.outputTokens === right.usage?.outputTokens
+    && left.capturedReply?.length === right.capturedReply?.length
+    && (left.capturedReply ?? []).every((block, index) => {
+      const other = (right.capturedReply as readonly typeof block[])[index] as typeof block
+      return block.text === other.text && block.logprobs === other.logprobs
+    })
 }
 
 /**
@@ -112,11 +120,13 @@ export function readerDocument(chat: ChatSnapshot, hasMore: boolean, previous?: 
     const blocks = tail?.closing?.blocks ?? []
     const usage = tail?.tokenUsage
     const reasoningTokens = usage?.reasoningTokens
+    const capturedReply = blocks.flatMap(block => block.kind === 'text' && block.logprobs !== undefined ? [{ text: block.text, logprobs: block.logprobs }] : [])
     const next: LoomReaderTurn = {
       turn,
       ...location?.start === undefined ? {} : { startSeq: location.start.seq },
       prompt: (opening?.content ?? []).flatMap(block => block.type === 'text' ? [block.text] : []).join('\n\n'),
       reply: blocks.flatMap(block => block.kind === 'text' ? [block.text] : []).join('\n\n'),
+      ...capturedReply.length === 0 ? {} : { capturedReply },
       reasoning: blocks.flatMap(block => block.kind === 'reasoning' ? [block.text] : []).join('\n\n'),
       ...reasoningTokens === undefined ? {} : { reasoningTokens },
       ...usage === undefined ? {} : {

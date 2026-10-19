@@ -458,7 +458,7 @@ describe('dsh-tool-workflow', () => {
       const session = Session.create(SessionId('caller'))
       const parent: Agent = {
         id: session.id, options: {}, session, inbox: unsupportedInbox(), status: 'idle', ctx,
-        send: () => {}, followup: () => {}, steer: () => {}, inject: () => {}, cancel: () => {},
+        send: () => {}, followup: () => {}, continue: () => {}, steer: () => {}, inject: () => {}, cancel: () => {},
         runMaintenance: task => task(new AbortController().signal), whenIdle: () => Promise.resolve(),
       }
       await ctx.agents.register(parent)
@@ -677,7 +677,7 @@ describe('dsh-tool-workflow', () => {
       const session = Session.create(SessionId('caller'))
       const parent: Agent = {
         id: session.id, options: {}, session, inbox: unsupportedInbox(), status: 'idle', ctx,
-        send: () => {}, followup: () => {}, steer: () => {}, inject: () => {}, cancel: () => {},
+        send: () => {}, followup: () => {}, continue: () => {}, steer: () => {}, inject: () => {}, cancel: () => {},
         runMaintenance: task => task(new AbortController().signal), whenIdle: () => Promise.resolve(),
       }
       await ctx.agents.register(parent)

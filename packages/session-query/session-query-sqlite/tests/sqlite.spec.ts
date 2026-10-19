@@ -365,6 +365,40 @@ describe('SQLite session search', () => {
       .resolves.toMatchObject({ items: [{ header: session.header, live: true, persisted: false }] })
   })
 
+  it('searches own and inherited fork text before ranking in both search operations', async () => {
+    const ctx = await liveContext({ path: ':memory:' })
+    const parent = ctx.sessions.create(SessionId('ownership-parent'))
+    parent.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'needle inherited' }], source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    const child = ctx.sessions.fork(parent, SessionSeq(0), SessionId('ownership-child'))
+    const own = child.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'needle own' }], source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    const cold = await liveContext({ path: ':memory:' })
+    await cold.plugin(JsonlSessionPersistence, { root: await temporaryPath('ownership-sessions'), compression: 'none' })
+    const writer = await cold.sessionPersistence.create(child.header, { inheritedEventCount: child.inheritedEventCount })
+    await writer.append((await ctx.sessionQuery.readSession(child.id)).events)
+    await writer.close()
+    for (const provider of [ctx.sessionQuery, cold.sessionQuery]) {
+      for (const ownership of ['own', 'inherited'] as const) {
+        const expectedSeq = ownership === 'own' ? own.seq : SessionSeq(0)
+        const filters = [{ kind: 'ownership' as const, values: [ownership] }]
+        const events = await provider.searchEvents({ sessionId: child.id, query: 'needle', filters })
+        expect(events.items.map(item => item.seq)).toEqual([expectedSeq])
+        const sessions = await provider.searchSessions({
+          query: 'needle', sessionFilters: [{ kind: 'id', values: [child.id] }], eventFilters: filters,
+        })
+        expect(sessions.items.map(item => item.bestMatch.seq)).toEqual([expectedSeq])
+      }
+    }
+    const unseeded = await ctx.sessionQuery.searchEvents({
+      sessionId: parent.id, query: 'needle', filters: [{ kind: 'ownership', values: ['inherited'] }],
+    })
+    expect(unseeded.items).toEqual([])
+    await cold.fiber.dispose()
+  })
+
   it('excludes assistant reasoning while indexing visible answer text', async () => {
     const ctx = await liveContext()
     const session = ctx.sessions.create(SessionId('reasoning'))

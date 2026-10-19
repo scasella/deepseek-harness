@@ -110,7 +110,7 @@ type SessionTitleAutomaticMode = 'first-prompt' | 'all-prompts'
 interface SessionTitleProviderRequest {
   /** Live session being titled. */
   readonly session: Session
-  /** All eligible human messages through this generation revision. */
+  /** This Session's own eligible human messages through this generation revision. */
   readonly messages: readonly SessionTitleUserMessage[]
   /** Exact current logged main-request route, when one has been recorded. */
   readonly route?: SessionTitleModelIdentity

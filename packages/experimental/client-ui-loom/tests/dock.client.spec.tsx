@@ -15,7 +15,9 @@ import { createLoomBranching, type LoomBranchForm, type LoomBranchingState, type
 import type { LoomDockProps } from '../src/client/dock.ts'
 import { EditBranch, type EditBranchProps } from '../src/client/EditBranch.tsx'
 import { createLoomFamilySources, type LoomFamilyState } from '../src/client/family.ts'
+import type { LoomReadState } from '../src/client/read-sources.ts'
 import type { LoomRoutesState } from '../src/client/routes.ts'
+import type { LoomEstimateValue } from '@deepseek-ai/dsh-experimental-loom/types'
 import { RunningStrip } from '../src/client/RunningStrip.tsx'
 import { entry, listOf, ROOT, SET, SET2, tEn, tZh, type Member } from './fixtures.client.ts'
 
@@ -46,7 +48,7 @@ const MEMBERS: Member[] = [
 ]
 
 function form(extra: Partial<LoomBranchForm> = {}): LoomBranchForm {
-  return { sourceSessionId: ROOT, afterTurn: 2, rows: ['Try A', 'Try A'], samples: 1, selection: null, starting: false, failure: null, ...extra }
+  return { sourceSessionId: ROOT, afterTurn: 2, rows: ['Try A', 'Try A'], samples: 1, selection: null, isolation: 'shared', isolationUnavailable: null, starting: false, failure: null, ...extra }
 }
 
 function bench(options: {
@@ -62,12 +64,16 @@ function bench(options: {
   locale?: 'en' | 'zh'
   cancel?: () => Promise<LoomOutcome>
   submit?: () => Promise<boolean>
+  /** Read state of every cost estimate; a failed read shows no Cost row. */
+  estimate?: LoomReadState<LoomEstimateValue>
 } = {}) {
   const sessions = createSnapshotStore<SessionListState>(listOf(options.members ?? MEMBERS))
   const families = createLoomFamilySources({ sessions })
   const branching = createSnapshotStore<LoomBranchingState>({ sets: [], forms: {}, marks: {}, ...options.branching })
   const statuses = createSnapshotStore<SessionStatusSnapshot>(options.statuses ?? new Map())
   const routes = createSnapshotStore<LoomRoutesState>(options.routes ?? { status: 'idle' })
+  const estimate = createSnapshotStore<LoomReadState<LoomEstimateValue>>(options.estimate ?? { status: 'failed' })
+  const estimateKeys: string[] = []
   const injected = {
     openSession: vi.fn(),
     refreshProjection: vi.fn(),
@@ -99,10 +105,14 @@ function bench(options: {
     useLoomFamily: keyed<LoomFamilyState>(key => families.source(key)),
     useLoomBranching: bindSnapshotSelector(branching),
     useLoomRoutes: bindSnapshotSelector(routes),
+    useLoomEstimate: keyed<LoomReadState<LoomEstimateValue>>((key) => {
+      estimateKeys.push(key)
+      return estimate
+    }),
     t: options.locale === 'zh' ? tZh : tEn,
     ...injected,
   } as never
-  return { props, injected, branching, statuses, sessions }
+  return { props, injected, branching, statuses, sessions, estimate, estimateKeys }
 }
 
 describe('Branch ×N form', () => {
@@ -136,6 +146,71 @@ describe('Branch ×N form', () => {
     expect(injected.submitForm).toHaveBeenCalledWith(ROOT)
     fireEvent.click(within(panel).getByRole('button', { name: 'Cancel' }))
     expect(injected.closeForm).toHaveBeenCalledWith(ROOT)
+  })
+
+  it('chooses where the branches keep their files, and disables a refused worktree option with the Host\'s reason', () => {
+    const { props, injected, branching } = bench({ branching: { forms: { [ROOT]: form() } } })
+    render(<BranchForm {...props} />)
+    const panel = screen.getByRole('region')
+    const shared = within(panel).getByRole('radio', { name: /Run one at a time in the shared folder/u })
+    const worktree = within(panel).getByRole('radio', { name: /Isolate each branch in a worktree/u })
+    expect(shared.textContent).toContain('Children share this folder, including edits earlier branches make')
+    expect(worktree.textContent).toContain('Each branch starts from a snapshot of this folder')
+    expect(worktree.textContent).toContain('Untracked files are not carried over.')
+    fireEvent.click(worktree)
+    expect(injected.editForm).toHaveBeenLastCalledWith(ROOT, { isolation: 'worktree' })
+    act(() => { branching.set({ sets: [], marks: {}, forms: { [ROOT]: form({ isolation: 'worktree' }) } }) })
+    fireEvent.click(shared)
+    expect(injected.editForm).toHaveBeenLastCalledWith(ROOT, { isolation: 'shared' })
+    act(() => { branching.set({ sets: [], marks: {}, forms: { [ROOT]: form({ isolationUnavailable: 'service-unavailable' }) } }) })
+    expect(worktree).toHaveProperty('disabled', true)
+    expect(worktree.textContent).toContain('Not available: the worktree service is not running')
+    fireEvent.keyDown(shared, { key: 'ArrowDown' })
+    expect(injected.editForm).toHaveBeenCalledTimes(2)
+    act(() => { branching.set({ sets: [], marks: {}, forms: { [ROOT]: form({ starting: true }) } }) })
+    expect([shared, worktree].map(radio => (radio as HTMLButtonElement).disabled)).toEqual([true, true])
+  })
+
+  it('reads the cost of the branches once per branch count and kind of set, and says an override is not covered', () => {
+    const priced: LoomReadState<LoomEstimateValue> = {
+      status: 'ready',
+      value: { priced: true, perBranch: { low: 0.006, high: 0.01 }, total: { low: 0.012, high: 0.02 }, cacheShare: 0.887, basis: 'family' },
+      refreshing: false,
+      stale: false,
+    }
+    const { props, estimateKeys, branching } = bench({ branching: { forms: { [ROOT]: form() } }, estimate: priced })
+    render(<BranchForm {...props} />)
+    const text = (): string => screen.getByRole('region').textContent ?? ''
+    expect(text()).toContain('≈ $0.006–$0.010 per branch · list price')
+    expect(text()).toContain("≈ $0.012–$0.020 for 2 · 88% of input was cached across this family's own turns")
+    expect(estimateKeys.at(-1)).toBe(['root', 'steer', '', '2', '2'].join('\u0000'))
+    act(() => { branching.set({ sets: [], marks: {}, forms: { [ROOT]: form({ samples: 3 }) } }) })
+    expect(estimateKeys.at(-1)).toBe(['root', 'variants', '', '2', '6'].join('\u0000'))
+    expect(text()).not.toContain('not this override')
+    act(() => { branching.set({ sets: [], marks: {}, forms: { [ROOT]: form({ selection: { provider: 'p', model: 'm' } }) } }) })
+    expect(estimateKeys.at(-1)).toBe(['root', 'steer', '', '2', '2', JSON.stringify({ provider: 'p', model: 'm' })].join('\u0000'))
+    // Typing a steering line changes nothing the estimate reads.
+    const before = estimateKeys.length
+    act(() => { branching.set({ sets: [], marks: {}, forms: { [ROOT]: form({ rows: ['Try A', 'Try B'], selection: { provider: 'p', model: 'm' } }) } }) })
+    expect(new Set(estimateKeys.slice(before))).toEqual(new Set([estimateKeys.at(-1)]))
+  })
+
+  it('shows the cost while it reads, in tokens without a price, and no Cost row when the estimate fails', () => {
+    const states: [LoomReadState<LoomEstimateValue>, string | null][] = [
+      [{ status: 'loading' }, 'Estimating…'],
+      [{ status: 'ready', value: { priced: false, perBranch: { low: 10_000, high: 12_000 }, cacheShare: 0, basis: 'own-turn' }, refreshing: true, stale: true }, '≈ 10K–12K tokens per branch · no list price for this route'],
+      [{ status: 'failed' }, null],
+    ]
+    for (const [estimate, expected] of states) {
+      cleanup()
+      render(<BranchForm {...bench({ branching: { forms: { [ROOT]: form({ rows: ['a'] }) } }, estimate }).props} />)
+      const content = screen.getByRole('region').textContent ?? ''
+      if (expected === null) expect(content).not.toContain('Cost')
+      else expect(content).toContain(expected)
+    }
+    cleanup()
+    render(<BranchForm {...bench({ branching: { forms: { [ROOT]: form() } }, estimate: { status: 'loading' }, locale: 'zh' }).props} />)
+    expect(screen.getByRole('region').textContent).toContain('正在估算…')
   })
 
   it('refuses empty lines, shows a start in flight and its failure, and picks a route for these branches', () => {

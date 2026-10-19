@@ -119,8 +119,8 @@ describe.skipIf(MODE === 'record')('web e2e: seeded fork family', () => {
     await groupRow.waitFor({ timeout: 15_000 })
     await groupRow.click()
     await expect.poll(() => page.locator('[role="treeitem"]').count(), { timeout: 15_000 }).toBe(4)
-    // Rows sort by recency: branch B, branch A, then the root.
-    await page.locator('[role="treeitem"]').nth(2).click()
+    // Open the fork through its stable Session identity.
+    await page.locator(`[data-row-key="session:${BRANCH_A}"]`).click()
     await page.getByText(`${MARKER_A} This branch continues`, { exact: false }).last().waitFor({ timeout: 15_000 })
     const dock = page.locator('[data-composer-dock]')
     await expect.poll(() => dock.textContent(), { timeout: 15_000 }).toContain('inherited')
@@ -130,11 +130,11 @@ describe.skipIf(MODE === 'record')('web e2e: seeded fork family', () => {
   it('folds the opened fork\'s inherited turns and names its parent in the header', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-fork-family-flow'))
     // Reading the root lists its durable title, which A's crumb then shows.
-    await page.locator('[role="treeitem"]').nth(3).click()
+    await page.locator(`[data-row-key="session:${ROOT_ID}"]`).click()
     await page.getByText(rootFixture.markers.user(2), { exact: false }).last().waitFor({ timeout: 15_000 })
     expect(await page.getByRole('button', { name: /Inherited from parent/u }).count()).toBe(0)
-    await expect.poll(() => page.locator('[role="treeitem"]').nth(3).textContent(), { timeout: 15_000 }).toContain(rootFixture.title)
-    await page.locator('[role="treeitem"]').nth(2).click()
+    await expect.poll(() => page.locator(`[data-row-key="session:${ROOT_ID}"]`).textContent(), { timeout: 15_000 }).toContain(rootFixture.title)
+    await page.locator(`[data-row-key="session:${BRANCH_A}"]`).click()
     await page.getByText(`${MARKER_A} This branch continues`, { exact: false }).last().waitFor({ timeout: 15_000 })
     const inherited = page.getByRole('button', { name: 'Inherited from parent · turn 1 · 1 step' })
     expect(await inherited.getAttribute('aria-expanded')).toBe('false')

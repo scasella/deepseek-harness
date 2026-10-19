@@ -44,6 +44,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-experimental-tool-agent-team` | `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/task`, `agent/inbox/spliced`, `user/message on inbox claim`, `tool/result` | - | All nine tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@deepseek-ai/dsh-tool-working-directory` | `working_directory` | `ctx.tools`, `ctx.workingDirectory` | `tool/call`, `working-directory/change`, `user context for directory changes`, `tool/result` | - | Reads or changes the calling Session directory. Existing shells and processes retain their own directories; origin metadata and permission roots stay fixed. |
+| `@deepseek-ai/dsh-experimental-tool-loom` | `loom_cull`, `loom_expand`, `loom_keep`, `loom_read`, `loom_wait` | `ctx.tools`, `ctx.loom`, `ctx.sessionController`, `ctx.sessionQuery`, `ctx.sessionProjections`, `ctx.tokenMeter`, `ctx.permissionPresets`, `ctx.workspaceRegistry`, `a calling Agent` | `tool/call`, `forked child Sessions (plugin:loom/branch, permission/preset, a loom-sourced user/message)`, `plugin:loom/mark`, `Workspace archive set`, `tool/result` | - | Explicit experimental composition only, beside the experimental Loom service. Every Session sees the five tools; a Session whose first own prompt came from a weaver is refused. Wait and read bounds in the schema text follow the plugin Config. |
 | `@deepseek-ai/dsh-experimental-tool-worktree` | `create_worktree` | `ctx.tools`, `ctx.worktrees`, `a calling Agent` | `tool/call`, `Git branch and checkout`, `working-directory/change`, `tool/result` | - | Explicit experimental composition only. Creates a new branch and checkout from a pinned local commit under existing write permissions, then changes the Session directory. Leaving retains the branch and checkout. |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-workspace-dependencies` | `load_workspace_dependencies` | `ctx.tools` | `tool/call`, `tool/result` | - | - |
@@ -2631,6 +2632,140 @@ Read the current working directory, or change it with cd. Relative paths use the
 Source: [`packages/session/tool-working-directory/src/index.ts`](../packages/session/tool-working-directory/src/index.ts)
 
 Reads or changes the calling Session directory. Existing shells and processes retain their own directories; origin metadata and permission roots stay fixed.
+
+<a id="deepseek-aidsh-experimental-tool-loom"></a>
+
+## `@deepseek-ai/dsh-experimental-tool-loom`
+
+### `loom_cull`
+
+Stop a child this Session started and archive it. The archive keeps its history.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string",
+      "description": "Child Session returned by loom_expand or loom_wait."
+    }
+  },
+  "required": [
+    "sessionId"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-loom/src/tools.ts`](../packages/experimental/tool-loom/src/tools.ts)
+
+### `loom_expand`
+
+Branch a Session into child Sessions that continue from the end of one turn: one child per prompt line, or count children that sample the next turn again. Children run in the background with a non-interactive permission preset; follow them with loom_wait and loom_read. A call that would exceed this Session's branch, depth, or own-token budget is refused without creating any child.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string",
+      "description": "Session to branch: another Session in the same working directory. Omit to branch this Session."
+    },
+    "afterTurn": {
+      "type": "integer",
+      "description": "Last turn every child keeps; each child continues from the end of this turn."
+    },
+    "lines": {
+      "type": "array",
+      "description": "One prompt per child, sent verbatim as that child's next user message. Give exactly one of lines and count.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "count": {
+      "type": "integer",
+      "description": "Number of children that each resend the opening prompt of turn afterTurn + 1 to sample that turn again. Give exactly one of lines and count."
+    }
+  },
+  "required": [
+    "afterTurn"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-loom/src/tools.ts`](../packages/experimental/tool-loom/src/tools.ts)
+
+### `loom_keep`
+
+Mark a child this Session started as kept.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string",
+      "description": "Child Session returned by loom_expand or loom_wait."
+    }
+  },
+  "required": [
+    "sessionId"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-loom/src/tools.ts`](../packages/experimental/tool-loom/src/tools.ts)
+
+### `loom_read`
+
+Read the latest assistant output of a child this Session started, with its state and the tokens of its own requests.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string",
+      "description": "Child Session returned by loom_expand or loom_wait."
+    },
+    "maxChars": {
+      "type": "integer",
+      "description": "Longest output to return, in characters, from 1 through 20000. Defaults to 4000."
+    }
+  },
+  "required": [
+    "sessionId"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-loom/src/tools.ts`](../packages/experimental/tool-loom/src/tools.ts)
+
+### `loom_wait`
+
+Wait until every child of a branch set has finished its turn, failed, or been withdrawn, or until the timeout passes. Returns each child's state and the tokens of its own requests.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "setId": {
+      "type": "string",
+      "description": "Branch set id returned by loom_expand."
+    },
+    "timeoutMs": {
+      "type": "integer",
+      "description": "Longest wait in milliseconds, from 1 through 1800000. Defaults to 120000."
+    }
+  },
+  "required": [
+    "setId"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-loom/src/tools.ts`](../packages/experimental/tool-loom/src/tools.ts)
+
+Explicit experimental composition only, beside the experimental Loom service. Every Session sees the five tools; a Session whose first own prompt came from a weaver is refused. Wait and read bounds in the schema text follow the plugin Config.
 
 <a id="deepseek-aidsh-experimental-tool-worktree"></a>
 

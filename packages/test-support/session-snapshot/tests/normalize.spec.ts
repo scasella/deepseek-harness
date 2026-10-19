@@ -487,9 +487,9 @@ describe('normalizeSessionLog', () => {
     expect(out).not.toContain('212')
   })
 
-  it('normalizes timing inside an embedded Assistant stream and ignores opaque members', () => {
+  it.each(['assistant/attempt', 'plugin:loom/weave-node'])('normalizes embedded %s clocks and preserves opaque members', (type) => {
     const event = JSON.stringify({
-      type: 'assistant/attempt',
+      type,
       seq: 2,
       time: 9,
       data: {

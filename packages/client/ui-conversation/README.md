@@ -50,6 +50,8 @@ Group registration rejects a missing View target. Removing an already registered
 
 Target packages declaration-merge their snapshot and Location data maps, then register with `ctx.uiConversation.events.register(...)` and `ctx.uiConversation.views.register(...)`. A target reads its Session-owned source with `ctx.uiConversation.binding(binding).target(targetId)`. Registrations are Cordis effects and their returned disposers remove the contribution from the same registry. The shared request inspection serves every target: `ctx.uiConversation.inspectSystemPrompt(previous, event)` interprets system messages and positional replacements as immutable loaded-surface state. It selects the last nonempty surviving system node in surface order, retains only surviving replacement positions for chained rewrites, and withholds the prompt after an unindexed older endpoint until prepend replay supplies its order. Target-owned Definitions retain historical cards independently. `ctx.uiConversation.inspectRequestPrompt(previous, header, system)` classifies request changes against that effective prompt; ordinary messages and stream chunks require no system-state work.
 
+`AssistantBlock` text values may carry generation-time `logprobs` metadata from a settled stream. The optional value preserves sampled token text, probabilities, and alternatives for consumers that present them; ordinary text rendering remains unchanged. `AssistantRequestConfig.topLogprobs` records the requested alternative count.
+
 <a id="sent-user-text"></a>
 ## Sent user text
 

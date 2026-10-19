@@ -4,6 +4,7 @@ import type {
   ConversationNodeContext, ConversationNodeDefinition,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { StreamChunk } from '@deepseek-ai/dsh-llm'
+import { assistantStreamBlockLogprobs } from '@deepseek-ai/dsh-llm/assistant-stream'
 import type {} from '@deepseek-ai/dsh-llm-retry/types'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import type { AssistantChatData } from '../contract/chat-nodes.ts'
@@ -137,7 +138,7 @@ function updateChunk(
     case 'block-end':
       changedIndex = chunk.index
       previousVisible = blockIsVisible(blocks[chunk.index])
-      blocks[chunk.index] = toAssistantBlock(chunk.block)
+      blocks[chunk.index] = toAssistantBlock(chunk.block, chunk.logprobs)
       break
     case 'usage':
       return { ...state, usage: chunk.usage }
@@ -166,7 +167,7 @@ function settleMessage(
   match: ConversationMatch,
   event: SessionEvent<'assistant/message'>,
 ): AssistantState {
-  const blocks = toAssistantBlocks(event.data.message.content)
+  const blocks = toAssistantBlocks(event.data.message.content, assistantStreamBlockLogprobs(event.data.stream))
   return {
     ...state,
     blocks,
@@ -201,7 +202,7 @@ function finalNode(
       time: event.time,
       turn: state.turn,
       step: state.step,
-      blocks: toAssistantBlocks(event.data.message.content),
+      blocks: compactBlocks(state.blocks),
       usage: event.data.usage,
       timing: {
         stepStartTime: context.start?.event.time ?? null,

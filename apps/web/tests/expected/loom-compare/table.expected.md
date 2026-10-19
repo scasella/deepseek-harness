@@ -1,0 +1,37 @@
+- text: After turn 1 · Compare family · 2 branches Branches ran in the shared folder
+- table "Branch comparison":
+  - rowgroup:
+    - row "Select Branch Tests Diff Steps Own tokens Wall Marks":
+      - columnheader "Select"
+      - columnheader "Branch"
+      - columnheader "Tests"
+      - columnheader "Diff"
+      - columnheader "Steps"
+      - columnheader "Own tokens"
+      - columnheader "Wall"
+      - columnheader "Marks"
+  - rowgroup:
+    - 'row "Compare family Compare family Passing approach 4 passed no changes 1 200 tok {{duration}} Keep: Compare family Set aside: Compare family"':
+      - cell "Compare family":
+        - radio "Compare family"
+      - cell "Compare family Passing approach"
+      - cell "4 passed"
+      - cell "no changes"
+      - cell "1"
+      - cell "200 tok"
+      - cell "{{duration}}"
+      - 'cell "Keep: Compare family Set aside: Compare family"':
+        - 'button "Keep: Compare family"'
+        - 'button "Set aside: Compare family"'
+    - 'row "Compare family Compare family Failing approach 1 of 4 failed no changes 1 200 tok {{duration}} Keep: Compare family Set aside: Compare family"':
+      - cell "Compare family":
+        - radio "Compare family"
+      - cell "Compare family Failing approach"
+      - cell "1 of 4 failed"
+      - cell "no changes"
+      - cell "1"
+      - cell "200 tok"
+      - cell "{{duration}}"
+      - 'cell "Keep: Compare family Set aside: Compare family"':
+        - 'button "Keep: Compare family"'
+        - 'button "Set aside: Compare family"'

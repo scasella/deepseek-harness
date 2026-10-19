@@ -3,7 +3,6 @@ import type {
   ConversationMatch, ConversationNodeContext, ConversationNodeDefinition, PreparingToolCall, StartedToolCall,
   ToolCallBlock, ToolResultNode,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-session/surface'
 import type {} from '@deepseek-ai/dsh-tools/types'
 import { PartialArguments } from '@deepseek-ai/dsh-util-values'
 import type { ChatNode, ToolChatData } from '../contract/chat-nodes.ts'
@@ -97,7 +96,7 @@ function preparingBlock(root: PreparingToolCall, current: ToolCallBlock | undefi
   return changed ? { ...root } : root
 }
 
-function rootResult(match: ConversationMatch, previous?: StartedToolCall): ToolResultNode | undefined {
+function rootResult(match: ConversationMatch, previous?: StartedToolCall | ToolResultNode): ToolResultNode | undefined {
   if (match.event.type !== 'tool/result') return undefined
   const message = match.event.data.message
   return {
@@ -107,8 +106,8 @@ function rootResult(match: ConversationMatch, previous?: StartedToolCall): ToolR
     callId: String(message.source.callId),
     name: previous?.name ?? '',
     args: previous?.args ?? PartialArguments.EMPTY,
-    call: previous === undefined ? null : { name: previous.name, argsRaw: previous.argsRaw },
-    callTime: previous?.time ?? null,
+    call: previous === undefined ? null : 'kind' in previous ? previous.call : { name: previous.name, argsRaw: previous.argsRaw },
+    callTime: previous === undefined ? null : 'kind' in previous ? previous.callTime : previous.time,
     content: message.content,
     isError: message.isError === true,
     ...match.event.data.error === undefined ? {} : { error: match.event.data.error },
@@ -302,7 +301,7 @@ export const toolDefinition: ConversationNodeDefinition<ToolState> = {
       return chunk.type === 'tool-call-delta' ? { id: String(chunk.id), role: 'start' } : null
     }
     if (event.type === 'tool/call') return { id: String(event.data.callId), role: 'start' }
-    if (event.type === 'tool/result' && isAppendSurfaceEvent(event)) {
+    if (event.type === 'tool/result') {
       return { id: String(event.data.message.source.callId), role: 'update' }
     }
     if (event.type === 'tool/ptc-dispatch-start' || event.type === 'tool/ptc-dispatch') {
@@ -322,8 +321,8 @@ export const toolDefinition: ConversationNodeDefinition<ToolState> = {
     if (match.event.type === 'tool/call') return { ...context.state, root: rootCall(match, context.state.root) }
     if (match.event.type === 'tool/result') {
       const root = context.state.root
-      const running = root !== undefined && !('kind' in root) && root.phase === 'start' ? root : undefined
-      const result = rootResult(match, running)
+      const previous = root !== undefined && ('kind' in root || root.phase === 'start') ? root : undefined
+      const result = rootResult(match, previous)
       return result === undefined ? context.state : { ...context.state, root: result }
     }
     return updateDispatch(context.state, match)

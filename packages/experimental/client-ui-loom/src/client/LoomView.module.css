@@ -1,7 +1,8 @@
-/* Full-height Loom tab: the tree pane beside the reading pane, stacked at narrow widths.
-   ConversationRoot floats the composer over the reading pane (over the whole tab when
-   stacked), so the reading pane scrolls above it. The root is the size container; the
-   panes grid inside it is what the query restyles. */
+/* Full-height Loom tab: a toolbar with the mode switch above either the tree pane beside
+   the reading pane (stacked at narrow widths) or the comparison. ConversationRoot floats
+   the composer over the reading pane (over the whole tab when stacked, and in Compare),
+   so the panes scroll above it. The root is the size container; the panes grid inside it
+   is what the query restyles. */
 .root {
   --loom-bottom-clearance: calc(var(--dsh-composer-height, 152px) + 16px);
 
@@ -13,7 +14,26 @@
   overflow: hidden;
   color: var(--dsw-alias-label-primary);
   background: var(--dsw-alias-bg-layer-1);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
 }
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 12px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.comparePane {
+  min-height: 0;
+  padding-bottom: var(--loom-bottom-clearance);
+  overflow-y: auto;
+}
+
+.weavePane { min-height: 0; overflow-y: auto; }
 
 .panes {
   display: grid;

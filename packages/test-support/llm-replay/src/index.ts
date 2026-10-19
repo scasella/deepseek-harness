@@ -13,7 +13,7 @@ import { delimiter as pathDelimiter } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-compaction'
 import type {} from '@deepseek-ai/dsh-deepseek-llm-api-extensions'
-import { SESSION_FORMAT_VERSION, SessionLogOffset, type SessionEvent } from '@deepseek-ai/dsh-session'
+import { SESSION_FORMAT_VERSION, SessionLogOffset, pluginRecordOf, type SessionEvent } from '@deepseek-ai/dsh-session'
 import type { SessionLogOffset as SessionLogOffsetType } from '@deepseek-ai/dsh-session'
 import {
   createSessionFormatCatalogWithChildren,
@@ -22,6 +22,7 @@ import {
 } from '@deepseek-ai/dsh-session-format-catalog'
 import type {
   ContentBlock,
+  AssistantStreamRecord,
   GenerateOptions,
   LlmImageRequestPricing,
   LlmModelInfo,
@@ -73,6 +74,13 @@ export type ReplayEntry =
 
 /** One model exposed by a replay-only provider catalog. */
 export interface ReplayModelConfig {
+  /** Exact-route probability capture for keyless Loom calls. */
+  tokenLogprobs?: {
+    /** Maximum number of alternative tokens accepted by this replay model. */
+    readonly maxTopLogprobs: number
+  }
+  /** Tool-free auxiliary assistant-prefix support for keyless Loom calls. */
+  assistantPrefill?: 'tool-free'
   /** Model id used for replay requests. */
   id: string
   /** Selector label; defaults to {@link id}. */
@@ -465,8 +473,8 @@ export function parseSessionHeader(text: string): {
  * @returns one `chunks` entry per recorded model call, in call order.
  */
 export function deriveReplayScript(events: SessionEvent[]): ReplayEntry[] {
-  const script: ReplayEntry[] = []
-  const close = (key: string | undefined, chunks: StreamChunk[]): void => {
+  const script: { readonly seq: number; readonly index: number; readonly entry: ReplayEntry }[] = []
+  const close = (key: string | undefined, chunks: StreamChunk[], seq: number, index = 0): void => {
     if (chunks.length === 0) return
     if (chunks[chunks.length - 1]?.type !== 'finish') {
       throw new Error(
@@ -474,9 +482,21 @@ export function deriveReplayScript(events: SessionEvent[]): ReplayEntry[] {
         + 'this scenario needs a replay.override.json sidecar',
       )
     }
-    script.push({ kind: 'chunks', chunks })
+    script.push({ seq, index, entry: { kind: 'chunks', chunks } })
   }
   for (const event of events) {
+    const record = pluginRecordOf(event)
+    const type: string | undefined = record?.type
+    if (type === 'plugin:loom/weave-node') {
+      const data: unknown = record?.data
+      if (!isRecord(data) || !Number.isSafeInteger(data['requestSeq']) || (data['requestSeq'] as number) < 0
+        || !Number.isSafeInteger(data['index']) || (data['index'] as number) < 0 || !Array.isArray(data['stream'])) {
+        throw new Error('llm-replay: invalid plugin:loom/weave-node record')
+      }
+      const chunks = expandAssistantStream(data['stream'] as AssistantStreamRecord[]).map(member => member.chunk)
+      close(`weave/${String(data['requestSeq'])}/${String(data['index'])}`, chunks, data['requestSeq'] as number, data['index'] as number)
+      continue
+    }
     if (event.type === 'compaction/summary') {
       // JSONL decoding crosses an untyped durable boundary, so retain its wider
       // shape even though current in-process producers enforce this correlation.
@@ -496,15 +516,15 @@ export function deriveReplayScript(events: SessionEvent[]): ReplayEntry[] {
         }
         if (persisted.usage !== undefined) chunks.push({ type: 'usage', usage: persisted.usage })
         chunks.push({ type: 'finish', reason: { kind: 'stop' } })
-        script.push({ kind: 'chunks', chunks })
+        script.push({ seq: event.seq, index: 0, entry: { kind: 'chunks', chunks } })
       }
       continue
     }
     if (event.type !== 'assistant/message' && event.type !== 'assistant/attempt') continue
     const chunks = expandAssistantStream(event.data.stream).map(member => member.chunk)
-    close(`${String(event.data.turn)}/${String(event.data.step)}`, chunks)
+    close(`${String(event.data.turn)}/${String(event.data.step)}`, chunks, event.seq)
   }
-  return script
+  return script.sort((left, right) => left.seq - right.seq || left.index - right.index).map(value => value.entry)
 }
 
 /**
@@ -932,6 +952,8 @@ class ReplayAdapter extends LlmAdapter {
       ...configuredModel?.toolUpdate === undefined
         ? {}
         : { toolUpdate: configuredModel.toolUpdate },
+      ...configuredModel?.tokenLogprobs === undefined ? {} : { tokenLogprobs: { ...configuredModel.tokenLogprobs } },
+      ...configuredModel?.assistantPrefill === undefined ? {} : { assistantPrefill: configuredModel.assistantPrefill },
       ...configuredModel?.reasoningEfforts === undefined
         ? {}
         : {
@@ -1226,6 +1248,16 @@ function validateConfiguredModels(providers: ReplayProviderConfig[] | undefined)
           `llm-replay: provider "${provider.id}" model "${model.id}" toolUpdate `
           + 'must be "in-history" or "addition-only" when present',
         )
+      }
+      const tokenLogprobs: unknown = model.tokenLogprobs
+      if (tokenLogprobs !== undefined && (!isRecord(tokenLogprobs)
+        || !Number.isSafeInteger(tokenLogprobs['maxTopLogprobs'])
+        || (tokenLogprobs['maxTopLogprobs'] as number) < 0 || (tokenLogprobs['maxTopLogprobs'] as number) > 20)) {
+        throw new Error(`llm-replay: provider "${provider.id}" model "${model.id}" maxTopLogprobs must be an integer from 0 through 20`)
+      }
+      const assistantPrefill: unknown = model.assistantPrefill
+      if (assistantPrefill !== undefined && assistantPrefill !== 'tool-free') {
+        throw new Error(`llm-replay: provider "${provider.id}" model "${model.id}" assistantPrefill must be "tool-free"`)
       }
     }
   }

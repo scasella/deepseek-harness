@@ -101,6 +101,26 @@ function harness(
 }
 
 describe('Tool preparation and durable replay', () => {
+  it('replaces displayed tool content while retaining the call identity, name, arguments, and timing', () => {
+    const initial = [...opening, call(3), result(4)]
+    const h = harness(initial)
+    const before = h.tools()[0]!
+    const replacement = entry({ type: 'tool/result', seq: SessionSeq(5), time: 5,
+      surfaceOp: { op: 'replace', startSeq: SessionSeq(4), endSeq: SessionSeq(4) },
+      sourceEventSeqs: [SessionSeq(4)], data: {
+        turn: 1, step: 1, message: createToolResultMessage({ callId: first,
+          content: [{ type: 'text', text: 'Counterfactual output' }], isError: false }),
+      } })
+    h.assembler.append(replacement)
+    const after = h.tools()[0]!
+    expect(after.id).toBe(before.id)
+    expect(after.anchorSeq).toBe(before.anchorSeq)
+    expect(after.data.root).toMatchObject({ kind: 'tool-result', seq: 5, time: 5,
+      name: 'write', call: { name: 'write', argsRaw: args }, callTime: 3,
+      content: [{ type: 'text', text: 'Counterfactual output' }],
+    })
+    expect(harness([...initial, replacement]).material()).toEqual(h.material())
+  })
   it('keeps Assistant state unchanged for parameter-only deltas while the Tool reader advances', () => {
     const update = vi.fn<typeof assistantDefinition.update>((...values) => assistantDefinition.update(...values))
     const h = harness(opening, false, toolDefinition, { ...assistantDefinition, update })

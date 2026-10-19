@@ -14,12 +14,11 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
     /**
-     * Keyed Tool call view dispatched by wire Tool name. Any name is allowed,
-     * including tools registered by your package. Register with
-     * `key: '<tool name>'`; a typo never renders.
+     * Keyed Tool call view dispatched by wire Tool name. Register with
+     * `key: '<tool name>'`; any name is allowed, while a typo never renders.
      *
-     * Registering an occupied key replaces its view; unclaimed keys use the
-     * generic row. The owner supplies the call identity and running
+     * An occupied key replaces its view; unclaimed keys use the generic row.
+     * The owner supplies the call identity and running
      * or settled node through explicit phase props. Every stage supplies
      * `name` and a lazy `args` view; preparing arguments may be incomplete.
      */
@@ -28,6 +27,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       scope: 'session'
       owner: ToolCallOwnerProps
     }
+    /** Optional actions for one preparing, running, or settled call, beside its card. */
+    'tool.call.actions': { kind: 'list'; scope: 'session'; owner: ToolCallOwnerProps }
     /**
      * Durable images of a settled image-bearing Tool call, rendered through
      * the attachment presentation plugin. The Tool layer never imports an
@@ -152,6 +153,6 @@ export type ToolHostInfoInjected = {
 
 /** Full props of the Tool call-tree renderer registered as a tool-call Chat Node. */
 export type ToolTreeProps = PropsRuntime<'conversation.chat.node', 'tool-call'>
-  & PropsRenderSlots<'tool.call.toolview'>
+  & PropsRenderSlots<'tool.call.toolview' | 'tool.call.actions'>
   & PropsLocale<'conversation'>
   & InjectFace<ToolHostInfoInjected>

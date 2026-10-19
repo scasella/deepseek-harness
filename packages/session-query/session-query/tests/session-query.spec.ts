@@ -41,6 +41,26 @@ function checkpointSource(compactionId: string): CheckpointSource {
 
 const TITLE_SERVICE_CONFIG = { fallbackMaxWords: 8, fallbackMaxBytes: 64, maxTitleBytes: 256 }
 
+it('filters own and inherited fork events through the live scan provider', async () => {
+  const ctx = new Context()
+  await ctx.plugin(SessionStore)
+  await ctx.plugin(SessionProjectionRegistry)
+  await ctx.plugin(TestSessionQueryEngine)
+  const parent = ctx.sessions.create(SessionId('ownership-parent'))
+  parent.append('user/message', createUserMessage({
+    content: [{ type: 'text', text: 'inherited needle' }], source: { kind: 'user' },
+  }), { surfaceOp: 'append' })
+  const child = ctx.sessions.fork(parent, SessionSeq(0), SessionId('ownership-child'))
+  const own = child.append('user/message', createUserMessage({
+    content: [{ type: 'text', text: 'own needle' }], source: { kind: 'user' },
+  }), { surfaceOp: 'append' })
+  expect((await ctx.sessionQuery.filterEvents(child.id, [{ kind: 'ownership', values: ['inherited'] }]))
+    .map(event => event.seq)).toEqual([SessionSeq(0)])
+  expect((await ctx.sessionQuery.filterEvents(child.id, [{ kind: 'ownership', values: ['own'] }]))
+    .map(event => event.seq)).toEqual([own.seq])
+  await ctx.fiber.dispose()
+})
+
 function header(id: string, createdAt = 1, extra: Partial<SessionHeader> = {}): SessionHeader {
   return { version: SESSION_FORMAT_VERSION, id: SessionId(id), createdAt, isSeeded: false, ...extra }
 }

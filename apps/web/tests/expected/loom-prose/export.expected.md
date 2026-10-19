@@ -1,0 +1,24 @@
+- dialog "Export path":
+  - heading "Export path" [level=2]
+  - button "Close export"
+  - group "Scope":
+    - text: Scope
+    - radio "This path" [checked]
+    - text: This path
+    - radio "Path and siblings"
+    - text: Path and siblings
+    - radio "Kept branches only"
+    - text: Kept branches only
+  - heading "Curation record" [level=3]
+  - paragraph: "Choices: 2 · 1.0 bits · model tokens: 2 · 0.500 bits/token"
+  - paragraph: Every format includes the prose and its recorded choices and curation facts.
+  - text: Format
+  - combobox "Format":
+    - option "Read-only HTML"
+    - option "Plain text"
+    - option "JSON tree" [selected]
+  - region "Current path preview":
+    - heading "Current path preview" [level=3]
+    - paragraph: The sea waited.
+  - button "Cancel"
+  - button "Download"

@@ -62,7 +62,7 @@ One optional asynchronous provider may be registered through `ctx.sessionTitle.r
 
 ### Failures and recovery
 
-Automatic failures warn and retain the latest title; explicit `refresh()` rejects on provider error or caller cancellation, and cancellation does not roll back an already accepted fallback event. Automatic work never delays the main agent response, its late completion appends a standalone log-only event without opening a turn, and a stale completion cannot append. Forks inherit title events in their seed unchanged.
+Automatic failures warn and retain the latest title; explicit `refresh()` rejects on provider error or caller cancellation, and cancellation does not roll back an already accepted fallback event. Automatic work never delays the main agent response, its late completion appends a standalone log-only event without opening a turn, and a stale completion cannot append. Forks inherit seed title events unchanged until their first own eligible prompt. Their fallback and provider inputs use only their own human messages; a first-prompt provider runs once for that fork. An inherited user rename does not pin the fork, while a rename written in the fork does.
 
 -----
 

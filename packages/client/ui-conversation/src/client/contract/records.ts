@@ -4,7 +4,7 @@
 
 import type { CommandId } from '@deepseek-ai/dsh-commands/brand'
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm/types'
+import type { BlockTokenLogprobs, ContentBlock } from '@deepseek-ai/dsh-llm/types'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type { LlmRetryEventData } from '@deepseek-ai/dsh-llm-retry/types'
 import type { TodoItem } from '@deepseek-ai/dsh-tool-todo/client'
@@ -21,6 +21,8 @@ export interface AssistantRequestConfig {
   reasoningEffort?: string
   temperature?: number
   maxTokens?: number
+  /** Generation-time probability alternatives requested per token. */
+  topLogprobs?: number
   stop?: readonly string[]
 }
 
@@ -32,7 +34,7 @@ export interface AssistantProviderMetadataView {
 
 /** Assistant content blocks sorted by what a UI target presents. */
 export type AssistantBlock =
-  | { kind: 'text'; text: string }
+  | { kind: 'text'; text: string; logprobs?: BlockTokenLogprobs }
   | { kind: 'reasoning'; text: string }
   | { kind: 'image'; attachment: ImageAttachmentRef }
   | { kind: 'tool-call'; callId: string; name: string; argsRaw: string }
