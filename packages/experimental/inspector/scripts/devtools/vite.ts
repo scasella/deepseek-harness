@@ -72,6 +72,7 @@ export const LOCAL_FETCH_PATTERN = "data:application/json,{}", REMOTE_FETCH_PATT
   for (const directory of ['panels/recorder/injected/injected', 'models/live-metrics/web-vitals-injected/web-vitals-injected']) {
     const result = await build({ ...base, plugins: [sourcePlugin()], build: {
       write: false, minify: 'oxc', target: 'es2022', sourcemap: false,
+      rolldownOptions: { experimental: { attachDebugInfo: 'none' } },
       lib: { entry: join(front, `${directory}.ts`), name: 'DevToolsInjected', formats: ['iife'] },
     } })
     const outputs = Array.isArray(result) ? result : [result]
@@ -110,10 +111,14 @@ export const LOCAL_FETCH_PATTERN = "data:application/json,{}", REMOTE_FETCH_PATT
   }], build: {
     outDir: output, emptyOutDir: true, minify: 'oxc', sourcemap: false, target: 'es2022', modulePreload: false,
     lib: { entry: input, formats: ['es'] },
-    rolldownOptions: { output: {
-      entryFileNames: chunk => chunk.name === 'connect' ? 'connect.js' : entryFiles[chunk.name]!,
-      chunkFileNames: 'chunks/[name]-[hash].js',
-    } },
+    rolldownOptions: {
+      // CSS virtual ids retain physical source paths; generated region comments must not publish them.
+      experimental: { attachDebugInfo: 'none' },
+      output: {
+        entryFileNames: chunk => chunk.name === 'connect' ? 'connect.js' : entryFiles[chunk.name]!,
+        chunkFileNames: 'chunks/[name]-[hash].js',
+      },
+    },
   } })
 }
 

@@ -39,6 +39,14 @@ it('builds from fixed installed sources with network APIs blocked and includes M
   ]
   onTestFinished(() => { for (const guard of guards) guard.mockRestore() })
   await buildFrontend(root)
+  const scripts = (await readdir(root, { withFileTypes: true, recursive: true }))
+    .filter(file => file.isFile() && file.name.endsWith('.js'))
+  expect(scripts.length).toBeGreaterThan(0)
+  for (const script of scripts) {
+    const path = join(script.parentPath, script.name)
+    const code = (await readFile(path, 'utf8')).replaceAll('\\', '/')
+    expect(code.includes(source.replaceAll('\\', '/')), path).toBe(false)
+  }
   for (const guard of guards) expect(guard).not.toHaveBeenCalled()
   expect(await sourceHash(source)).toBe(before)
   for (const path of [
