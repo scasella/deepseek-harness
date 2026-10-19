@@ -9,7 +9,7 @@ kind: "package-bundle"
 
 ## 概述
 
-这个可选组合包启用 Loom 分支、工作树隔离、对比和模型编排探索。Loom 把 fork 出的 Session 视为由分支组成的树：fork 出的会话在切点处显示分支标记，并在对话标题栏显示变体标签；每个 Session 都多出一个阅读 fork 家族的 Loom 标签页。安装包随附此组合包且默认关闭；没有配置档模板选用它，插件管理器在启用前把它列在「更多」中。
+探索不同的 Agent 任务和散文续写，同时保留其他分支。此可选组合包添加织机树与阅读器、带工作树操作的对比、支持词元探索与导出的编织、多重宇宙搜索，以及带预算的 autoloom 工具。在 Web 插件管理器中启用；默认关闭。请使用包含所需核心 API 的配套 Harness 构建。
 
 ## 目录
 
@@ -25,7 +25,30 @@ kind: "package-bundle"
 <a id="use-this-package"></a>
 ## 使用此包
 
-打开 Web 侧栏中的**插件**，点击**实验性插件**旁的**更多**，启用**织机**；启用后它也会出现在主列表中。该组合包通过首次搜索时打开的内存 SQLite 索引启用多重宇宙内容搜索；未启用 Loom 的配置档仍关闭内容搜索。该组合包没有配置表单；请通过配置档覆盖层配置插件。Autoloom 子会话使用组合包提供的 `loom-child` 权限预设，可在不弹出审批提示的情况下读取内容。[`@deepseek-ai/dsh-experimental-client-ui-loom`](../client-ui-loom/README.zh.md) 说明它显示的内容。开发时，`pnpm dsh web --patch apps/web/tests/loom.overlay.yml` 无需启用组合包即可组合相同的行。
+打开 Web 侧栏中的**插件**，选择**实验性插件**旁的**更多**，然后启用**织机**。按照[织机指南](../../../docs/user/guide/loom.zh.md)创建分支、对比、继续和导出。配套的 Harness 版本必须包含该组合包及核心更改；已经发布的 `0.2.1-rc.2` 运行时不提供这些 API。
+
+### 从源码检出安装
+
+在已准备好且包含织机的源码检出中，将本地组合包添加到 Web 配置档：
+
+```sh
+pnpm dsh plugin --profile web add link:./packages/experimental/loom-bundle --offline
+pnpm dsh web --dump-config
+```
+
+输出包含 `loom`、`loom-worktree`、`tool-loom` 和 `ui-loom`。包管理器可能提示链接的 Cordis 对等依赖警告；内置组合包及其依赖从 Harness 安装目录解析。命令使用所选的 `DSH_HOME`；试用时请使用临时主目录。移除此层的命令为：
+
+```sh
+pnpm dsh plugin --profile web remove @deepseek-ai/dsh-experimental-loom-bundle
+```
+
+移除操作从组合后的配置档撤下织机，同时保留会话文件。重新启动 Web 配置档以加载更改后的组合。这些源码命令不表示尚未发布的功能已经可通过 npm 获取。
+
+### 配置与权限
+
+组合包没有配置表单；请通过配置档覆盖层配置[织机服务](../loom/README.zh.md)与 [autoloom 工具](../tool-loom/README.zh.md)。Autoloom 子会话使用组合包提供的 `loom-child` 预设：只读且不弹出审批提示。工作树分支需要 Git 仓库与工作区写入权限。默认不提供价格；配置后的费用为标价。
+
+多重宇宙内容搜索使用首次搜索时打开的内存 SQLite 索引；未启用织机的配置档保持内容搜索关闭。组合包也会写入权限预设配置，因此后续覆盖层若更改该配置，必须保留仍需使用的预设。
 
 -----
 
@@ -44,7 +67,9 @@ kind: "package-bundle"
 <a id="further-exploration"></a>
 ## 进一步探索
 
-[Loom 界面 Agent Note](../../../.agents/notes/implemented/feature/2026-10-18-loom-interface.zh.md)
+- [织机指南](../../../docs/user/guide/loom.zh.md) — 面向任务的 Web 使用流程。
+- [织机服务](../loom/README.zh.md) — 隔离、价格、记录和限制。
+- [织机界面 Agent Note](../../../.agents/notes/implemented/feature/2026-10-18-loom-interface.zh.md) — 决策依据。
 
 -----
 
@@ -63,6 +88,8 @@ kind: "package-bundle"
 
 - 组合包图标尚待设计师批准。
 - Loom 记录是实验性插件记录，Session 格式迁移只尽力保留它们。
+- Host 重启会丢失排队的分支准入、autoloom 预算、热前缀提示和下载 URL。已经启动的会话、已记录的散文和选择仍然保留。
+- 采用与归档保留工作树；应用与丢弃负责明确清理。
 
 -----
 

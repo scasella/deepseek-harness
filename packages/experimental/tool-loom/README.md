@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package gives the model five autoloom tools over the experimental Loom service: `loom_expand` branches a Session into child Sessions after one of its turns, `loom_wait` waits for a branch set, `loom_read` reads a child's latest output, `loom_keep` marks a child as kept, and `loom_cull` stops a child and archives it. The Session whose model calls them is the weaver. Each weaver has a branch budget, a depth budget, and an own-token budget, and a child that the weaver started cannot use the tools itself. The package is published under its experimental name and provides no stability guarantee.
+This package gives the model five autoloom tools over the experimental Loom service: `loom_expand` branches a Session into child Sessions after one of its turns, `loom_wait` waits for a branch set, `loom_read` reads a child's latest output, `loom_keep` marks a child as kept, and `loom_cull` stops a child and archives it. The Session whose model calls them is the weaver. Each weaver has a branch budget, a depth budget, and an own-token budget, and a child that the weaver started cannot use the tools itself. The experimental tools provide no stability guarantee.
 
 ## Table of Contents
 
@@ -24,6 +24,8 @@ This package gives the model five autoloom tools over the experimental Loom serv
 
 <a id="use-this-package"></a>
 ## Use this package
+
+For the Web workflow and prerequisites, start with the [Loom guide](../../../docs/user/guide/loom.md). Use the [Loom bundle](../loom-bundle/README.md) to compose the matching Host, browser, worktree, and tool packages.
 
 Mount this package beside `@deepseek-ai/dsh-experimental-loom` in a composition that also has the Session Controller, the Workspace registry, the permission presets, the token meter, and Session query, as the Web profile does. Every Session then sees the five tools; a Session becomes a weaver by calling them.
 
@@ -105,7 +107,7 @@ This section explains how the tools keep their promises and points at the code; 
 
 ### Runs and budgets
 
-A run holds every set and child one weaver Session started while the plugin is loaded, keyed by the weaver's Session id, so an unloaded and resumed weaver keeps its budget. `maxBranches` counts every requested child except those Loom reported failed without a Session. A child's generation is the number of the weaver's own children among the target and its fork ancestors, plus one, read from Session query lineage, so a person's fork of a child counts too. The call id of `loom_expand` derives Loom's request identity, so a repeated call returns the first set and counts it once.
+A run holds every set and child one weaver Session started while the plugin is loaded, keyed by the weaver's Session id, so a weaver Session unloaded and resumed while the plugin stays loaded keeps its budget. `maxBranches` counts every requested child except those Loom reported failed without a Session. A child's generation is the number of the weaver's own children among the target and its fork ancestors, plus one, read from Session query lineage, so a person's fork of a child counts too. The call id of `loom_expand` derives Loom's request identity, so a repeated call returns the first set and counts it once.
 
 Unloading the tools aborts pending reads, wakes waits, stops their running children with the hook reason `loom: autoloom tools unloaded`, withdraws queued children, and drains in-flight admissions and child activity before clearing run state. A child whose admission already created a Session is retained without a prompt if preparation sees the unload. Completed children remain available, and a person may prompt them after the tools unload.
 
@@ -131,7 +133,7 @@ A Session whose first own prompt carries the `loom` source is an autoloom child,
 - [Loom package](../loom/README.md) — branch sets, cuts, admission limits, records, and marks.
 - [Loom subsystem](../../../docs/subsystems/loom.md) — the `loom` Remote and Host types.
 - [Generated tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-experimental-tool-loom) — every tool schema the model receives.
-- [Loom interface Agent Note](../../../.agents/notes/implemented/feature/2026-10-18-loom-interface.md) — the staged plan; autoloom is L24.
+- [Loom interface Agent Note](../../../.agents/notes/implemented/feature/2026-10-18-loom-interface.md) — decision rationale for model-driven branching.
 
 -----
 
@@ -175,7 +177,7 @@ A child repeats the target's request prefix through the cut, and the Session Con
 - **The own-token watcher acts per committed response** — a child is stopped after the response that passed the budget, so the last response can overshoot `maxOwnTokens` or `maxUsd`, and an uncapped child response is not cut short.
 - **A queued child whose fork fails wakes no wait** — `loom_wait` reports it when another child changes state or when the wait times out.
 - **Every Session sees the tools** — the schemas cost tokens in Sessions that never weave; only autoloom children are refused.
-- **No Web card** — Host presenters give generic cards with past-tense titles.
+- **Web cards need the Loom browser package** — it renders recorded results with status, budgets, child links, and output; other clients use the Host presenters.
 - **Needs the Web composition** — `loom_cull` archives through the Workspace registry, which the headless profile does not mount.
 - **Experimental prototype with no stability promise** — schemas, limits, and the `loom` source can change while the package incubates.
 

@@ -277,6 +277,33 @@ describe('apply and discard', () => {
     await expect(access(isolationOf(child!).worktreePath)).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
+  it.each(['apply', 'discard'] as const)('retains a renamed checkout and its ownership record when %s cannot remove it', async (action) => {
+    const root = await folder()
+    await repository(root)
+    const h = await host({ workspaceRoot: root })
+    const [child] = await settled(h, await h.ctx.loom.branch(steer((await source(h, root)).id, ['write notes.txt: revised'])))
+    if (child === undefined) throw new Error('Missing isolated child')
+    const isolation = isolationOf(child)
+    await git(isolation.worktreePath, 'branch', '-m', 'renamed-loom-child')
+
+    await expect(h.ctx.loom[action]({ sessionId: child.id })).rejects.toMatchObject(action === 'apply'
+      ? { code: 'loom/worktree-cleanup-failed', details: { sessionId: child.id, worktreePath: isolation.worktreePath, applied: ['notes.txt'] } }
+      : { code: 'loom/worktree-unavailable', details: { sessionId: child.id, reason: 'missing' } })
+    expect(await readFile(join(root, 'notes.txt'), 'utf8')).toBe(action === 'apply' ? 'revised\n' : 'base\n')
+    expect(await readFile(join(isolation.worktreePath, 'notes.txt'), 'utf8')).toBe('revised\n')
+    expect(await git(root, 'worktree', 'list', '--porcelain')).toContain('branch refs/heads/renamed-loom-child')
+    expect(own(child).some(event => pluginRecordOf(event)?.type === 'plugin:loom/isolation-end')).toBe(false)
+
+    await git(isolation.worktreePath, 'branch', '-m', isolation.branchName)
+    expect(await h.ctx.loom.discard({ sessionId: child.id })).toEqual({
+      worktreePath: isolation.worktreePath, branchName: isolation.branchName,
+    })
+    await expect(access(isolation.worktreePath)).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(await git(root, 'branch', '--list', isolation.branchName)).toBe('')
+    expect(own(child).map(pluginRecordOf).filter(record => record?.type === 'plugin:loom/isolation-end'))
+      .toMatchObject([{ type: 'plugin:loom/isolation-end', data: { version: 1, reason: 'discarded' } }])
+  })
+
   it.each(['apply', 'discard'] as const)('queues waking input until %s releases the child checkout', async (action) => {
     const root = await folder()
     await repository(root)

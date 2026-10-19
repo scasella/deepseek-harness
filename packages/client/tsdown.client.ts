@@ -534,6 +534,9 @@ function clientConfig(
     // a CJS bundle cannot carry) resolve their static flavor matching the
     // NODE_ENV the defines below bake in.
     inputOptions: {
+      // CSS virtual module ids contain physical paths; generated source-region
+      // comments would publish those paths even though source maps are rebased.
+      experimental: { attachDebugInfo: 'none' },
       resolve: {
         conditionNames: [
           (process.env.NODE_ENV ?? 'production') === 'development' ? 'development' : 'production',

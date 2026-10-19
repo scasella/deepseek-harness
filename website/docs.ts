@@ -179,6 +179,14 @@ const homeAndGuide = pairedPages([
     order: 2,
   },
   {
+    source: 'docs/user/guide/loom.md',
+    route: 'guide/loom.md',
+    label: { root: '织机：分支与写作', en: 'Loom: branches and prose' },
+    sidebar: { root: 'zh-guide', en: 'en-guide' },
+    section: { root: '集成', en: 'Integrations' },
+    order: 3,
+  },
+  {
     source: 'docs/user/guide/mcp-memory.md',
     route: 'guide/mcp-memory.md',
     label: { root: '记忆 MCP', en: 'Memory MCP' },

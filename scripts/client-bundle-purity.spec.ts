@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { runInNewContext } from 'node:vm'
 import { build, type Rolldown, type TsdownBundle, type UserConfig } from 'tsdown'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { clientBundle, requestedExternals, staticLinked } from '../packages/client/tsdown.client.ts'
@@ -480,6 +481,76 @@ describe('client bundle module requests', () => {
 })
 
 describe('client bundle debug artifacts', () => {
+  it('keeps physical CSS virtual paths out of published code without changing styles or string values', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-client-private-path-'))
+    onTestFinished(() => { rmSync(root, { recursive: true, force: true }) })
+    const owner = join(root, 'fixture-person', 'checkout')
+    const entry = join(owner, 'lib/types/client/index.js')
+    const sources = join(owner, 'src/client')
+    mkdirSync(dirname(entry), { recursive: true })
+    mkdirSync(sources, { recursive: true })
+    writeFileSync(join(owner, 'package.json'), JSON.stringify({ name: REQUESTING_PACKAGE, type: 'module' }))
+    writeFileSync(entry, [
+      'import styles from "./Fixture.module.css"',
+      'import "./global.css"',
+      'import inline from "./inline.css?inline"',
+      '/*! @license fixture-license */',
+      'export { styles, inline }',
+      'export const text = "//#region dsh-css:/preserved/source-text"',
+    ].join('\n'))
+    writeFileSync(join(sources, 'Fixture.module.css'), '.root { color: red; }\n')
+    writeFileSync(join(sources, 'global.css'), 'body { color: blue; }\n')
+    writeFileSync(join(sources, 'inline.css'), 'p { color: green; }\n')
+    const config = clientConfigs(owner)[0]
+    if (config === undefined || typeof config.inputOptions !== 'object') throw new Error('client input options missing')
+
+    async function output(config: UserConfig): Promise<string> {
+      const builds = await build({
+        ...config, cwd: owner, config: false, tsconfig: false,
+        write: false, clean: false, exports: false, report: false, logLevel: 'silent',
+      })
+      try {
+        return builds.flatMap(bundle => bundle.chunks.filter(chunk => chunk.type === 'chunk').map(chunk => chunk.code)).join('\n')
+      } finally {
+        for (const bundle of builds) await bundle[Symbol.asyncDispose]()
+      }
+    }
+
+    // The compiler's default debug mode reproduces the leak through all three CSS loaders.
+    const exposed = await output({
+      ...config,
+      inputOptions: { ...config.inputOptions, experimental: { attachDebugInfo: 'simple' } },
+    })
+    for (const kind of ['dsh-css:', 'dsh-global-css:', 'dsh-inline-css:']) expect(exposed).toContain(kind)
+    expect(exposed).toContain('fixture-person')
+
+    const code = await output(config)
+    expect(code).not.toContain('fixture-person')
+    expect(code).not.toContain(root)
+    expect(code).toContain('@license fixture-license')
+    const styles: Array<{ dataset: Record<string, string>; textContent: string }> = []
+    let exports: unknown
+    runInNewContext(code, {
+      window: { __ModuleLoader__: { load: ({ factory }: { factory: () => unknown }) => { exports = factory() } } },
+      document: {
+        querySelector: () => null,
+        createElement: () => ({ dataset: {}, textContent: '' }),
+        head: { appendChild: (style: typeof styles[number]) => { styles.push(style) } },
+      },
+    })
+    expect(exports).toMatchObject({
+      inline: 'p{color:green}',
+      text: '//#region dsh-css:/preserved/source-text',
+    })
+    expect(exports).toHaveProperty('styles.root', expect.stringMatching(/_root$/))
+    expect(styles.map(style => style.dataset.pluginCss).sort()).toEqual([
+      `${REQUESTING_PACKAGE}/Fixture.module.css`, `${REQUESTING_PACKAGE}/global.css`,
+    ])
+    expect(styles.map(style => style.textContent)).toEqual(expect.arrayContaining([
+      expect.stringMatching(/^\.[\w-]+_root\{color:red\}$/), 'body{color:#00f}',
+    ]))
+  })
+
   it('emits source maps for plugin TS and TSX outside the Vite module graph', () => {
     const configs = clientConfigs()
     expect(configs[0]?.sourcemap).toBe(true)

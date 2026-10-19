@@ -9,14 +9,14 @@
   en: b77585bce091d9d6
   zh: aa767171fa14c1c6
 /deepseek-ai-dsh-experimental-tool-loom/summary:
-  en: f47e0bddb5345c2b
-  zh: 03dd2d5dd9389a76
+  en: 08103bbe55892c0b
+  zh: 862f11d58d6e06fe
 /deepseek-ai-dsh-experimental-tool-loom/table-of-contents:
   en: d152484eb41ac6b4
   zh: 09388d293f9be9cb
 /deepseek-ai-dsh-experimental-tool-loom/use-this-package:
-  en: 8da0d31afa14dbc2
-  zh: 4f5eeb68050b66c9
+  en: f1f4e9431cca009c
+  zh: 835f1f0f62b04ccb
 /deepseek-ai-dsh-experimental-tool-loom/use-this-package/when-to-choose-it:
   en: 88011b6227532240
   zh: 70bd1cc8bcb2c655
@@ -39,8 +39,8 @@
   en: c4024e875b8088ee
   zh: f3eb86a80ce08652
 /deepseek-ai-dsh-experimental-tool-loom/understand-the-implementation/runs-and-budgets:
-  en: b19fe80ed97f1dc8
-  zh: 19b9ba827c859aa2
+  en: ee86f754ae9931e7
+  zh: fa93c490bd814d38
 /deepseek-ai-dsh-experimental-tool-loom/understand-the-implementation/child-preparation:
   en: 373f80e87b4467f4
   zh: 15335e69ef955ac0
@@ -51,8 +51,8 @@
   en: b9de4d29a341253a
   zh: 0034627da0c4c666
 /deepseek-ai-dsh-experimental-tool-loom/further-exploration:
-  en: 9ad3c246ca892023
-  zh: 5cf4d21c3b2b8a43
+  en: 68c8640f7ca2e0d6
+  zh: a278f3539c30dcb8
 /deepseek-ai-dsh-experimental-tool-loom/model-experience:
   en: 215e7ba838619b7b
   zh: a311da3843709f90
@@ -81,8 +81,8 @@
   en: 5b095804843faee8
   zh: 6976b8c409fc9214
 /deepseek-ai-dsh-experimental-tool-loom/known-limitations-and-deferred-work:
-  en: 09fe756d19097224
-  zh: 337391f06abc2ef1
+  en: 21d243c5e14bf14c
+  zh: 9440e03074b2d2a2
 /deepseek-ai-dsh-experimental-tool-loom/known-limitations-and-deferred-work/dev-note:
   en: e67f633dc6fe7773
   zh: 7a3bbb28b46dce8b

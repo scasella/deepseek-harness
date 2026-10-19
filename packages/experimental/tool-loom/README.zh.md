@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-本包在实验性 Loom 服务之上为模型提供五个 autoloom 工具：`loom_expand` 在某个 Session 的一个 turn 之后把它分支为子 Session，`loom_wait` 等待一个分支集合，`loom_read` 读取子会话的最新输出，`loom_keep` 把子会话标记为保留，`loom_cull` 停止子会话并将其归档。调用这些工具的模型所在的 Session 就是 weaver。每个 weaver 都有分支预算、深度预算和自有 token 预算，而 weaver 启动的子会话自身不能使用这些工具。本包以实验性名称公开发布，但不提供稳定性保证。
+本包在实验性 Loom 服务之上为模型提供五个 autoloom 工具：`loom_expand` 在某个 Session 的一个 turn 之后把它分支为子 Session，`loom_wait` 等待一个分支集合，`loom_read` 读取子会话的最新输出，`loom_keep` 把子会话标记为保留，`loom_cull` 停止子会话并将其归档。调用这些工具的模型所在的 Session 就是 weaver。每个 weaver 都有分支预算、深度预算和自有 token 预算，而 weaver 启动的子会话自身不能使用这些工具。这些实验性工具不提供稳定性保证。
 
 ## 目录
 
@@ -24,6 +24,8 @@ kind: "package-reference"
 
 <a id="use-this-package"></a>
 ## 使用本包
+
+Web 使用流程与前提条件请先参阅[织机指南](../../../docs/user/guide/loom.zh.md)。使用[织机组合包](../loom-bundle/README.zh.md)组合配套的 Host、浏览器、工作树和工具包。
 
 在同样挂载了 Session Controller、Workspace registry、permission presets、token meter 和 Session query 的组合中（如 Web profile），把本包与 `@deepseek-ai/dsh-experimental-loom` 一起挂载。之后每个 Session 都能看到这五个工具；Session 调用它们即成为 weaver。
 
@@ -105,7 +107,7 @@ kind: "package-reference"
 
 ### 运行与预算
 
-一次运行保存插件加载期间某个 weaver Session 启动的每个集合与子会话，以 weaver 的 Session id 为键，因此卸载后又恢复的 weaver 保留其预算。`maxBranches` 计入每个请求的子会话，但 Loom 报告为失败且没有 Session 的除外。子会话的代数等于目标及其 fork 祖先中 weaver 自己的子会话数量再加一，从 Session query 的谱系读取，因此人对子会话做的 fork 也会计入。`loom_expand` 的调用 id 派生出 Loom 的请求身份，因此重复的调用返回第一次的集合，且只计数一次。
+一次运行保存插件加载期间某个 weaver Session 启动的每个集合与子会话，以 weaver 的 Session id 为键，因此在插件持续加载期间，卸载后又恢复的 weaver 会话保留其预算。`maxBranches` 计入每个请求的子会话，但 Loom 报告为失败且没有 Session 的除外。子会话的代数等于目标及其 fork 祖先中 weaver 自己的子会话数量再加一，从 Session query 的谱系读取，因此人对子会话做的 fork 也会计入。`loom_expand` 的调用 id 派生出 Loom 的请求身份，因此重复的调用返回第一次的集合，且只计数一次。
 
 卸载工具会中止待处理的读取、唤醒等待，以 hook 原因 `loom: autoloom tools unloaded` 停止其正在运行的子会话，撤回排队子会话，并在清除运行状态前等待准入中的操作与子会话活动结束。若准入已创建 Session，且准备函数发现卸载，该子会话会被保留但不收到提示。已完成的子会话仍然可用，人可在工具卸载后向它们发送提示。
 
@@ -131,7 +133,7 @@ Loom 在每个子会话的 `plugin:loom/branch` 记录之后、提示之前调�
 - [Loom 包](../loom/README.zh.md) —— 分支集合、切分、准入限制、记录与标记。
 - [Loom 子系统](../../../docs/subsystems/loom.zh.md) —— `loom` Remote 与 Host 类型。
 - [生成的工具目录](../../../docs/tool-catalog.zh.md#deepseek-aidsh-experimental-tool-loom) —— 模型收到的每个工具 schema。
-- [Loom 界面 Agent Note](../../../.agents/notes/implemented/feature/2026-10-18-loom-interface.zh.md) —— 分阶段计划；autoloom 为 L24。
+- [Loom 界面 Agent Note](../../../.agents/notes/implemented/feature/2026-10-18-loom-interface.zh.md) —— 模型编排分支的决策依据。
 
 -----
 
@@ -175,7 +177,7 @@ Loom 在每个子会话的 `plugin:loom/branch` 记录之后、提示之前调�
 - **自有 token 监视器按已提交的响应生效** —— 子会话在超出预算的那次响应之后才被停止，因此最后一次响应可能超出 `maxOwnTokens` 或 `maxUsd`，且不限长度的子会话响应不会被截断。
 - **fork 失败的排队子会话不会唤醒等待** —— `loom_wait` 会在另一个子会话改变状态或等待超时时报告它。
 - **每个 Session 都能看到这些工具** —— 这些 schema 在从不进行分支编排的 Session 中也会消耗 token；只有 autoloom 子会话会被拒绝。
-- **没有 Web 卡片** —— Host presenter 只提供带过去时标题的通用卡片。
+- **Web 卡片需要织机浏览器包** —— 它根据已记录的结果显示状态、预算、子会话链接和输出；其他客户端使用 Host presenter。
 - **需要 Web 组合** —— `loom_cull` 通过 Workspace registry 归档，而 headless profile 不挂载它。
 - **实验性原型，不承诺稳定性** —— 在孵化期间，schema、限制以及 `loom` 来源都可能改变。
 

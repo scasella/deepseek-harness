@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package is the browser half of Loom. A fork shows a band at its cut and a "Variant k of N" header chip. A completed turn gains Branch ×N and Regenerate ×N with a folder choice and cost estimate, a sibling pager, and private marks; a user message gains Edit & branch, and a dock strip follows running branches. Every Session gains a Loom tab: a family tree beside a reading pane, and a Compare mode that adopts a branch, applies its worktree change, or discards its worktree. It mounts the `loom` Remote of [`@deepseek-ai/dsh-experimental-loom`](../loom/README.md). Choose it through [`@deepseek-ai/dsh-experimental-loom-bundle`](../loom-bundle/README.md).
+Read forked conversations as a tree, switch between variants, and compare test results, diffs, and own usage. Branch actions retain alternatives with local model and isolation choices. Weave generates prose at a cursor, inspects captured token probabilities, and exports curated paths. Multiverse searches families across Sessions, with touch controls at phone width. Enable the UI through the [Loom bundle](../loom-bundle/README.md).
 
 ## Table of Contents
 
@@ -24,6 +24,8 @@ This package is the browser half of Loom. A fork shows a band at its cut and a "
 
 <a id="use-this-package"></a>
 ## Use this package
+
+For the Web workflow and prerequisites, start with the [Loom guide](../../../docs/user/guide/loom.md). Use the [Loom bundle](../loom-bundle/README.md) to compose the matching Host, browser, worktree, and tool packages.
 
 The Web Client loader mounts the `/client` export; the root Host export is inert, and the package has no configuration fields. The plugin injects `remote`, `sessions`, and `locale`; its slot entries wait for the mounted `remote.loom` namespace, `slots`, `uiConversation`, and `uiWorkspace`, its route pickers wait for the `session` Remote, and its shortcut reference rows wait for `shortcuts`.
 
@@ -70,7 +72,7 @@ A radio picks a row, which expands to its diff (`loom.diff`, drawn in a `DiffBlo
 
 The sidebar's Multiverse page lists fork families across Sessions. Search targets the selected family ids before ranking and the result cap; Own messages is the page default, with Inherited messages and All history available. The standard sidebar search keeps its existing scope.
 
-Weave edits a prose document at an exact cursor, then requests N continuations. Preview leaves the document unchanged; Choose records a curation choice and keeps every sibling. The retained-request selector reopens every recorded request, including unchosen sets; model blocks also reopen their original alternatives. Unsubmitted prose, its exact attribution and cursor, and generation controls survive switching panels or conversation tabs. Up and Down preview candidates, 1–9 choose a completed candidate, and g generates while focus is outside editor controls. The local model row, explicit thinking-off label, temperature control, and list-price preview describe auxiliary prose calls without changing the Session route. Price ranges use historical input for that route and the requested output cap, and identify whether the cursor text matches that history. Typed refusals explain capability, limit, route, access, and busy recovery. The meter shows the persisted sum of log₂(N) for Weave choices only. The export dialog downloads the current path, its siblings, or kept agent branches as HTML, text, or JSON through an authorized Host route.
+Weave edits a prose document at an exact cursor, then requests N continuations. Preview leaves the document unchanged; Choose records a curation choice and keeps every sibling. The retained-request selector reopens every recorded request, including unchosen sets; model blocks also reopen their original alternatives. Unsubmitted prose, its exact attribution and cursor, and generation controls survive switching panels or conversation tabs. Up and Down preview candidates, 1–9 choose a completed candidate, and g generates while focus is outside editor controls. The local model row, explicit thinking-off label, temperature control, and list-price preview describe auxiliary prose calls without changing the Session route. Price ranges use historical input for that route and the requested output cap, and identify whether the cursor text matches that history. Typed refusals explain capability, limit, route, access, and busy recovery. The meter shows the persisted sum of log₂(N) for Weave choices only. The export dialog downloads the current path, its siblings, or kept prose nodes as HTML, text, or JSON through an authorized Host route.
 
 Captured answer probabilities appear in a separate disclosure in the reading pane and directly on Weave text. Only exact recorded token/text matches are annotated. Dotted underlines and written percentages accompany probability shading; reasoning and uncaptured text stay plain. Token alternatives and the bounded token multiverse continue only through the Host's logged auxiliary prose requests. The block explorer uses cumulative probability for height and groups children inside the parent interval; written path selection has full-size touch targets, and the selected subtree shows probability, magnification, and information. Hatching names unshown mass only at positions actually probed, including alternatives outside the returned top tokens; blank space never means zero probability. A phone-sized variant chip opens the shared bottom sheet, with full sibling titles and visible controls.
 
@@ -128,7 +130,7 @@ Each branch is a fork that inherits its parent's prefix, so its first request ca
 - A family holds only Sessions in the client Session list, so a fork parent that is hidden or deleted roots the family at its highest listed ancestor.
 - A sibling whose list row carries no `forkLineage` value sorts after its siblings until that value arrives.
 - The view registry lists the Loom tab on every Session while the bundle is on, so every Session shows a tab strip.
-- The reading pane is a read-only summary of the loaded turns, not the Chat transcript: tool calls and intermediate steps are omitted, and the reasoning shown is the closing step's. An embedded Chat would render a composer for the read Session and nest the current Session inside its own tab.
+- The reading pane summarizes loaded turns; tool calls and intermediate steps are omitted, and the reasoning shown is the closing step's. Open in Chat to inspect the full transcript.
 - Reading a Session other than the current one opens its history in the browser while the pane shows it.
 - The tree shows own tokens rather than cost. The Regenerate panel and the Branch ×N form show an estimate that uses the selected route; a route without a configured price reads in tokens.
 - The Workspace row cannot disable worktree isolation before the first request, because the Host reports no capability, and it does not say whether shared-folder children run one at a time, because the Host does not report its `concurrentWritableBranches` policy. The form and the panel always send their folder choice, so the Host's `defaultIsolation` applies only to requests that send none.

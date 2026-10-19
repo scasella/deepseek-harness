@@ -1,0 +1,40 @@
+# Bilingual-pair consistency record for loom.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/user/guide/loom.md
+/explore-alternatives-with-loom:
+  en: dcc2ce2fb81c2d99
+  zh: 139f8dd3d9c76ba2
+/explore-alternatives-with-loom/summary:
+  en: 52f0ea79ed6eb99c
+  zh: f80431b2fb83695e
+/explore-alternatives-with-loom/table-of-contents:
+  en: bc472f7aa58e8888
+  zh: 2dd9ab884a4c7cea
+/explore-alternatives-with-loom/enable-loom:
+  en: 528ca0eaa2a6ffb0
+  zh: 67a814f0955607a6
+/explore-alternatives-with-loom/create-and-read-branches:
+  en: 56c573ae8945a2bc
+  zh: 292863acc9e92383
+/explore-alternatives-with-loom/compare-and-apply-changes:
+  en: 592f12771611acbe
+  zh: dde465af6a12bdb8
+/explore-alternatives-with-loom/try-a-different-tool-result:
+  en: 07ef4eedb551e6bc
+  zh: e7f6140e3de27f81
+/explore-alternatives-with-loom/write-prose-with-weave:
+  en: 0f72f5356f21fab3
+  zh: fed5a361e7f7d9cb
+/explore-alternatives-with-loom/let-a-model-explore:
+  en: 24290e90e4bf1bed
+  zh: de5e904c1f9ea29c
+/explore-alternatives-with-loom/costs-saved-data-and-limits:
+  en: 076e6c92139158c4
+  zh: 50b82c5ca6d639c1
+/explore-alternatives-with-loom/further-exploration:
+  en: 17630fb71c3b5d77
+  zh: dca11cf736d22244
+/explore-alternatives-with-loom/dev-note:
+  en: b75c8458928b72b9
+  zh: 003ba4e17b4b5269

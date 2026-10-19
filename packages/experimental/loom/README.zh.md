@@ -25,6 +25,8 @@ Loom 让你将 Session 分支为多个备选项，可选地把每个分支隔离
 <a id="use-this-package"></a>
 ## 使用此包
 
+Web 使用流程与前提条件请先参阅[织机指南](../../../docs/user/guide/loom.zh.md)。使用[织机组合包](../loom-bundle/README.zh.md)组合配套的 Host、浏览器、工作树和工具包。
+
 将本行与 Session Controller、Session 存储、Session 投影注册表、Remote 访问控制、Typert、文件系统和 Workspace 注册表组合；Web 配置档提供这七项。worktree 隔离还需要 [`@deepseek-ai/dsh-experimental-worktree`](../worktree/README.zh.md) 及其注入的 sandbox、子进程与工作目录服务；共享文件夹的子会话的 diff 需要 [`@deepseek-ai/dsh-workspace-changes`](../../deliverables/workspace-changes/README.zh.md)；`compare()` 从 `tokenUsage` 与 `sessionStats` 投影读取自身用量。浏览器部分 [`@deepseek-ai/dsh-experimental-client-ui-loom`](../client-ui-loom/README.zh.md) 挂载本包生成的 `/remote` 贡献。请求与结果类型来自 `@deepseek-ai/dsh-experimental-loom/types`。
 
 | 字段 | 默认值 | 含义 |
@@ -57,7 +59,7 @@ Loom 让你将 Session 分支为多个备选项，可选地把每个分支隔离
 
 第 k 轮之前的切点保留其之前的所有已完成 turn 以及最后一个 turn 之后的独立事件（例如模型选择），并停在第 k 轮的提示之前。对第 1 轮而言，切点是首个提示之前的独立事件。某一 turn 结束处的切点是它的 `turn/end` 及其后的独立事件，停在下一 turn 或排队输入之前。源 Session 在较早 turn 运行期间排队的提示在切点处仍待处理；运行器在发送子会话自己的提示之前把它从子会话中移除，因此它永远不会在子会话中运行。
 
-对 fork Session 自己开始的首个 turn 执行 `regenerate` 或 `edit` 时，分支位于该 fork 旁边而不是其下方：子会话从该 fork 的父会话在 fork 的切点处 fork 出来，收到该 fork 自己的开场提示（原样或经编辑），并把父会话记录为来源，因此加入该 fork 的变体。未指定 `selection` 时，它们采用该 fork 在该 turn 之前最后选择的路由，因此与该 fork 运行在同一路由上。调用方还必须在父会话上拥有 `loom/branch` 权限。父会话已不存在时，子会话改为在所指定的 fork 中切分，位于其下方，并重发该 fork 自己的开场提示。其他任何 turn，包括 subagent 子会话或非 fork Session 的每个 turn，都在请求所指定的 Session 中切分。
+对 fork Session 自己开始的首个 turn 执行 `regenerate` 或 `edit` 时，分支位于该 fork 旁边而不是其下方：子会话从该 fork 的父会话在 fork 的切点处 fork 出来，收到该 fork 自己的开场提示（原样或经编辑），并把父会话记录为来源，因此加入该 fork 的变体。未指定 `selection` 时，如果该 fork 首次请求使用的路由不同于切点处的路由，它们采用该请求的路由；否则采用该 fork 在该 turn 之前最后选择的路由。调用方还必须在父会话上拥有 `loom/branch` 权限。父会话已不存在时，子会话改为在所指定的 fork 中切分，位于其下方，并重发该 fork 自己的开场提示。其他任何 turn，包括 subagent 子会话或非 fork Session 的每个 turn，都在请求所指定的 Session 中切分。
 
 每个子会话的提示带有 `user` 来源：其 `rpcId` 是请求的 `requestId` 后接 `/` 与子会话序号；它带有所替代的源提示记录的浏览器时区（对 `steer` 与 `variants` 而言，取切点处或之前最近一条记录了时区的源提示）；调用方不是所有者时还带有调用方。`selection` 为每个子会话的下一次请求指定路由；Session Controller 的 fork 在子会话被准入时逐个校验它，并只在子会话中记录，因此不可用的路由会使每个子会话以 `session/model-unavailable` 失败，而不是使请求失败。未指定时，子会话沿用 fork 给出的路由。
 
@@ -129,7 +131,7 @@ Loom 让你将 Session 分支为多个备选项，可选地把每个分支隔离
 
 `adopt({ sessionId })` 把一个 fork 作为继续推进的主线。它向该 fork 写入一次 `plugin:loom/adopt`，然后通过 Workspace 注册表归档其兄弟会话，并先停止它们正在运行的工作：兄弟会话是其集合中的其他成员；不属于任何集合的 fork 则是其切点处的其他每个 fork。已归档的 Session 保留其日志并可恢复；不会删除任何内容。调用方需要在每个兄弟会话上拥有 `loom/adopt` 权限，该检查在任何写入之前进行（`remote-access/denied`）。它返回该 fork 和每个已归档的兄弟会话；某次归档失败时，以 `loom/adopt-incomplete` 失败并列出已归档与剩余的兄弟会话，重试会完成剩余部分。被采用的分支子会话的 `loomBranch` 值增加 `adopted: true`。
 
-`apply({ sessionId })` 用 `git apply` 把空闲 worktree 子会话的全部变更（包括未跟踪文件）复制到源文件夹，然后移除该 worktree 及其分支，并返回写入的路径。变更只落在工作区中且不暂存，新文件保持未跟踪；变更未涉及的文件保持其字节不变。在任何写入之前：源文件夹的已跟踪文件有已暂存或未暂存的变更时，以 `loom/apply-dirty` 和这些路径失败，因此从未提交工作分支出的集合只有在该工作提交之后才能应用；变更无法应用时以 `loom/apply-conflict` 和这些路径失败；超出 `apply.maxPatchBytes` 时以 `loom/apply-too-large` 失败。共享文件夹的子会话以 `loom/apply-not-isolated` 失败。变更已写入但 worktree 无法移除时，以 `loom/worktree-cleanup-failed` 失败并列出已写入的路径，之后可用 `discard()` 移除该 worktree。`discard({ sessionId })` 移除空闲子会话的 worktree 和分支及其文件，并返回路径与分支。二者都会写入 `plugin:loom/isolation-end`，子会话位于 worktree 内时把它移回仓库根，并且只触及子会话隔离记录所指明的 worktree。正在运行的子会话以 `session/agent-busy` 失败；没有 worktree 的子会话以 `loom/worktree-unavailable`（`shared`、`removed` 或 `missing`）失败。
+`apply({ sessionId })` 用 `git apply` 把空闲 worktree 子会话的全部变更（包括未跟踪文件）复制到源文件夹，然后移除该 worktree 及其分支，并返回写入的路径。变更只落在工作区中且不暂存，新文件保持未跟踪；变更未涉及的文件保持其字节不变。在任何写入之前：源文件夹的已跟踪文件有已暂存或未暂存的变更时，以 `loom/apply-dirty` 和这些路径失败，因此从未提交工作分支出的集合只有在该工作提交之后才能应用；变更无法应用时以 `loom/apply-conflict` 和这些路径失败；超出 `apply.maxPatchBytes` 时以 `loom/apply-too-large` 失败。共享文件夹的子会话以 `loom/apply-not-isolated` 失败。变更已写入但 worktree 无法移除时，以 `loom/worktree-cleanup-failed` 失败并列出已写入的路径，之后可用 `discard()` 移除该 worktree。`discard({ sessionId })` 移除空闲子会话的 worktree 和分支及其文件，并返回路径与分支。只有成功移除后才会写入 `plugin:loom/isolation-end`，并在子会话位于 worktree 内时把它移回仓库根；两项操作都只触及子会话隔离记录所指明的 worktree。重命名或切换检出的 Git 分支会阻止移除受管理的 worktree：请恢复其已记录的分支，然后重试 `discard()`。收到 `loom/worktree-cleanup-failed` 后，请检查来源中已经应用的更改，并通过 `discard()` 重试清理，不要再次调用 `apply()`。正在运行的子会话以 `session/agent-busy` 失败；没有 worktree 的子会话以 `loom/worktree-unavailable`（`shared`、`removed` 或 `missing`）失败。
 
 `apply()` 与 `discard()` 均保留子会话的 `runMaintenance()` 槽位，直到移除操作及其隔离结束记录完成。期间到达的提示等待该槽位完成；另一项维护操作会收到 `session/agent-busy`。
 

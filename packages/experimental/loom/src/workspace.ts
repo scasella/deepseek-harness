@@ -646,13 +646,15 @@ export class LoomWorkspace {
    * @param target - the worktree.
    * @param reason - why it ends.
    * @param applied - paths `loom.apply` wrote before the removal.
-   * @throws RemoteError `loom/worktree-cleanup-failed` after an apply, or the removal's failure after a discard.
+   * @throws RemoteError `loom/worktree-cleanup-failed` after an apply, or `loom/worktree-unavailable`
+   *   after a discard when Git no longer registers the recorded checkout and branch, or the removal's failure.
    */
   private async removeWorktree(target: WorktreeTarget, reason: 'applied' | 'discarded', applied: readonly string[]): Promise<void> {
     const { worktrees, agent, isolation, signal } = target
     const checkout = { path: isolation.worktreePath, branch: isolation.branchName, repositoryRoot: isolation.repositoryRoot }
     try {
-      await worktrees.remove(agent, checkout, signal)
+      const removed = await worktrees.remove(agent, checkout, signal)
+      if (removed.kind === 'missing') throw worktreeUnavailable(agent.id, 'missing')
     } catch (error) {
       if (reason === 'discarded') throw error
       throw new RemoteError('loom/worktree-cleanup-failed', `the change was applied, but the worktree at ${isolation.worktreePath} could not be removed: ${messageOf(error)}`, {
