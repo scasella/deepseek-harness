@@ -2,33 +2,36 @@
 # section, a hash of its English and Chinese blocks outside code blocks and generated regions.
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write README.md
-/deepseek-harness:
-  en: f68c4f080ce55ff2
-  zh: 88a76d7f7f0b260e
-/deepseek-harness/developer-preview:
-  en: 4ef4d8a71ac143f0
-  zh: 1bfc3149ba8e5543
-/deepseek-harness/run:
-  en: 4e0248e4c6474fc6
-  zh: eb2fb8d78c7d6bc0
-/deepseek-harness/run/run-from-npm:
-  en: e22005cd42e6cbad
-  zh: 0f536f4208df1d60
-/deepseek-harness/run/run-from-source:
-  en: 819e3f7c144d0d64
-  zh: de815f040975dba7
-/deepseek-harness/community-and-support:
-  en: 20acf6451fdc869b
-  zh: d06246dd019ecef7
-/deepseek-harness/contributing:
-  en: cabc2d3e9f8898bd
-  zh: 83b6d238bae29ce3
-/deepseek-harness/development:
-  en: 803ca2b11b497bed
-  zh: 8b4071eb0e7783ef
-/deepseek-harness/citation:
-  en: 6704e9e5a8d49a91
-  zh: 85c9cdd8d56f8e9d
-/deepseek-harness/license:
-  en: 926995344fc1c72b
-  zh: c92fab5abf85932f
+/loom-for-deepseek-harness:
+  en: 5975053a64c6a7d6
+  zh: a1d4ea5a436fdfc6
+/loom-for-deepseek-harness/watch-the-demo:
+  en: 22ef04869bd6c7d7
+  zh: 435d0b132dd842f9
+/loom-for-deepseek-harness/what-you-can-do:
+  en: c566ac325e7e78a0
+  zh: 2e9174c599c3a04c
+/loom-for-deepseek-harness/install-and-set-up:
+  en: 3507d94e84c024bd
+  zh: 2e1266a8e0382ce9
+/loom-for-deepseek-harness/install-and-set-up/run-from-source:
+  en: 05e4aeb84bc65d88
+  zh: 53d67397fe9ab32d
+/loom-for-deepseek-harness/install-and-set-up/configure-your-first-session:
+  en: eec0ba6b02bf208d
+  zh: 2944bc8aa18c587b
+/loom-for-deepseek-harness/install-and-set-up/make-your-first-branches:
+  en: 9d9f2e3384acc5ad
+  zh: ba4c5e6099c8433a
+/loom-for-deepseek-harness/costs-and-limits:
+  en: 21e9a1c374f7225b
+  zh: f25d09d3c98f0025
+/loom-for-deepseek-harness/documentation-and-support:
+  en: c0c9305a6256646d
+  zh: 1b325c227f62b970
+/loom-for-deepseek-harness/development:
+  en: 1c07f054f7b3c95a
+  zh: 0c0f447527a7204e
+/loom-for-deepseek-harness/credits-and-license:
+  en: 121e0b3f345fae9c
+  zh: 2b3699c1b1c6d432
