@@ -2,11 +2,13 @@
 
 [English](README.md) | 中文
 
+[![release: v0.1.0-alpha.1](https://img.shields.io/badge/release-v0.1.0--alpha.1-orange?logo=github)](https://github.com/scasella/deepseek-harness/releases/tag/loom-v0.1.0-alpha.1)
+
 为智能体任务或一段文字创建分支，比较不同结果，并保留探索过的每条路径。Loom（织机）为 DeepSeek Harness 添加对话树、工作区比较和散文编辑器。
 
 这是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的独立社区分支。DeepSeek Harness 是 DeepSeek AI 开发、由 Cordis 驱动的开源智能体框架。两个项目均采用 [MIT 许可证](LICENSE)。
 
-[观看演示](#demo) · [安装与设置](#run) · [Loom 用户指南](docs/user/guide/loom.zh.md) · [报告问题](https://github.com/scasella/deepseek-harness/issues)
+[源码预发布版](https://github.com/scasella/deepseek-harness/releases/tag/loom-v0.1.0-alpha.1) · [观看演示](#demo) · [安装与设置](#run) · [Loom 用户指南](docs/user/guide/loom.zh.md) · [报告问题](https://github.com/scasella/deepseek-harness/issues)
 
 <a id="demo"></a>
 ## 观看演示
@@ -33,7 +35,7 @@ https://github.com/user-attachments/assets/3a35ceab-bd12-4e20-a4c9-b0bda106d687
 <a id="run"></a>
 ## 安装与设置
 
-请使用本分支源码：已发布的 `@deepseek-ai/dsh` 包不包含这些 Loom 更改。Loom 属于实验功能，需要本分支中配套的核心 API。在让智能体操作文件前，请阅读[安全说明](SAFETY.zh.md)。
+[Loom v0.1.0-alpha.1 源码预发布版](https://github.com/scasella/deepseek-harness/releases/tag/loom-v0.1.0-alpha.1)包含配套的 Harness 更改。该版本提供源码，本分支尚未发布 npm 包或安装程序。已发布的 `@deepseek-ai/dsh` 包不包含这些 Loom API；请按下方说明使用完整检出。Loom 属于实验功能。在让智能体操作文件前，请阅读[安全说明](SAFETY.zh.md)。
 
 <a id="run-from-source"></a>
 ### 从源码运行
@@ -41,7 +43,7 @@ https://github.com/user-attachments/assets/3a35ceab-bd12-4e20-a4c9-b0bda106d687
 安装 Git 2.26+、Node.js 24+（也支持 22.x 中的 22.19 及更高版本）和 pnpm **11.28.5**。以下命令使用 POSIX shell；工具链与 Windows 设置见[开发指南](docs/development.zh.md#setup-tutorial)。
 
 ```sh
-git clone --branch loom/loom-interface https://github.com/scasella/deepseek-harness.git deepseek-harness-loom
+git clone --branch loom-v0.1.0-alpha.1 --single-branch https://github.com/scasella/deepseek-harness.git deepseek-harness-loom
 cd deepseek-harness-loom
 pnpm install
 pnpm run build

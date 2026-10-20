@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write README.md
 /loom-for-deepseek-harness:
-  en: 5975053a64c6a7d6
-  zh: a1d4ea5a436fdfc6
+  en: 2cdde1eb00fec98b
+  zh: 7d7ebe33041a319b
 /loom-for-deepseek-harness/watch-the-demo:
   en: 22ef04869bd6c7d7
   zh: 435d0b132dd842f9
@@ -12,8 +12,8 @@
   en: c566ac325e7e78a0
   zh: 2e9174c599c3a04c
 /loom-for-deepseek-harness/install-and-set-up:
-  en: 3507d94e84c024bd
-  zh: 2e1266a8e0382ce9
+  en: e8103a28b0bdad7e
+  zh: 9063e9260b66b0da
 /loom-for-deepseek-harness/install-and-set-up/run-from-source:
   en: 05e4aeb84bc65d88
   zh: 53d67397fe9ab32d

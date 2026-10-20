@@ -2,11 +2,13 @@
 
 English | [中文](README.zh.md)
 
+[![release: v0.1.0-alpha.1](https://img.shields.io/badge/release-v0.1.0--alpha.1-orange?logo=github)](https://github.com/scasella/deepseek-harness/releases/tag/loom-v0.1.0-alpha.1)
+
 Branch an agent task or a passage of prose, compare alternatives, and keep every path you explored. Loom adds a conversation tree, workspace comparisons, and a prose editor to DeepSeek Harness.
 
 This is an independently maintained community fork of [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), the open-source, Cordis-powered agent harness developed by DeepSeek AI. Both projects use the [MIT license](LICENSE).
 
-[Watch the demo](#demo) · [Install and set up](#run) · [Loom user guide](docs/user/guide/loom.md) · [Report an issue](https://github.com/scasella/deepseek-harness/issues)
+[Source prerelease](https://github.com/scasella/deepseek-harness/releases/tag/loom-v0.1.0-alpha.1) · [Watch the demo](#demo) · [Install and set up](#run) · [Loom user guide](docs/user/guide/loom.md) · [Report an issue](https://github.com/scasella/deepseek-harness/issues)
 
 <a id="demo"></a>
 ## Watch the demo
@@ -33,7 +35,7 @@ https://github.com/user-attachments/assets/3a35ceab-bd12-4e20-a4c9-b0bda106d687
 <a id="run"></a>
 ## Install and set up
 
-Use this fork's source checkout: the published `@deepseek-ai/dsh` package does not include these Loom changes. Loom is experimental, and it needs the matching core APIs in this branch. Read the [safety notice](SAFETY.md) before running agents on your files.
+The [Loom v0.1.0-alpha.1 source prerelease](https://github.com/scasella/deepseek-harness/releases/tag/loom-v0.1.0-alpha.1) includes the matching Harness changes. It provides source, with no npm package or installer for this fork. The published `@deepseek-ai/dsh` package does not include these Loom APIs; use the complete checkout below. Loom is experimental. Read the [safety notice](SAFETY.md) before running agents on your files.
 
 <a id="run-from-source"></a>
 ### Run from source
@@ -41,7 +43,7 @@ Use this fork's source checkout: the published `@deepseek-ai/dsh` package does n
 Install Git 2.26+, Node.js 24+ (or Node 22.19 or later within 22.x), and pnpm **11.28.5**. The following commands use a POSIX shell; see the [development guide](docs/development.md#setup-tutorial) for toolchain and Windows setup.
 
 ```sh
-git clone --branch loom/loom-interface https://github.com/scasella/deepseek-harness.git deepseek-harness-loom
+git clone --branch loom-v0.1.0-alpha.1 --single-branch https://github.com/scasella/deepseek-harness.git deepseek-harness-loom
 cd deepseek-harness-loom
 pnpm install
 pnpm run build
