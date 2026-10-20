@@ -1,5 +1,7 @@
 # Loom for DeepSeek Harness
 
+> **Loom 已迁移至 [scasella/dsh-loom](https://github.com/scasella/dsh-loom)。** 独立插件、当前安装说明、版本发布和问题跟踪均请前往该仓库。本分支保留为只读参考，历史版本、源码和现有链接仍可访问。下方说明适用于本分支的历史版本。
+
 [English](README.md) | 中文
 
 [![release: v0.1.0-alpha.1](https://img.shields.io/badge/release-v0.1.0--alpha.1-orange?logo=github)](https://github.com/scasella/deepseek-harness/releases/tag/loom-v0.1.0-alpha.1)

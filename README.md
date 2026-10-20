@@ -1,5 +1,7 @@
 # Loom for DeepSeek Harness
 
+> **Loom has moved to [scasella/dsh-loom](https://github.com/scasella/dsh-loom).** Use that repository for the standalone plugin, current installation instructions, releases, and issue tracking. This fork is preserved as a read-only reference, including its historical releases, source, and existing links. The instructions below describe the historical fork release.
+
 English | [中文](README.zh.md)
 
 [![release: v0.1.0-alpha.1](https://img.shields.io/badge/release-v0.1.0--alpha.1-orange?logo=github)](https://github.com/scasella/deepseek-harness/releases/tag/loom-v0.1.0-alpha.1)
